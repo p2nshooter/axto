@@ -1,0 +1,9 @@
+{
+  "name": "axto-engine",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "produce": "node bin/produce.mjs"
+  }
+}

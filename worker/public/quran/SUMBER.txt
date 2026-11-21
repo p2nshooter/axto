@@ -1,0 +1,5 @@
+Teks & tata letak mushaf: quran-text (@quran.ws/text 0.1.0, https://quran.ws), CC BY 4.0 — KFGQPC Uthmanic Hafs v3
+(Kompleks Percetakan Al-Qur'an Raja Fahd). Disalin tanpa perubahan.
+Terjemah Indonesia & transliterasi: quran-json 3.1.2 (https://github.com/risan/quran-json), CC BY 4.0.
+Font tampilan di axto.io: Amiri Quran (SIL Open Font License 1.1).
+Karya NFT axto.io adalah karya seni kaligrafi & token koleksinya, bukan klaim hak atas ayat Al-Qur'an.
