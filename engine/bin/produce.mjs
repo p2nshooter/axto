@@ -15,7 +15,7 @@ import { fsProvider } from '../src/provider-fs.js';
 
 const API = (process.env.AXTO_API || '').replace(/\/$/, '');
 const KEY = process.env.ENGINE_HMAC_KEY || '';
-const BATCH = Number(process.env.BATCH || 5000);
+const BATCH = Number(process.env.BATCH || 20000);
 const DRY = process.env.DRY_RUN === '1' || !API || !KEY;
 const LIST = (process.env.COLLECTIONS || Object.keys(COLLECTIONS).join(',')).split(',').map((s) => s.trim()).filter(Boolean);
 
