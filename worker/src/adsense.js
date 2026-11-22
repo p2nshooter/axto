@@ -1,10 +1,11 @@
 /**
- * AdSense axto.io — hanya 3 akun (pemilik, 21 Nov 2026: „sisakan 3 adsense saja, masukan ke 3 kode ini jg ke axto.io").
- * Satu loader per halaman (akun utama axto.io), satu tag meta per akun, tiga baris ads.txt (public/ads.txt).
+ * AdSense axto.io — 4 akun saja (pemilik, 22 Nov 2026: „sisakan 3 adsense saja … jg ke axto.io", lalu „Tamabahin kode adsense
+ * ini di semua web google.com, pub-6701063918838796" dan „Hapus yg tadi adsense tumpuk yg belum sempet d hapus, sisakan 4 kode adsense").
+ * Satu loader per halaman (akun utama axto.io), satu tag meta per akun, empat baris ads.txt (public/ads.txt).
  * Sumber yang sama: adsense-stack.json di repositori ulyah.com (primary["axto.io"]).
  */
 export const ADSENSE_PRIMARY = 'ca-pub-5928074389292014';
-export const ADSENSE_ACCOUNTS = ['ca-pub-6560360898389273', 'ca-pub-4906992051458194', 'ca-pub-5928074389292014'];
+export const ADSENSE_ACCOUNTS = ['ca-pub-6560360898389273', 'ca-pub-4906992051458194', 'ca-pub-5928074389292014', 'ca-pub-6701063918838796'];
 
 /** Urutan meta: akun utama lebih dulu, lalu sisanya. */
 const ORDER = [ADSENSE_PRIMARY, ...ADSENSE_ACCOUNTS.filter((a) => a !== ADSENSE_PRIMARY)];

@@ -179,23 +179,25 @@ jobs:
             echo "$r" | node -e "const d=JSON.parse(require('fs').readFileSync(0,'utf8'));if(!d.success){console.log(JSON.stringify(d.errors));process.exit(1)};console.log('terpasang',d.result.hostname)"
           done
 
-      - name: Cek live (AdSense 3 akun, ads.txt, halaman, metadata)
+      - name: Cek live (AdSense 4 akun, ads.txt, halaman, metadata)
         run: |
           for i in $(seq 1 24); do
             ads=$(curl -sf https://axto.io/ads.txt || true)
-            [ "$(echo "$ads" | grep -c '^google.com, pub-')" = "3" ] && break
+            [ "$(echo "$ads" | grep -c '^google.com, pub-')" = "4" ] && break
             sleep 15
           done
-          for p in 6560360898389273 4906992051458194 5928074389292014; do
+          for p in 6560360898389273 4906992051458194 5928074389292014 6701063918838796; do
             echo "$ads" | grep -qx "google.com, pub-$p, DIRECT, f08c47fec0942fa0" || { echo "::error::ads.txt pub-$p hilang"; echo "$ads"; exit 1; }
           done
           home=$(curl -sfL https://axto.io/en)
-          for p in 6560360898389273 4906992051458194 5928074389292014; do
+          for p in 6560360898389273 4906992051458194 5928074389292014 6701063918838796; do
             echo "$home" | grep -q "name=\"google-adsense-account\" content=\"ca-pub-$p\"" || { echo "::error::meta ca-pub-$p hilang"; exit 1; }
           done
           [ "$(echo "$home" | grep -o 'adsbygoogle.js?client=' | wc -l)" = "1" ] || { echo "::error::harus tepat satu loader"; exit 1; }
+          old=$(echo "$home$ads" | grep -oE 'pub-[0-9]{16}' | sort -u | grep -vE '6560360898389273|4906992051458194|5928074389292014|6701063918838796' || true)
+          [ -z "$old" ] || { echo "::error::akun AdSense lama masih ada: $old"; exit 1; }
           curl -sf https://axto.io/api/meta/time/1 | grep -q '"name"'
           {
             echo "## axto.io live ✅"
-            echo "- AdSense: loader ca-pub-5928074389292014 · 3 tag meta · ads.txt 3 baris"
+            echo "- AdSense: loader ca-pub-5928074389292014 · 4 tag meta · ads.txt 4 baris · tanpa akun lama"
           } >> "$GITHUB_STEP_SUMMARY"
