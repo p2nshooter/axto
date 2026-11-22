@@ -7,7 +7,8 @@
  * 2. Status publik (alamat, saldo, kebutuhan gas, langkah) → axto-nft-data/cfg/deployer.json → tampil di Portal admin.
  * 3. Saldo cukup → deploy berurutan; kepemilikan langsung ke wallet pemilik sejak konstruktor:
  *    AuctionHouse + 7 koleksi → admin NFT; AxtoSale → wallet koin; AxtoToken diserahkan ke wallet koin di akhir.
- *    Koleksi publik (4 × 2.000.000) tercetak penuh saat deploy (ERC-2309) ke kustodi AuctionHouse → tampil di OpenSea.
+ *    Koleksi publik (4 × 2.000.000) tercetak penuh saat deploy (ERC-2309) ke wallet admin → tampil di profil OpenSea pemilik;
+ *    AuctionHouse menjadi operator untuk memindahkannya ke pemenang yang membayar.
  * 4. Selesai → POST /internal/contracts (HMAC) → worker memverifikasi on-chain & menyimpan + vault setConfig.
  *
  * ENV: CLOUDFLARE_API_KEY, CLOUDFLARE_EMAIL, CLOUDFLARE_ACCOUNT_ID, CHAIN_ID (8453 | 84532), [AXTO_API]
@@ -150,7 +151,7 @@ async function main() {
   for (const [k, name, sym, max] of COLS) {
     if (st.collections[k]) continue;
     const ex = k.startsWith('ex-');
-    const cfg = { name, symbol: sym, maxSupply: max, owner: ADMIN, royaltyReceiver: TREASURY, baseURI: `${BASE}/api/meta/${k}/`, contractURI: `${BASE}/api/contract/${k}`, custody: ex ? ethers.ZeroAddress : house, premint: ex ? 0 : max, signer: ex ? signer : ethers.ZeroAddress };
+    const cfg = { name, symbol: sym, maxSupply: max, owner: ADMIN, royaltyReceiver: TREASURY, baseURI: `${BASE}/api/meta/${k}/`, contractURI: `${BASE}/api/contract/${k}`, custody: ex ? ethers.ZeroAddress : ADMIN, premint: ex ? 0 : max, operator: ex ? ethers.ZeroAddress : house, signer: ex ? signer : ethers.ZeroAddress };
     st.collections[k] = await deploy(`col:${k}`, 'AxtoCollection', cfg);
     delete st[`col:${k}`];
     save();

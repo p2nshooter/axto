@@ -43,9 +43,9 @@ before(async () => {
   token = await deploy('AxtoToken', owner.address);
   sale = await deploy('AxtoSale', owner.address, await token.getAddress(), await usdc.getAddress(), await feed.getAddress(), treasury.address, signerW.address);
   house = await deploy('AxtoAuctionHouse', owner.address, treasury.address, signerW.address, [await usdc.getAddress(), await token.getAddress()]);
-  col = await deploy('AxtoCollection', { name: 'AXTO Time', symbol: 'AXTIME', maxSupply: 2_000_000, owner: owner.address, royaltyReceiver: treasury.address, baseURI: 'https://axto.io/api/meta/time/', contractURI: 'https://axto.io/api/contract/time', custody: await house.getAddress(), premint: 2_000_000, signer: ethers.ZeroAddress });
+  col = await deploy('AxtoCollection', { name: 'AXTO Time', symbol: 'AXTIME', maxSupply: 2_000_000, owner: owner.address, royaltyReceiver: treasury.address, baseURI: 'https://axto.io/api/meta/time/', contractURI: 'https://axto.io/api/contract/time', custody: owner.address, premint: 2_000_000, operator: await house.getAddress(), signer: ethers.ZeroAddress });
   premintRcpt = await provider.getTransactionReceipt(col.deploymentTransaction().hash);
-  colEx = await deploy('AxtoCollection', { name: 'AXTO Exclusive Time', symbol: 'AXXTIME', maxSupply: 50_000, owner: owner.address, royaltyReceiver: treasury.address, baseURI: 'https://axto.io/api/meta/ex-time/', contractURI: 'https://axto.io/api/contract/ex-time', custody: ethers.ZeroAddress, premint: 0, signer: signerW.address });
+  colEx = await deploy('AxtoCollection', { name: 'AXTO Exclusive Time', symbol: 'AXXTIME', maxSupply: 50_000, owner: owner.address, royaltyReceiver: treasury.address, baseURI: 'https://axto.io/api/meta/ex-time/', contractURI: 'https://axto.io/api/contract/ex-time', custody: ethers.ZeroAddress, premint: 0, operator: ethers.ZeroAddress, signer: signerW.address });
   vest = await deploy('AxtoVesting', await token.getAddress(), owner.address, E(3_000_000));
   lock = await deploy('AxtoLock', await token.getAddress(), treasury.address);
   // distribusi persis seperti skrip deploy
@@ -118,8 +118,9 @@ async function lot(collection, tokenId, bidder, max, price, opts = {}) {
   return { bid, bidSig, res, resSig };
 }
 
-test('premint koleksi publik: 2.000.000 token milik kustodi AuctionHouse sejak deploy (ERC-2309, maks 5.000 per event)', async () => {
-  const h = await house.getAddress();
+test('premint koleksi publik: 2.000.000 token di wallet admin sejak deploy (ERC-2309, maks 5.000 per event), AuctionHouse operatornya', async () => {
+  const h = owner.address; // wallet admin (owner) memegang premint → tampil di profil OpenSea pemilik
+  assert.equal(await col.isApprovedForAll(h, await house.getAddress()), true);
   assert.equal(await col.balanceOf(h), 2_000_000n);
   assert.equal(await col.totalMinted(), 2_000_000n);
   for (const id of [1, 5000, 5001, 1_234_567, 2_000_000]) assert.equal(await col.ownerOf(id), h);
@@ -138,16 +139,16 @@ test('premint koleksi publik: 2.000.000 token milik kustodi AuctionHouse sejak d
   console.log(`gas deploy koleksi publik + premint 2 jt: ${premintRcpt.gasUsed}`);
 });
 
-test('lelang publik: pemenang klaim (bayar gas sendiri) → USDC ke treasury, NFT pindah dari kustodi ke pemenang', async () => {
+test('lelang publik: pemenang klaim (bayar gas sendiri) → USDC ke treasury, NFT pindah dari wallet admin ke pemenang', async () => {
   const c = await col.getAddress();
   await (await as(usdc, alice).approve(await house.getAddress(), U(50))).wait(); // dana tetap di wallet sampai klaim
   const L = await lot(c, 42, alice, U(50), U(1));
   const t0 = await usdc.balanceOf(treasury.address);
   await revert(as(house, bob).claim(L.bid, L.bidSig, L.res, L.resSig)); // bukan pemenang
-  assert.equal(await col.ownerOf(42), await house.getAddress());
+  assert.equal(await col.ownerOf(42), owner.address);
   await (await as(house, alice).claim(L.bid, L.bidSig, L.res, L.resSig)).wait();
   assert.equal(await col.ownerOf(42), alice.address);
-  assert.equal(await col.balanceOf(await house.getAddress()), 2_000_000n - 1n);
+  assert.equal(await col.balanceOf(owner.address), 2_000_000n - 1n);
   assert.equal((await usdc.balanceOf(treasury.address)) - t0, U(1));
   assert.equal(await col.tokenURI(42), 'https://axto.io/api/meta/time/42');
   const [rcv, roy] = await col.royaltyInfo(42, U(100));

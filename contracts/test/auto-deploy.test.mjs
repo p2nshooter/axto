@@ -44,12 +44,13 @@ test('kepemilikan langsung ke pemilik: AuctionHouse + 7 koleksi → admin, AxtoS
   assert.equal(await own(c.token), COIN);
 });
 
-test('koleksi publik tercetak penuh ke kustodi AuctionHouse; eksklusif kosong dengan signer vault', async () => {
+test('koleksi publik tercetak penuh ke wallet admin (profil OpenSea pemilik), AuctionHouse operatornya; eksklusif kosong dengan signer vault', async () => {
   const c = result.contracts;
   for (const k of ['time', 'stamp', 'quran', 'model']) {
     const col = new ethers.Contract(c.collections[k], art('AxtoCollection').abi, provider);
-    assert.equal(await col.balanceOf(c.auctionHouse), 2_000_000n, k);
-    assert.equal(await col.ownerOf(2_000_000), c.auctionHouse, k);
+    assert.equal(await col.balanceOf(ADMIN), 2_000_000n, k);
+    assert.equal(await col.ownerOf(2_000_000), ADMIN, k);
+    assert.equal(await col.isApprovedForAll(ADMIN, c.auctionHouse), true, k);
   }
   for (const k of ['ex-time', 'ex-stamp', 'ex-quran']) {
     const col = new ethers.Contract(c.collections[k], art('AxtoCollection').abi, provider);

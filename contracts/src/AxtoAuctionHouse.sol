@@ -16,6 +16,10 @@ interface IAxtoMint {
     function mint(address to, uint256 tokenId) external;
 }
 
+interface IAxtoCustody {
+    function custody() external view returns (address);
+}
+
 /**
  * @title AxtoAuctionHouse
  * @notice Penyelesaian lelang axto.io. Dana penawar TIDAK pernah dititipkan: penawar memberi allowance (USDC/AXTO)
@@ -24,7 +28,7 @@ interface IAxtoMint {
  *  Kontrak memastikan: tanda tangan penawar sah, harga ≤ batas yang ditandatangani penawar, lot belum pernah
  *  diselesaikan, attestasi belum kedaluwarsa. Mode pengiriman:
  *   0 = mint langsung ke pemenang (cadangan)
- *   1 = transfer dari kustodi kontrak ini (koleksi publik: premint saat deploy, perintah pemilik #30)
+ *   1 = transfer dari kustodi koleksi (wallet admin; kontrak ini operatornya) — koleksi publik, premint saat deploy (#30)
  *   2 = kustodi axto.io (edisi eksklusif; hanya pembayaran + event, NFT dicatat off-chain sampai WD)
  *  Pembagian: seller == 0 → 100% treasury; seller != 0 (resale marketplace eksklusif) → 90% seller, 10% treasury.
  */
@@ -156,7 +160,9 @@ contract AxtoAuctionHouse is Ownable2Step, Pausable, ReentrancyGuard, EIP712, IE
         if (res.mode == 0) {
             IAxtoMint(res.collection).mint(res.winner, res.tokenId);
         } else if (res.mode == 1) {
-            IERC721(res.collection).safeTransferFrom(address(this), res.winner, res.tokenId);
+            // koleksi publik: token tercetak sejak deploy di kustodi koleksi (wallet admin); kontrak ini operatornya
+            address from = IAxtoCustody(res.collection).custody();
+            IERC721(res.collection).safeTransferFrom(from, res.winner, res.tokenId);
         }
         emit Claimed(res.lotId, res.collection, res.tokenId, res.winner, res.currency, res.price, res.seller, res.mode);
     }

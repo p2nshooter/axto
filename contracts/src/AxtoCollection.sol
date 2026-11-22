@@ -26,9 +26,10 @@ interface ITransferValidator {
 /**
  * @title AxtoCollection
  * @notice Koleksi 1/1 AXTO (TIME, STAMP, QURAN, MODEL, dan edisi eksklusif). Token lahir lewat:
- *  - premint saat deploy (koleksi publik, perintah pemilik #30): token 1..premint langsung milik kustodi AuctionHouse,
- *    diumumkan dengan event ERC-2309 `ConsecutiveTransfer` (maks. 5.000 per event, hanya di konstruktor sesuai ERC-721)
- *    → tampil di OpenSea tanpa transaksi per token; pemenang lelang menerimanya lewat transfer dari kustodi;
+ *  - premint saat deploy (koleksi publik, perintah pemilik #30): token 1..premint langsung milik wallet admin (kustodi)
+ *    → tampil di profil OpenSea pemilik; diumumkan dengan event ERC-2309 `ConsecutiveTransfer` (maks. 5.000 per event,
+ *    hanya di konstruktor sesuai ERC-721). AuctionHouse diberi izin (operator) sejak konstruktor untuk memindahkan token
+ *    kustodi ke pemenang lelang tepat saat pemenang membayar;
  *  - `mint` oleh kontrak minter resmi, atau
  *  - `mintWithVoucher` bertanda tangan signer yang ditunjuk owner (penarikan/WD edisi eksklusif, gas oleh member).
  *  Royalti jual kembali 10% (ERC-2981) ke treasury; kait ERC-721C untuk penegakan royalti di OpenSea.
@@ -75,8 +76,9 @@ contract AxtoCollection is ERC721, ERC2981, Ownable2Step, Pausable, EIP712, ICre
         address royaltyReceiver;
         string baseURI;
         string contractURI;
-        address custody; // kustodi premint (AuctionHouse); 0 bila tanpa premint
+        address custody; // pemegang premint (wallet admin → tampil di profil OpenSea pemilik); 0 bila tanpa premint
         uint256 premint; // jumlah token 1..premint yang dicetak saat deploy
+        address operator; // AuctionHouse: diizinkan memindahkan token kustodi ke pemenang yang membayar; boleh 0
         address signer; // signer voucher WD (edisi eksklusif); boleh 0
     }
 
@@ -99,6 +101,7 @@ contract AxtoCollection is ERC721, ERC2981, Ownable2Step, Pausable, EIP712, ICre
                 if (to > c.premint) to = c.premint;
                 emit ConsecutiveTransfer(from, to, address(0), c.custody);
             }
+            if (c.operator != address(0) && c.operator != c.custody) _setApprovalForAll(c.custody, c.operator, true);
         }
         if (c.signer != address(0)) emit SignerUpdated(c.signer);
     }
