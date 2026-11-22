@@ -208,27 +208,20 @@ export function coinPage(lang, sale, paypalOn, a = {}) {
   <div class="buy" id="coin-buy"><label>${lang === 'id' ? 'Jumlah koin' : 'Number of coins'} <input type="number" min="1" max="5000" step="1" value="10" id="coin-n"></label>
   <p>${paypalOn ? `<button class="btn gold" type="button" data-buy="paypal">${esc(t.buyPaypal)}</button>` : `<span class="muted">${esc(t.paypalOff)}</span>`}
   <button class="btn" type="button" data-buy="usdc">${esc(t.buyUsdc)}</button> <button class="btn" type="button" data-buy="eth">${esc(t.buyEth)}</button> <button class="btn ghost" type="button" data-watch-axto>${lang === 'id' ? 'Tambahkan AXTO ke MetaMask' : 'Add AXTO to MetaMask'}</button></p><p class="buymsg" role="status"></p></div>
-  ${coinTransparency(lang, a)}
+  ${coinWalletBox(lang, a)}
   <p class="disclaimer">${esc(t.disclaimer)}</p></section>`;
 }
 
-/** Transparansi koin (perintah pemilik #40): semua alamat + saldo AXTO langsung dari blockchain + tautan BaseScan. */
-function coinTransparency(lang, a) {
+/** Kotak wallet publik (perintah pemilik #43 „jgn bongkar rahasia perusahaan"): HANYA dua alamat kontrak yang dibutuhkan
+ *  pembeli — kontrak token (impor ke wallet) dan kontrak beli (kirim ETH = beli). Wallet internal perusahaan (bank,
+ *  presale, vesting, hold, treasury) beserta saldonya hanya tampil di Portal admin. */
+function coinWalletBox(lang, a) {
   const id = lang === 'id';
-  const rows = [
-    ['token', id ? 'Kontrak token AXTO (impor ke MetaMask)' : 'AXTO token contract (import into MetaMask)', a.token, false],
-    ['sale', id ? 'Kontrak beli otomatis (kirim ETH ke sini = beli AXTO $10)' : 'Automatic purchase contract (send ETH here = buy AXTO at $10)', a.sale, false],
-    ['bank', id ? 'Bank Koin AXTO (jatah owner 2.000.000 + komisi 10% marketplace AXTO)' : 'AXTO coin bank (owner share 2,000,000 + 10% AXTO marketplace commission)', a.bank, true],
-    ['presale', id ? 'Wallet presale (sumber koin yang dijual, 2.000.000)' : 'Presale wallet (source of coins sold, 2,000,000)', a.presale, true],
-    ['vesting', id ? 'Wallet vesting = listing DEX (3.000.000, dibuka setelah presale habis)' : 'Vesting wallet = DEX listing (3,000,000, released after the presale)', a.vesting, true],
-    ['hold', id ? 'Wallet hold 5 tahun (3.000.000)' : '5-year hold wallet (3,000,000)', a.hold, true],
-    ['treasury', id ? 'Treasury (penerima uang penjualan)' : 'Treasury (receives sale proceeds)', a.treasury, true],
-  ];
-  const link = (x) => (x ? `<a class="link" href="${esc(a.explorer)}/${x === a.token ? 'token' : 'address'}/${esc(x)}" target="_blank" rel="noopener"><code>${esc(x)}</code></a>` : `<span class="muted">${id ? 'aktif setelah deploy' : 'live after deploy'}</span>`);
-  return `<section class="coin-tx" data-token="${esc(a.token)}" data-rpc="${esc(a.rpc)}"><h2>${id ? 'Transparansi koin AXTO' : 'AXTO coin transparency'}</h2>
-  <p class="meta">${id ? 'Jaringan Base · simbol AXTO · 18 desimal · suplai tetap 10.000.000 · saldo dibaca langsung dari blockchain' : 'Base network · symbol AXTO · 18 decimals · fixed supply 10,000,000 · balances read live from the blockchain'}</p>
-  <table class="split addrs"><tbody>${rows.map(([k, label, addr, bal]) => `<tr><th>${esc(label)}</th><td>${link(addr)}</td><td class="bal">${bal && addr ? `<span data-bal="${esc(addr)}">${a.token ? '…' : '—'}</span>` : ''}</td></tr>`).join('')}</tbody></table>
-  ${a.token ? '' : `<p class="muted">${id ? 'Kontrak token sedang dideploy otomatis; saldo tampil begitu aktif.' : 'The token contract is being deployed automatically; balances appear once it is live.'}</p>`}</section>`;
+  if (!a.token) return `<p class="muted">${id ? 'Alamat kontrak koin tampil di sini begitu kontrak aktif.' : 'The coin contract address appears here once the contract is live.'}</p>`;
+  const row = (label, x) => `<tr><th>${esc(label)}</th><td><code>${esc(x)}</code> <button class="btn ghost sm" type="button" data-copy="${esc(x)}">${id ? 'Salin' : 'Copy'}</button></td></tr>`;
+  return `<section class="coin-wallet"><h2>${id ? 'Tambahkan AXTO di wallet Anda' : 'Add AXTO to your wallet'}</h2>
+  <p class="meta">${id ? 'Jaringan Base · simbol AXTO · 18 desimal' : 'Base network · symbol AXTO · 18 decimals'}</p>
+  <table class="split cw"><tbody>${row(id ? 'Kontrak token (impor manual)' : 'Token contract (manual import)', a.token)}${a.sale ? row(id ? 'Kontrak beli (kirim ETH = beli AXTO $10)' : 'Purchase contract (send ETH = buy AXTO at $10)', a.sale) : ''}</tbody></table></section>`;
 }
 
 export function memberPage(lang) {

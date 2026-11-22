@@ -384,15 +384,9 @@ if (ex) {
   pk.addEventListener('touchend', (e) => { if (tx === null) return; const dx = e.changedTouches[0].clientX - tx; if (Math.abs(dx) > 50) step(dx < 0 ? 1 : -1); tx = null; }, { passive: true });
 }
 
-// ---- transparansi koin: saldo AXTO tiap alamat langsung dari blockchain (balanceOf) ----
-const ctx = $('.coin-tx');
-if (ctx?.dataset.token) {
-  const fmtAxto = (wei) => (Number(wei / 10n ** 15n) / 1000).toLocaleString(lang === 'id' ? 'id-ID' : 'en-US', { maximumFractionDigits: 3 });
-  ctx.querySelectorAll('[data-bal]').forEach(async (el) => {
-    try {
-      const r = await fetch(ctx.dataset.rpc, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_call', params: [{ to: ctx.dataset.token, data: `0x70a08231${pad(el.dataset.bal)}` }, 'latest'] }) });
-      const j = await r.json();
-      el.textContent = `${fmtAxto(BigInt(j.result))} AXTO`;
-    } catch { el.textContent = '—'; }
-  });
-}
+// ---- salin alamat kontrak (halaman Koin: hanya kontrak token & kontrak beli — #43) ----
+document.addEventListener('click', (e) => {
+  const b = e.target.closest?.('[data-copy]');
+  if (!b) return;
+  navigator.clipboard?.writeText(b.dataset.copy).then(() => { const t = b.textContent; b.textContent = '✓'; setTimeout(() => { b.textContent = t; }, 1500); });
+});

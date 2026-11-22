@@ -159,7 +159,8 @@ async function api(request, env, ctx, url) {
     if (!s?.admin) return json({ error: 'admin_only' }, 403);
     let signer = null;
     try { signer = (await vault(env, 'signerAddress', {})).address; } catch { signer = null; }
-    return json({ admin: env.ADMIN_WALLET, coinWallet: env.COIN_WALLET, treasury: env.TREASURY, signer, networks: NETWORKS, active: await readJSON(env.STORE, 'cfg/active.json'), deployer: await readJSON(env.STORE, 'cfg/deployer.json') });
+    const coin = { chainId: Number(env.CHAIN_ID), token: env.AXTO_TOKEN || '', sale: env.AXTO_SALE || '', wallets: { bank: env.COIN_WALLET, presale: env.PRESALE_WALLET, vesting: env.VESTING_WALLET, hold: env.HOLD_WALLET, treasury: env.TREASURY } };
+    return json({ admin: env.ADMIN_WALLET, coinWallet: env.COIN_WALLET, treasury: env.TREASURY, signer, networks: NETWORKS, coin, active: await readJSON(env.STORE, 'cfg/active.json'), deployer: await readJSON(env.STORE, 'cfg/deployer.json') }, 200, { 'cache-control': 'private, no-store' });
   }
   if (p === '/api/admin/contracts' && method === 'POST') {
     if (!s?.admin) return json({ error: 'admin_only' }, 403);
@@ -365,8 +366,8 @@ async function html(request, env, ctx, url) {
   }
   if (key === 'exclusive') return out({ page: key, title: T[lang].exclusive.title, body: P.exclusivePage(lang, stats) });
   if (key === 'coin') {
-    const net = NETWORKS[Number(env.CHAIN_ID)] ?? NETWORKS[8453];
-    const addrs = { token: env.AXTO_TOKEN || '', sale: env.AXTO_SALE || '', bank: env.COIN_WALLET, presale: env.PRESALE_WALLET, vesting: env.VESTING_WALLET, hold: env.HOLD_WALLET, treasury: env.TREASURY, rpc: net.rpc, explorer: net.explorer };
+    // publik hanya kontrak token & kontrak beli; wallet internal hanya di Portal admin (perintah pemilik #43)
+    const addrs = { token: env.AXTO_TOKEN || '', sale: env.AXTO_SALE || '' };
     return out({ page: key, title: T[lang].coin.title, body: P.coinPage(lang, await readJSON(env.STORE, 'e/coin/sale.json'), env.PAYPAL_COIN_SALE === 'on', addrs) });
   }
   if (key === 'member') {
