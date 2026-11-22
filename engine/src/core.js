@@ -113,11 +113,12 @@ export function decodeRadix(value, radices) {
 export const product = (radices) => radices.reduce((a, b) => a * b, 1);
 
 /** Registri koleksi. tokenId = index + 1. Salt berbeda → desain publik & eksklusif tidak pernah sama. */
+// #47 (pemilik, 22 Nov 2026): publik 4 × 10.000.000 = 40 jt NFT, langsung tercetak ke wallet toko → OpenSea
 export const COLLECTIONS = {
-  time: { key: 'time', kind: 'time', max: 2_000_000, salt: 'axto/time/v1', exclusive: false, symbol: 'AXTIME' },
-  stamp: { key: 'stamp', kind: 'stamp', max: 2_000_000, salt: 'axto/stamp/v1', exclusive: false, symbol: 'AXSTAMP' },
-  quran: { key: 'quran', kind: 'quran', max: 2_000_000, salt: 'axto/quran/v1', exclusive: false, symbol: 'AXQURAN' },
-  model: { key: 'model', kind: 'model', max: 2_000_000, salt: 'axto/model/v1', exclusive: false, symbol: 'AXMODEL', requiresConsent: true },
+  time: { key: 'time', kind: 'time', max: 10_000_000, salt: 'axto/time/v1', exclusive: false, symbol: 'AXTIME' },
+  stamp: { key: 'stamp', kind: 'stamp', max: 10_000_000, salt: 'axto/stamp/v1', exclusive: false, symbol: 'AXSTAMP' },
+  quran: { key: 'quran', kind: 'quran', max: 10_000_000, salt: 'axto/quran/v1', exclusive: false, symbol: 'AXQURAN' },
+  model: { key: 'model', kind: 'model', max: 10_000_000, salt: 'axto/model/v1', exclusive: false, symbol: 'AXMODEL', requiresConsent: true },
   // perintah pemilik #44: eksklusif (dibayar koin AXTO, dilelang & berputar di axto.io) cukup 10.000 per koleksi × 4 = 40.000
   'ex-time': { key: 'ex-time', kind: 'time', max: 10_000, salt: 'axto/ex-time/v1', exclusive: true, symbol: 'AXXTIME' },
   'ex-stamp': { key: 'ex-stamp', kind: 'stamp', max: 10_000, salt: 'axto/ex-stamp/v1', exclusive: true, symbol: 'AXXSTAMP' },

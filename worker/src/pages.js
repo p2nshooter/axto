@@ -11,7 +11,7 @@ const EXCL = ['ex-time', 'ex-stamp', 'ex-quran', 'ex-model'];
 const fmt = (n, lang) => Number(n ?? 0).toLocaleString(lang === 'id' ? 'id-ID' : 'en-US');
 export const money = (units, cur, lang) => (cur === 'USDC' ? `$${(units / 100).toLocaleString(lang === 'id' ? 'id-ID' : 'en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : `${(units / 1000).toLocaleString(lang === 'id' ? 'id-ID' : 'en-US', { maximumFractionDigits: 3 })} AXTO`);
 const nftPath = (lang, c, id) => `/${lang}/nft/${c}/${id}`;
-const IMGV = 'v=5';
+const IMGV = 'v=6';
 const img = (c, id) => `/img/${c}/${id}.svg?${IMGV}`;
 /** Lencana jenis karya: publik (USDC, OpenSea, MetaMask) atau eksklusif (koin AXTO, kustodi axto.io, WD). */
 export const badge = (lang, c, long = false) => {
@@ -291,7 +291,7 @@ export function adminPage(lang, ok, stats) {
   return `<section class="page"><h1>${esc(t.title)}</h1><table class="split"><thead><tr><th></th><th>produced</th><th>ready</th><th>live</th><th>sold</th></tr></thead><tbody>${rows}</tbody></table>
   <p class="meta">genesis: ${stats.genesis ? new Date(stats.genesis).toISOString() : '—'}</p>
   <h2>${lang === 'id' ? 'Kontrak (deploy otomatis oleh sistem)' : 'Contracts (deployed automatically by the system)'}</h2>
-  <p>${lang === 'id' ? 'Sistem mendeploy semua kontrak sendiri dari wallet deployer khusus; pemilik AuctionHouse & 7 koleksi langsung wallet admin NFT, pemilik koin AXTO langsung wallet koin. 4 koleksi publik (8.000.000 NFT) tercetak saat deploy dan langsung tampil di OpenSea.' : 'The system deploys every contract itself from a dedicated deployer wallet; ownership goes straight to the admin and coin wallets. The 4 public collections (8,000,000 NFTs) are minted at deploy and show on OpenSea right away.'}</p>
+  <p>${lang === 'id' ? 'Sistem mendeploy semua kontrak sendiri dari wallet deployer khusus; pemilik AuctionHouse & 8 koleksi langsung wallet produksi, pemilik koin AXTO langsung wallet koin. 4 koleksi publik (40.000.000 NFT) tercetak saat deploy ke wallet toko sistem dan tampil di OpenSea; 4 koleksi eksklusif (40.000) dicetak saat member WD.' : 'The system deploys every contract itself from a dedicated deployer wallet; ownership goes straight to the production and coin wallets. The 4 public collections (40,000,000 NFTs) are minted at deploy to the system store wallet and show on OpenSea; the 4 exclusive collections (40,000) are minted when members withdraw.'}</p>
   <div id="deploy" data-lang="${lang}"><p class="muted">…</p></div></section>`;
 }
 

@@ -39,7 +39,7 @@ jobs:
       - name: Mesin listing OpenSea (wallet toko, etalase, penjualan → treasury)
         working-directory: market
         run: |
-          npm ci --no-audit --no-fund
+          npm ci --no-audit --no-fund || npm install --no-audit --no-fund --no-save
           node --test test/*.test.mjs
       - name: Worker (kripto, bundel)
         working-directory: worker

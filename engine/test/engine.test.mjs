@@ -25,7 +25,7 @@ test('ruang kombinasi setiap koleksi > max', () => {
     if (COLLECTIONS[k].kind === 'quran') continue;
     assert.ok(spaceSize(k) >= COLLECTIONS[k].max, `${k}: ${spaceSize(k)} < ${COLLECTIONS[k].max}`);
   }
-  assert.equal(planTotal(PLANS.quran), 2_000_000);
+  assert.equal(planTotal(PLANS.quran), 10_000_000);
   assert.equal(planTotal(PLANS['ex-quran']), 10_000);
 });
 
@@ -53,7 +53,7 @@ test('tier = label kelangkaan (5 tingkat, distribusi wajar); harga mulai $1 untu
   assert.ok(cnt[0] > cnt[4] * 5, JSON.stringify(cnt));
   assert.ok(cnt.every((n) => n > 0), JSON.stringify(cnt));
   // #44: publik dijual harga tetap per tier di OpenSea; eksklusif dilelang koin AXTO mulai $1 di axto.io
-  for (const [c, id] of [['time', 7], ['stamp', 1_999_999], ['quran', 2_000_000], ['model', 3]]) {
+  for (const [c, id] of [['time', 7], ['stamp', 9_999_999], ['quran', 10_000_000], ['model', 3]]) {
     const d = dna(c, id);
     const price = metadata(c, id).attributes.find((a) => a.trait_type === 'Price (USD)');
     assert.equal(price.value, String([10, 25, 75, 250, 1000][d.tier.rank]), c);
@@ -66,7 +66,8 @@ test('tier = label kelangkaan (5 tingkat, distribusi wajar); harga mulai $1 untu
 
 test('tokenId di luar rentang ditolak', () => {
   assert.throws(() => dna('time', 0));
-  assert.throws(() => dna('time', 2_000_001));
+  assert.throws(() => dna('time', 10_000_001));
+  assert.ok(dna('time', 10_000_000));
   assert.throws(() => dna('ex-time', 10_001));
   assert.throws(() => dna('ex-model', 10_001));
 });
@@ -96,4 +97,27 @@ test('wellFormed mendeteksi tag rusak', () => {
 test('decodeRadix', () => {
   assert.deepEqual(decodeRadix(0, [3, 4]), [0, 0]);
   assert.deepEqual(decodeRadix(11, [3, 4]), [2, 3]);
+});
+
+test('#43 genom gerak: tidak ada dua NFT yang bergerak sama (20.000 berurutan per koleksi) dan SVG beranimasi tetap valid', async () => {
+  const { motionGenome, radices } = await import('../src/render/motion.js');
+  const { animatedSvg } = await import('../src/metadata.js');
+  const { wellFormed } = await import('../src/qa.js');
+  for (const k of ['time', 'stamp', 'quran', 'ex-time', 'ex-quran']) {
+    const kind = COLLECTIONS[k].kind;
+    assert.ok(radices(kind).reduce((a, b) => a * b, 1) >= COLLECTIONS[k].max, `${k}: ruang gerak < max`);
+    const seen = new Set();
+    const n = Math.min(20000, COLLECTIONS[k].max);
+    for (let id = 1; id <= n; id += 1) {
+      const g = motionGenome(dna(k, id)).key;
+      assert.ok(!seen.has(g), `${k}#${id} gerak kembar`);
+      seen.add(g);
+    }
+  }
+  for (const [k, id] of [['time', 1], ['time', 9_999_999], ['stamp', 2], ['stamp', 77]]) {
+    const s = animatedSvg(dna(k, id), {});
+    assert.ok(wellFormed(s), `${k}#${id} SVG rusak`);
+    assert.match(s, /@keyframes mx/);
+    assert.doesNotMatch(s, /axsw/); // sapuan cahaya klasik sudah diganti
+  }
 });

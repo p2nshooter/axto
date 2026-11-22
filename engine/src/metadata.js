@@ -9,6 +9,7 @@ import { stampSvg, stampPlayer, ANIM_CSS as STAMP_ANIM_CSS } from './render/stam
 import { quranSvg, quranPlayer } from './render/quran.js';
 import { modelSvg, modelPlayer } from './render/model.js';
 import { modelTraits } from './catalog/model.js';
+import { applyMotion } from './render/motion.js';
 
 /** Seri koleksi TIME = kategori bentuk (untuk saringan OpenSea & penjelajah). [id, EN, ID] */
 export const TIME_SERIES = [['wrist', 'Wristwear', 'Jam Tangan'], ['body', 'Jewelry & Wearables', 'Perhiasan'], ['bag', 'Bags & Charms', 'Tas & Charm'], ['apparel', 'Apparel', 'Busana'], ['home', 'Home', 'Rumah'], ['vehicle', 'Vehicle', 'Kendaraan'], ['public', 'Public Spaces', 'Ruang Publik'], ['digital', 'Digital Screens', 'Layar Digital'], ['novel', 'Novelty', 'Unik']];
@@ -217,11 +218,17 @@ const SWEEP = '<defs><linearGradient id="axswg" x1="0" y1="0" x2="1" y2="0"><sto
  * menyapu karya. Model membawa animasinya sendiri di dalam SVG.
  */
 export function animatedSvg(d, ctx) {
-  const s = renderSvg(d, ctx);
-  const css = { time: TIME_ANIM_CSS, stamp: STAMP_ANIM_CSS, quran: QURAN_ANIM_CSS, model: '' }[d.kind] + SWEEP_CSS;
+  if (d.kind === 'model') {
+    const s = renderSvg(d, ctx);
+    const open = s.indexOf('>', s.indexOf('<svg')) + 1;
+    const close = s.lastIndexOf('</svg>');
+    return `${s.slice(0, open)}<style>${SWEEP_CSS}</style>${s.slice(open, close)}${SWEEP}${s.slice(close)}`;
+  }
+  // #43: jam, prangko, Al-Qur'an — genom gerak unik per token (tidak ada dua NFT yang bergerak sama)
+  const { svg: s, css: mcss } = applyMotion(d, renderSvg(d, ctx));
+  const css = { time: TIME_ANIM_CSS, stamp: STAMP_ANIM_CSS, quran: '' }[d.kind] + mcss;
   const open = s.indexOf('>', s.indexOf('<svg')) + 1;
-  const close = s.lastIndexOf('</svg>');
-  return `${s.slice(0, open)}<style>${css}</style>${s.slice(open, close)}${SWEEP}${s.slice(close)}`;
+  return `${s.slice(0, open)}<style>${css}</style>${s.slice(open)}`;
 }
 
 /** Render player HTML. */

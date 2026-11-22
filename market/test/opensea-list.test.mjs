@@ -24,13 +24,13 @@ let server, provider, deployer, store, buyer, col, feed, R2, posted;
 before(async () => {
   delete process.env.CLOUDFLARE_API_KEY;
   const mnemonic = 'test test test test test test test test test test test junk';
-  server = ganache.server({ logging: { quiet: true }, chain: { chainId: 8453, hardfork: 'shanghai' }, wallet: { mnemonic, totalAccounts: 4, defaultBalance: 100 }, miner: { blockGasLimit: 60_000_000 } });
+  server = ganache.server({ logging: { quiet: true }, chain: { chainId: 8453, hardfork: 'shanghai' }, wallet: { mnemonic, totalAccounts: 4, defaultBalance: 100 }, miner: { blockGasLimit: 120_000_000 } });
   await server.listen(18546);
   provider = new ethers.JsonRpcProvider('http://127.0.0.1:18546');
   [deployer, store, buyer] = [0, 1, 2].map((i) => ethers.HDNodeWallet.fromPhrase(mnemonic, undefined, `m/44'/60'/0'/0/${i}`).connect(provider));
   let n = await provider.getTransactionCount(deployer.address, 'latest');
   const f = (name) => new ethers.ContractFactory(art(name).abi, art(name).bytecode, deployer);
-  col = await (await f('AxtoCollection').deploy({ name: 'AXTO Time', symbol: 'AXTIME', maxSupply: 2_000_000, owner: deployer.address, royaltyReceiver: TREASURY, baseURI: 'https://axto.io/api/meta/time/', contractURI: 'https://axto.io/api/contract/time', custody: store.address, premint: 2_000_000, operator: '0x1E0049783F008A0085193E00003D00cd54003c71', signer: ethers.ZeroAddress }, { nonce: n++ })).waitForDeployment();
+  col = await (await f('AxtoCollection').deploy({ name: 'AXTO Time', symbol: 'AXTIME', maxSupply: 10_000_000, owner: deployer.address, royaltyReceiver: TREASURY, baseURI: 'https://axto.io/api/meta/time/', contractURI: 'https://axto.io/api/contract/time', custody: store.address, premint: 10_000_000, operator: '0x1E0049783F008A0085193E00003D00cd54003c71', signer: ethers.ZeroAddress }, { nonce: n++ })).waitForDeployment();
   feed = await (await f('MockFeed').deploy(2500n * 10n ** 8n, { nonce: n++ })).waitForDeployment();
   R2 = { 'axto-nft-data/cfg/opensea-ready.json': JSON.stringify({ ready: true }), 'axto-nft-data/cfg/contracts-8453.json': JSON.stringify({ chainId: 8453, store: store.address, collections: { time: await col.getAddress() } }), 'axto-vault-data/store.enc': seal(store.privateKey) };
   posted = [];

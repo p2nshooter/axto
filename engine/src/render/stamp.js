@@ -3,6 +3,7 @@
  */
 import { esc, rng, pad } from '../core.js';
 import { collection } from '../core.js';
+import { applyMotion } from './motion.js';
 import { svgOpen, linear, radial, starPath, polyPath, perforatedRect, starfield, r1, text, exclusiveBadge, hallmark } from './common.js';
 import { motif } from './motifs.js';
 
@@ -122,7 +123,9 @@ export function stampSvg(d) {
   if (frame[0] === 'airmail') margin = `<g>${Array.from({ length: 40 }, (_, i) => `<path d="M${i * 50 - 50} 0l25 0l-40 60h-25z" fill="${i % 2 ? '#c62a24' : '#1e3a8a'}"/><path d="M${i * 50 - 50} 1000l25 0l-40 -60h-25z" fill="${i % 2 ? '#1e3a8a' : '#c62a24'}"/>`).join('')}</g>`;
   const ex = d.exclusive ? exclusiveBadge(1000, d.tokenId, collection(d.key).max, finish[1]) : '';
   const cancel = mode[0] === 'static' && d.seed % 5 === 0 ? `<g fill="none" stroke="#222" stroke-opacity=".35" stroke-width="3"><circle cx="760" cy="300" r="90"/><circle cx="760" cy="300" r="72"/>${[0, 1, 2, 3].map((i) => `<path d="M560 ${360 + i * 18}q50 -16 100 0t100 0"/>`).join('')}</g>` : '';
-  return `${svgOpen(1000, 1000)}<defs>${radial('page', '#2a241b', bgPage)}</defs><rect width="1000" height="1000" fill="url(#page)"/>${margin}<g filter="drop-shadow(0 10px 14px rgba(0,0,0,.45))">${body}</g>${cancel}${ex}${hallmark(1000, 1000, '#e9dcc0')}</svg>`;
+  // kait genom gerak (#43): bentuk kertas untuk kilau permukaan (#mxclip) & cahaya tepi (#mxpaper)
+  const paperD = o.rect ? [o.rect, o.rect2].filter(Boolean).map(([x, y, w, h]) => perforatedRect(x, y, w, h, 9)).join(' ') : o.path;
+  return `${svgOpen(1000, 1000)}<defs>${radial('page', '#2a241b', bgPage)}<clipPath id="mxclip"><path d="${paperD}"/></clipPath><path id="mxpaper" d="${paperD}"/></defs><rect width="1000" height="1000" fill="url(#page)"/>${margin}<g class="mxo"><g filter="drop-shadow(0 10px 14px rgba(0,0,0,.45))"><g class="mxb">${body}</g></g></g>${cancel}${ex}${hallmark(1000, 1000, '#e9dcc0')}</svg>`;
 }
 
 export const ANIM_CSS = '.m-spin-slow{transform-box:fill-box;transform-origin:center;animation:ms 30s linear infinite}.m-float{animation:mf 4s ease-in-out infinite alternate}.m-sway{transform-box:fill-box;transform-origin:50% 100%;animation:mw 5s ease-in-out infinite alternate}.m-flap{transform-box:fill-box;transform-origin:center;animation:mfl .5s ease-in-out infinite alternate}.m-swim{animation:msw 6s ease-in-out infinite alternate}.m-twinkle,.m-blink{animation:mt 1.6s ease-in-out infinite}.m-pulse{animation:mt 2.2s ease-in-out infinite}.m-flame{transform-box:fill-box;transform-origin:50% 0;animation:mfl .18s linear infinite alternate}.m-arm{transform-box:fill-box;transform-origin:0 100%;animation:mw 1s ease-in-out infinite alternate}.m-wing{transform-box:fill-box;transform-origin:50% 100%;animation:mfl .4s ease-in-out infinite alternate}@keyframes ms{to{transform:rotate(360deg)}}@keyframes mf{to{transform:translateY(-14px)}}@keyframes mw{from{transform:rotate(-6deg)}to{transform:rotate(6deg)}}@keyframes mfl{to{transform:scaleX(.55)}}@keyframes msw{to{transform:translateX(26px)}}@keyframes mt{50%{opacity:.35}}@media(prefers-reduced-motion:reduce){*{animation:none!important}}';
@@ -142,8 +145,9 @@ export function stampPlayer(d, meta, opts = {}) {
   const n = opts.nonce ? ` nonce="${opts.nonce}"` : '';
   const animated = mode[0] !== 'static' || d.exclusive || d.tier.rank >= 2;
   const galaxy = d.tier.rank >= 3 && (series[0] === 'space' || d.tier.rank >= 4);
-  const svg = stampSvg(d).replace('<svg ', '<svg id="st" ');
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(meta.name)}</title><style${n}>html,body{margin:0;height:100%;background:#0a0806;overflow:hidden;font-family:system-ui}#st{width:100vmin;height:100vmin;display:block;margin:auto;touch-action:none;cursor:grab}#g{position:fixed;inset:0;width:100%;height:100%;display:none;touch-action:none}.b{position:fixed;right:8px;bottom:8px;display:flex;gap:6px}.b button{background:#000a;color:#fff;border:1px solid #fff4;border-radius:8px;padding:6px 10px;font:12px system-ui}${animated ? ANIM_CSS : ''}</style></head><body>${svg}<canvas id="g"></canvas><div class="b"><button id="zr" type="button">1:1</button>${galaxy ? '<button id="gx" type="button">Galaxy</button>' : ''}</div><script${n}>${VECTOR_ZOOM_JS};${galaxy ? GALAXY_JS : ''}
+  const mo = applyMotion(d, stampSvg(d)); // genom gerak unik per token (#43)
+  const svg = mo.svg.replace('<svg ', '<svg id="st" ');
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(meta.name)}</title><style${n}>html,body{margin:0;height:100%;background:#0a0806;overflow:hidden;font-family:system-ui}#st{width:100vmin;height:100vmin;display:block;margin:auto;touch-action:none;cursor:grab}#g{position:fixed;inset:0;width:100%;height:100%;display:none;touch-action:none}.b{position:fixed;right:8px;bottom:8px;display:flex;gap:6px}.b button{background:#000a;color:#fff;border:1px solid #fff4;border-radius:8px;padding:6px 10px;font:12px system-ui}${animated ? ANIM_CSS : ''}${mo.css}</style></head><body>${svg}<canvas id="g"></canvas><div class="b"><button id="zr" type="button">1:1</button>${galaxy ? '<button id="gx" type="button">Galaxy</button>' : ''}</div><script${n}>${VECTOR_ZOOM_JS};${galaxy ? GALAXY_JS : ''}
 const s=document.getElementById('st');vzoom(s);document.getElementById('zr').onclick=()=>s.setAttribute('viewBox','0 0 1000 1000');
 ${galaxy ? `let on=false;document.getElementById('gx').onclick=()=>{on=!on;const g=document.getElementById('g');g.style.display=on?'block':'none';s.style.display=on?'none':'block';if(on&&!g.dataset.i){g.dataset.i=1;galaxy(g,${d.seed},${JSON.stringify(pal[6])})}};` : ''}
 </script></body></html>`;

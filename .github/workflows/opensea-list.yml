@@ -32,7 +32,7 @@ jobs:
           node-version: 22
       - name: Pasang mesin listing
         working-directory: market
-        run: npm ci --omit=dev --no-audit --no-fund
+        run: npm ci --omit=dev --no-audit --no-fund || npm install --omit=dev --no-audit --no-fund --no-save
       - name: Listing, deteksi penjualan, perbarui etalase, teruskan hasil ke treasury
         working-directory: market
         env:

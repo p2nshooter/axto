@@ -174,6 +174,8 @@ export const PALETTE = [
   ['classic', 'Classic', 'Klasik', 0, null], ['ruby', 'Ruby', 'Merah Delima', 1, '#c0392b'], ['sapphire', 'Sapphire', 'Safir', 1, '#2f6fd1'],
   ['emerald', 'Emerald', 'Zamrud', 1, '#1e8a4a'], ['amber', 'Amber', 'Kuning Ambar', 1, '#f0a020'], ['violet', 'Violet', 'Ungu', 1, '#7a3b8f'],
   ['rose', 'Rose', 'Merah Muda', 1, '#e06a8a'], ['gold', 'Gold', 'Emas', 2, '#d4af37'],
+  // #47 (4 × 10 jt): palet tambahan agar ruang kombinasi ≥ 10 jt
+  ['teal', 'Teal', 'Hijau Toska', 1, '#178a8a'], ['coral', 'Coral', 'Koral', 1, '#ff6f61'], ['navy', 'Navy', 'Biru Dongker', 1, '#1f3b73'],
 ];
 
 export const SPACE = [POSES, SERIES, LOOK, PROP, SETTING, LIGHT, MOTION, ACCESSORY, PALETTE];

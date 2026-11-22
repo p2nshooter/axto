@@ -19,7 +19,7 @@ let server, provider, deployer, signerW, storeW, result, mod;
 
 before(async () => {
   const mnemonic = 'test test test test test test test test test test test junk';
-  server = ganache.server({ logging: { quiet: true }, chain: { chainId: 8453, hardfork: 'shanghai' }, wallet: { mnemonic, totalAccounts: 3, defaultBalance: 100 }, miner: { blockGasLimit: 60_000_000 } });
+  server = ganache.server({ logging: { quiet: true }, chain: { chainId: 8453, hardfork: 'shanghai' }, wallet: { mnemonic, totalAccounts: 3, defaultBalance: 100 }, miner: { blockGasLimit: 120_000_000 } });
   await server.listen(18545);
   provider = new ethers.JsonRpcProvider('http://127.0.0.1:18545');
   deployer = ethers.HDNodeWallet.fromPhrase(mnemonic, undefined, "m/44'/60'/0'/0/0").connect(provider);
@@ -49,14 +49,15 @@ test('kepemilikan langsung ke pemilik: AuctionHouse + 8 koleksi → admin, AxtoS
   assert.equal(await own(c.token), COIN);
 });
 
-test('#44: 8 jt NFT publik tercetak ke wallet toko sistem, konduit OpenSea disetujui sejak konstruktor; eksklusif 4 × 10.000 kosong dengan signer vault', async () => {
+test('#44/#47: 40 jt NFT publik tercetak ke wallet toko sistem, konduit OpenSea disetujui sejak konstruktor; eksklusif 4 × 10.000 kosong dengan signer vault', async () => {
   const c = result.contracts;
   assert.equal(c.store, storeW.address);
   for (const k of ['time', 'stamp', 'quran', 'model']) {
     const col = new ethers.Contract(c.collections[k], art('AxtoCollection').abi, provider);
-    assert.equal(await col.balanceOf(storeW.address), 2_000_000n, k);
+    assert.equal(await col.balanceOf(storeW.address), 10_000_000n, k);
     assert.equal(await col.ownerOf(1), storeW.address, k);
-    assert.equal(await col.ownerOf(2_000_000), storeW.address, k);
+    assert.equal(await col.ownerOf(10_000_000), storeW.address, k);
+    assert.equal(await col.maxSupply(), 10_000_000n, k);
     assert.equal(await col.isApprovedForAll(storeW.address, mod.OPENSEA_CONDUIT), true, k);
     assert.equal(await col.balanceOf(ADMIN), 0n, k);
   }

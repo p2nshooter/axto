@@ -31,7 +31,7 @@ async function deploy(name, ...args) {
 const wait = async (p) => (await p).wait();
 
 const COLS = [
-  ['time', 'AXTO Time', 'AXTIME', 2_000_000], ['stamp', 'AXTO Stamp', 'AXSTAMP', 2_000_000], ['quran', "AXTO Qur'an", 'AXQURAN', 2_000_000], ['model', 'AXTO Model', 'AXMODEL', 2_000_000],
+  ['time', 'AXTO Time', 'AXTIME', 10_000_000], ['stamp', 'AXTO Stamp', 'AXSTAMP', 10_000_000], ['quran', "AXTO Qur'an", 'AXQURAN', 10_000_000], ['model', 'AXTO Model', 'AXMODEL', 10_000_000],
   ['ex-time', 'AXTO Exclusive Time', 'AXXTIME', 50_000], ['ex-stamp', 'AXTO Exclusive Stamp', 'AXXSTAMP', 50_000], ['ex-quran', "AXTO Exclusive Qur'an", 'AXXQURAN', 50_000],
 ];
 

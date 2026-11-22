@@ -66,6 +66,31 @@ export const THEMES = [
   ['bloodline', 'Bloodline', 'Bloodline', 2, ['#7a0a14', '#2a0205', '#c2182b', '#150103'], '#ff2a3a', '#2a0508', ['#22030a', '#060001'], 355],
   ['quantum', 'Quantum', 'Kuantum', 5, ['#7cf3ff', '#2b6bff', '#e0b6ff', '#0b1a4a'], '#9ffcff', '#0a1838', ['#071233', '#01020a'], 210],
   ['sakura', 'Sakura Pearl', 'Mutiara Sakura', 2, ['#ffe4ef', '#f3b5cb', '#fff6fa', '#d891ab'], '#ff6aa2', '#3a1222', ['#3a1424', '#0c0306'], 335],
+  // #47 (4 × 10 jt): 24 tema baru agar ruang kombinasi ≥ 10 jt
+  ['coral-reef', 'Coral Reef', 'Terumbu Karang', 2, ['#fa6742', '#45340c', '#fb5687', '#210d08'], '#ff6c47', '#29100a', ['#39250e', '#0b0504'], 12],
+  ['glacier', 'Glacier', 'Gletser', 2, ['#ffffff', '#c8e5ef', '#eaf3f6', '#9fc4d1'], '#1e5567', '#d7e5ea', ['#e2eff3', '#a9c7d1'], 195],
+  ['desert-dune', 'Desert Dune', 'Bukit Pasir', 1, ['#efdec8', '#c69453', '#6f512a', '#e2bd8d'], '#6ea9f7', '#2e210f', ['#433119', '#0e0b06'], 34],
+  ['jade-temple', 'Jade Temple', 'Kuil Giok', 3, ['#c8efdb', '#53c68c', '#2a6f4d', '#8de2b8'], '#f76eb3', '#0f2e1f', ['#19432e', '#060e0a'], 150],
+  ['lava-core', 'Lava Core', 'Inti Lava', 3, ['#8f6756', '#211612', '#bb9281', '#140d0b'], '#f6895a', '#24150f', ['#26140d', '#070403'], 18],
+  ['arctic-aurora', 'Arctic Aurora', 'Aurora Arktik', 4, ['#42facc', '#0c3745', '#56fb7f', '#08211b'], '#47ffd1', '#0a2921', ['#0e3639', '#040b0a'], 165],
+  ['rose-gold', 'Rose Gold', 'Emas Mawar', 3, ['#efd1c8', '#c67053', '#6f3b2a', '#e2a28d'], '#6ed5f7', '#2e170f', ['#432419', '#0e0806'], 15],
+  ['cobalt-pulse', 'Cobalt Pulse', 'Denyut Kobalt', 2, ['#427ffa', '#160c45', '#56dffb', '#081021'], '#4785ff', '#0a1429', ['#0e0e39', '#04060b'], 220],
+  ['matcha', 'Matcha', 'Matcha', 1, ['#ffffff', '#d8efc8', '#eff6ea', '#b3d19f'], '#3c671e', '#dfead7', ['#e9f3e2', '#b9d1a9'], 95],
+  ['midnight-ink', 'Midnight Ink', 'Tinta Tengah Malam', 1, ['#565b8f', '#121321', '#8186bb', '#0b0b14'], '#5a67f6', '#0f1124', ['#0d0f26', '#030307'], 235],
+  ['sunset-strip', 'Sunset Strip', 'Senja Jalanan', 2, ['#fa9842', '#45430c', '#fb565b', '#211408'], '#ff9d47', '#29180a', ['#39310e', '#0b0704'], 28],
+  ['lilac-mist', 'Lilac Mist', 'Kabut Lilac', 2, ['#ffffff', '#dfc8ef', '#f1eaf6', '#bc9fd1'], '#481e67', '#e2d7ea', ['#ece2f3', '#c0a9d1'], 275],
+  ['copper-patina', 'Copper Patina', 'Patina Tembaga', 3, ['#c8efec', '#53c6bc', '#2a6f69', '#8de2db'], '#f76e79', '#0f2e2b', ['#19433f', '#060e0e'], 175],
+  ['toxic-lime', 'Toxic Lime', 'Limau Toksik', 2, ['#adfa42', '#11450c', '#fbed56', '#162108'], '#b2ff47', '#1c290a', ['#19390e', '#080b04'], 85],
+  ['deep-ocean', 'Deep Ocean', 'Samudra Dalam', 2, ['#56788f', '#121b21', '#81a3bb', '#0b1014'], '#5ab5f6', '#0f1b24', ['#0d1c26', '#030507'], 205],
+  ['honeycomb', 'Honeycomb', 'Sarang Madu', 2, ['#efe3c8', '#c6a353', '#6f5a2a', '#e2c98d'], '#6e97f7', '#2e250f', ['#433619', '#0e0c06'], 42],
+  ['ultraviolet', 'Ultraviolet', 'Ultraungu', 4, ['#8f42fa', '#410c45', '#5664fb', '#120821'], '#9447ff', '#170a29', ['#2e0e39', '#07040b'], 265],
+  ['mint-chrome', 'Mint Chrome', 'Krom Mint', 3, ['#c8efe1', '#53c69c', '#2a6f56', '#8de2c3'], '#f76ea0', '#0f2e23', ['#194333', '#060e0b'], 158],
+  ['blush-porcelain', 'Blush Porcelain', 'Porselen Merona', 2, ['#ffffff', '#efc8d1', '#f6eaed', '#d19fab'], '#671e30', '#ead7dc', ['#f3e2e7', '#d1a9b3'], 345],
+  ['storm-graphite', 'Storm Graphite', 'Grafit Badai', 1, ['#566e8f', '#121821', '#8199bb', '#0b0f14'], '#5a9bf6', '#0f1824', ['#0d1726', '#030507'], 215],
+  ['solar-flare', 'Solar Flare', 'Suar Surya', 5, ['#fabd42', '#3c450c', '#fb7156', '#211808'], '#ffc247', '#291f0a', ['#39390e', '#0b0904'], 40],
+  ['peacock', 'Peacock', 'Merak', 4, ['#c8ecef', '#53bcc6', '#2a696f', '#8ddbe2'], '#f7796e', '#0f2b2e', ['#193f43', '#060e0e'], 185],
+  ['ivory-noir', 'Ivory Noir', 'Gading Hitam', 2, ['#ffffff', '#efe2c8', '#f6f2ea', '#d1c09f'], '#674e1e', '#eae3d7', ['#f3ede2', '#d1c3a9'], 40],
+  ['blackberry', 'Blackberry', 'Beri Hitam', 2, ['#8f568f', '#211221', '#bb81bb', '#140b14'], '#f65af6', '#240f24', ['#260d26', '#070307'], 300],
 ];
 
 /** Gaya angka: [id, EN, ID, poin] */
@@ -100,6 +125,13 @@ export const GEMS = [
   ['seconds', 'Seconds Track', 'Jejak Detik', 3, 12],
   ['halo', 'Full Halo', 'Halo Penuh', 4, 60],
   ['constellation', 'Constellation', 'Rasi Bintang', 4, 24],
+  // #47: pola permata tambahan
+  ['duo', 'Twin Gems', 'Permata Kembar', 1, 2],
+  ['trinity', 'Trinity Gems', 'Permata Trinitas', 1, 3],
+  ['hexa', 'Hexa Gems', 'Permata Heksa', 2, 6],
+  ['compass', 'Compass Gems', 'Permata Kompas', 3, 16],
+  ['orbit', 'Orbit Ring', 'Cincin Orbit', 3, 36],
+  ['galaxy', 'Galaxy Ring', 'Cincin Galaksi', 5, 48],
 ];
 
 /** Latar: [id, EN, ID, poin] */

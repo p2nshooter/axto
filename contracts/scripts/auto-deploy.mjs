@@ -7,7 +7,7 @@
  * 2. Status publik (alamat, saldo, kebutuhan gas, langkah) → axto-nft-data/cfg/deployer.json → tampil di Portal admin.
  * 3. Saldo cukup → deploy berurutan; kepemilikan langsung ke wallet pemilik sejak konstruktor:
  *    AuctionHouse + 8 koleksi → admin NFT; AxtoSale → wallet koin; AxtoToken diserahkan ke wallet koin di akhir.
- *    Koleksi publik (4 × 2.000.000) tercetak penuh saat deploy (ERC-2309) ke WALLET TOKO sistem (perintah #44; kunci
+ *    Koleksi publik (4 × 10.000.000, #47) tercetak penuh saat deploy (ERC-2309) ke WALLET TOKO sistem (perintah #44; kunci
  *    terenkripsi di vault seperti deployer) dengan konduit OpenSea sebagai operator → mesin listing (opensea-list.mjs)
  *    menjualnya otomatis di OpenSea. Eksklusif (4 × 10.000) tanpa premint: dilelang koin AXTO di axto.io, mint saat WD.
  * 4. Selesai → POST /internal/contracts (HMAC) → worker memverifikasi on-chain & menyimpan + vault setConfig.
@@ -34,14 +34,15 @@ const NETS = {
   84532: { rpc: 'https://sepolia.base.org', usdc: '0x036CbD53842c5426634e7929541eC2318f3dCF7e', feed: '0x4aDC67696bA383F43DD60A9e78F2C97Fbbfc7cb1', name: 'Base Sepolia' },
 };
 const COLS = [
-  ['time', 'AXTO Time', 'AXTIME', 2_000_000], ['stamp', 'AXTO Stamp', 'AXSTAMP', 2_000_000], ['quran', "AXTO Qur'an", 'AXQURAN', 2_000_000], ['model', 'AXTO Model', 'AXMODEL', 2_000_000],
+  // #47: publik 4 × 10.000.000 (premint ERC-2309 ±7,7 jt gas per koleksi, di bawah batas 16,7 jt gas per transaksi)
+  ['time', 'AXTO Time', 'AXTIME', 10_000_000], ['stamp', 'AXTO Stamp', 'AXSTAMP', 10_000_000], ['quran', "AXTO Qur'an", 'AXQURAN', 10_000_000], ['model', 'AXTO Model', 'AXMODEL', 10_000_000],
   // #44: eksklusif koin AXTO 4 × 10.000 (ex-model ditambahkan di akhir → alamat koleksi sebelumnya tidak bergeser)
   ['ex-time', 'AXTO Exclusive Time', 'AXXTIME', 10_000], ['ex-stamp', 'AXTO Exclusive Stamp', 'AXXSTAMP', 10_000], ['ex-quran', "AXTO Exclusive Qur'an", 'AXXQURAN', 10_000], ['ex-model', 'AXTO Exclusive Model', 'AXXMODEL', 10_000],
 ];
 /** Konduit OpenSea (Seaport) — sama di semua jaringan; disetujui sejak konstruktor agar listing tanpa transaksi persetujuan. */
 export const OPENSEA_CONDUIT = '0x1E0049783F008A0085193E00003D00cd54003c71';
 /** Gas terukur di ganache untuk seluruh urutan ini (lihat test/auto-deploy.test.mjs), dibulatkan ke atas. */
-export const TOTAL_GAS = 32_000_000n;
+export const TOTAL_GAS = 48_000_000n;
 
 const LOCAL = !!process.env.LOCAL_RPC;
 const CHAIN = Number(process.env.CHAIN_ID || 8453);
