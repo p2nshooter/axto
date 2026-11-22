@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, ccr-9ef9a045-gmv4m2]
   pull_request:
 
 permissions:
@@ -25,16 +25,20 @@ jobs:
         env:
           DRY_RUN: '1'
         run: node bin/produce.mjs
-      - name: Kontrak (solc-js + ganache)
-        working-directory: contracts
+      - name: Checkout vault (repo coinaxto)
+        uses: actions/checkout@v4
+        with:
+          repository: p2nshooter/coinaxto
+          path: vault-src
+      - name: Kontrak + transaksi end-to-end (wallet → worker → vault → kontrak)
         run: |
-          npm ci
-          node scripts/compile.mjs
-          node --test test/*.test.mjs
+          (cd worker && npm ci --no-audit --no-fund)
+          (cd vault-src && npm ci --no-audit --no-fund)
+          cd contracts && npm ci --no-audit --no-fund && node scripts/compile.mjs
+          VAULT_DIR="$GITHUB_WORKSPACE/vault-src" node --test test/*.test.mjs
       - name: Worker (kripto, bundel)
         working-directory: worker
         run: |
-          npm ci
           npm test
           npx wrangler deploy --dry-run --outdir dist
       - name: AdSense axto.io (3 akun, 1 loader)

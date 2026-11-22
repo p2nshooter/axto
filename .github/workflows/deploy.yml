@@ -68,8 +68,8 @@ jobs:
         env:
           VAULT_HMAC_KEY: ${{ secrets.VAULT_HMAC_KEY }}
           SIGNER_KEY: ${{ secrets.SIGNER_KEY }}
-          PAYPAL_CLIENT_ID: ${{ secrets.PAYPAL_LIVE_CLIENT_ID }}
-          PAYPAL_CLIENT_SECRET: ${{ secrets.PAYPAL_LIVE_CLIENT_SECRET }}
+          PAYPAL_CLIENT_ID: ${{ secrets.PAYPAL_SANDBOX_CLIENT_ID }}  # mode sandbox (wrangler.toml PAYPAL_MODE); ganti ke PAYPAL_LIVE_* saat live
+          PAYPAL_CLIENT_SECRET: ${{ secrets.PAYPAL_SANDBOX_CLIENT_SECRET }}
           PAYPAL_WEBHOOK_ID: ${{ secrets.PAYPAL_WEBHOOK_ID }}
         run: |
           set -e
@@ -80,7 +80,19 @@ jobs:
           for attempt in 1 2 3; do npx wrangler deploy && break; [ $attempt = 3 ] && exit 1; sleep 15; done
           derive() { printf '%s' "axto:$1" | openssl dgst -sha256 -hmac "$CLOUDFLARE_API_KEY" | awk '{print $NF}'; }
           printf '%s' "${VAULT_HMAC_KEY:-$(derive VAULT_HMAC_KEY)}" | npx wrangler secret put VAULT_HMAC_KEY >/dev/null
-          [ -n "$SIGNER_KEY" ] && printf '%s' "$SIGNER_KEY" | npx wrangler secret put SIGNER_KEY >/dev/null || echo "::warning::SIGNER_KEY belum diisi (attestasi/voucher menunggu)"
+          # SIGNER_KEY: dari secret GitHub bila ada; kalau tidak, dibuat SEKALI di sini dan hanya disimpan sebagai secret
+          # terenkripsi Cloudflare (tidak pernah dicetak). Yang dicatat hanya ALAMAT publiknya (untuk deploy kontrak).
+          if [ -n "$SIGNER_KEY" ]; then
+            printf '%s' "$SIGNER_KEY" | npx wrangler secret put SIGNER_KEY >/dev/null
+          elif ! npx wrangler secret list --name axto-vault 2>/dev/null | grep -q '"SIGNER_KEY"'; then
+            key=0x$(openssl rand -hex 32)
+            printf '%s' "$key" | npx wrangler secret put SIGNER_KEY >/dev/null
+            addr=$(KEY="$key" node -e "import('@noble/curves/secp256k1').then(async({secp256k1})=>{const {keccak_256}=await import('@noble/hashes/sha3');const pub=secp256k1.getPublicKey(process.env.KEY.slice(2),false).slice(1);console.log('0x'+Buffer.from(keccak_256(pub).slice(12)).toString('hex'))})")
+            unset key
+            printf '{"signer":"%s","at":"%s"}' "$addr" "$(date -u +%FT%TZ)" > /tmp/signer.json
+            npx wrangler r2 object put axto-vault-data/signer.json --file /tmp/signer.json --content-type application/json --remote >/dev/null
+            echo "SIGNER_KEY baru dibuat; alamat signer: $addr"
+          fi
           for k in PAYPAL_CLIENT_ID PAYPAL_CLIENT_SECRET PAYPAL_WEBHOOK_ID; do
             [ -n "${!k}" ] && printf '%s' "${!k}" | npx wrangler secret put "$k" >/dev/null || true
           done
