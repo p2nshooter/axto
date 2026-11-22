@@ -14,11 +14,14 @@ import * as P from './pages.js';
 import { ADS_TXT } from './adsense.js';
 import { session, siweStart, siweFinish, logout, saveProfile, publicProfile, loadMember, rateLimit, hmac } from './auth.js';
 import { createOrder, captureOrder, webhook } from './paypal.js';
-import { dailyBackup, appendLog, readJSON } from './r2.js';
+import { dailyBackup, appendLog, readJSON, listKeys } from './r2.js';
 import { ownerOf, isAddress } from './eth.js';
 import { Ledger, KEYS } from './ledger.js';
 
 export { Ledger };
+
+/** Nama EIP-712 kontrak eksklusif (harus sama dengan nama saat deploy, contracts/scripts/deploy.mjs). */
+export const EX_NAMES = { 'ex-time': 'AXTO Exclusive Time', 'ex-stamp': 'AXTO Exclusive Stamp', 'ex-quran': "AXTO Exclusive Qur'an" };
 
 const IMMUTABLE = 'public, max-age=300, s-maxage=86400, stale-while-revalidate=604800';
 const json = (v, status = 200, extra = {}) => new Response(JSON.stringify(v), { status, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', ...extra } });
@@ -144,6 +147,42 @@ async function api(request, env, ctx, url) {
     if (!COLLECTIONS[b.c]) return json({ error: 'collection' }, 400);
     const r = await ledger(env).bid({ c: b.c, tokenId: Number(b.tokenId), bidder: s.wallet, kind: b.kind === 'proxy' ? 'proxy' : 'fixed', units: Number(b.units), nonce: String(b.nonce), deadline: String(b.deadline), sig: String(b.sig) });
     return json(r, r.ok ? 200 : 400);
+  }
+  // ---- marketplace eksklusif & kustodi ----
+  m = /^\/api\/market\/([a-z-]+)$/.exec(p);
+  if (m && COLLECTIONS[m[1]]?.exclusive && method === 'GET') return json(await ledger(env).marketRows(m[1], { offset: Number(url.searchParams.get('o') ?? 0) }));
+  if (p === '/api/market/list' && method === 'POST') {
+    if (!s) return json({ error: 'auth' }, 401);
+    const b = await readBody(request);
+    return json(await ledger(env).marketList({ c: b.c, tokenId: Number(b.tokenId), seller: s.wallet, kind: b.kind, units: Number(b.units) }));
+  }
+  if (p === '/api/market/cancel' && method === 'POST') {
+    if (!s) return json({ error: 'auth' }, 401);
+    const b = await readBody(request);
+    return json(await ledger(env).marketCancel({ c: b.c, tokenId: Number(b.tokenId), seller: s.wallet }));
+  }
+  if (p === '/api/market/bid' && method === 'POST') {
+    if (!s) return json({ error: 'auth' }, 401);
+    if (!(await rateLimit(env, `bid:${s.wallet}`, 20))) return json({ error: 'rate_limited' }, 429);
+    const b = await readBody(request);
+    const r = await ledger(env).marketBid({ c: b.c, tokenId: Number(b.tokenId), bidder: s.wallet, kind: b.kind, units: Number(b.units), nonce: String(b.nonce), deadline: String(b.deadline), sig: String(b.sig) });
+    return json(r, r.ok ? 200 : 400);
+  }
+  if (p === '/api/me/custody') {
+    if (!s) return json({ error: 'auth' }, 401);
+    const items = [];
+    for (const o of await listKeys(env.STORE, `c/by/${s.wallet.toLowerCase()}/`, 5000)) {
+      const ref = await readJSON(env.STORE, o.key);
+      const own = ref && (await readJSON(env.STORE, `c/ex-own/${ref.c}/${ref.tokenId}.json`));
+      if (own && own.owner.toLowerCase() === s.wallet.toLowerCase()) items.push({ c: ref.c, tokenId: ref.tokenId, status: own.status, since: own.since });
+    }
+    return json({ items });
+  }
+  if (p === '/api/wd' && method === 'POST') {
+    if (!s) return json({ error: 'auth' }, 401);
+    const b = await readBody(request);
+    if (!COLLECTIONS[b.c]?.exclusive) return json({ error: 'collection' }, 400);
+    return json(await ledger(env).withdraw({ c: b.c, tokenId: Number(b.tokenId), owner: s.wallet, collectionName: EX_NAMES[b.c] }));
   }
   m = /^\/api\/claim\/([a-z-]+)\/(\d+)$/.exec(p);
   if (m) {

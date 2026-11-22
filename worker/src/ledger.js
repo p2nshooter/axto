@@ -14,11 +14,12 @@
 import { DurableObject } from 'cloudflare:workers';
 import * as A from '../../engine/src/auction.js';
 import { COLLECTIONS } from '../../engine/src/core.js';
-import { readJSON, putJSON, appendLog, listKeys, createOnce } from './r2.js';
+import { readJSON, putJSON, appendLog, listKeys, createOnce, update } from './r2.js';
 import { vault } from './vault.js';
 import { recover, domainSeparator, bidStructHash, typedHash, lotIdHex, spendable, ownerOf, isAddress } from './eth.js';
 
 export const KEYS = Object.keys(COLLECTIONS);
+export const colAddr = (env, c) => env[`COLLECTION_${c.replace('-', '_').toUpperCase()}`];
 const currencyOf = (c) => (COLLECTIONS[c].exclusive ? 'AXTO' : 'USDC');
 /**
  * lotId stabil per token untuk penjualan primer (penawaran menunggu tetap sah saat masuk ronde; lot yang di-requeue
@@ -44,7 +45,7 @@ export class Ledger extends DurableObject {
       const state = (await readJSON(B, `e/${c}/state.json`)) ?? { produced: 0, cursor: 0, requeue: [], batches: 0, soldAt: 0 };
       const snap = await B.get(`e/${c}/sold.bin`);
       const sold = snap ? new Uint8Array(await snap.arrayBuffer()) : new Uint8Array(Math.ceil((max + 1) / 8));
-      const x = { state, sold, soldDirty: false, rounds: new Map(), inRound: new Map(), lots: new Map() };
+      const x = { state, sold, soldDirty: false, rounds: new Map(), inRound: new Map(), lots: new Map(), market: new Map() };
       // putar ulang log terjual sejak snapshot
       for (const day of daysSince(state.soldAt)) {
         for (const o of await listKeys(B, `log/sold-${c}/${day}/`, 100_000)) {
@@ -63,6 +64,12 @@ export class Ledger extends DurableObject {
       for (const o of await listKeys(B, `l/${c}/`, 1_000_000)) {
         const lot = await readJSON(B, o.key);
         if (lot) x.lots.set(lot.tokenId, lot);
+      }
+      if (COLLECTIONS[c].exclusive) {
+        for (const o of await listKeys(B, `m/${c}/`, 1_000_000)) {
+          const lot = await readJSON(B, o.key);
+          if (lot) x.market.set(lot.tokenId, lot);
+        }
       }
       this.s[c] = x;
     }
@@ -83,6 +90,10 @@ export class Ledger extends DurableObject {
       for (const lot of this.s[c].lots.values()) {
         if (lot.status === 'awaiting_claim') m.set(lot.lotId, { bidder: lot.winner.bidder, amount: lot.winner.amount });
         else if ((lot.status === 'live' || lot.status === 'offer') && lot.leader) m.set(lot.lotId, { bidder: lot.leader, amount: A.holdOf(lot) });
+      }
+      for (const lot of this.s[c].market.values()) {
+        if (lot.status === 'awaiting_claim') m.set(lot.lotId, { bidder: lot.winner.bidder, amount: lot.winner.amount });
+        else if (lot.status === 'live' && lot.leader) m.set(lot.lotId, { bidder: lot.leader, amount: A.holdOf(lot) });
       }
     }
     return m;
@@ -202,17 +213,11 @@ export class Ledger extends DurableObject {
       lot = A.newLot({ lotId: lotIdHex(lotKey(c, tokenId)), collection: c, tokenId, currency: cur, endAt: seal ? seal.endAt : null });
       lot.round = k ?? null;
     }
-    // verifikasi tanda tangan Bid (EIP-712) — inilah yang nanti diperiksa kontrak saat klaim
+    const v = await this.verifyBid(c, lot, b);
+    if (!v.ok) return v;
     const env = this.env;
-    const domain = domainSeparator({ name: 'AXTO Auction House', version: '1', chainId: Number(env.CHAIN_ID), verifyingContract: env.AUCTION_HOUSE });
-    const msg = { lotId: lot.lotId, collection: env[`COLLECTION_${c.replace('-', '_').toUpperCase()}`], tokenId, currency: cur === 'USDC' ? env.USDC : env.AXTO_TOKEN, maxAmount: BigInt(A.toBase(b.units, cur)), nonce: BigInt(b.nonce), deadline: BigInt(b.deadline) };
-    let signer;
-    try { signer = recover(typedHash(domain, bidStructHash(msg)), b.sig); } catch { return { ok: false, error: 'bad_signature' }; }
-    if (signer.toLowerCase() !== bidder.toLowerCase()) return { ok: false, error: 'bad_signature' };
-    // dana di wallet member sendiri: min(saldo, allowance ke AuctionHouse) − hold di lot lain
-    const onchain = A.fromBase((await spendable(env.BASE_RPC, msg.currency, bidder, env.AUCTION_HOUSE)).toString(), cur);
-    const available = A.availableFor(signer, onchain, this.holds(cur), lot.lotId);
-    const r = A.placeBid(lot, { bidder: signer, kind, amount: b.units, max: b.units, sig: { sig: b.sig, nonce: String(b.nonce), deadline: String(b.deadline), units: b.units } }, now, available);
+    const signer = v.signer;
+    const r = A.placeBid(lot, { bidder: signer, kind, amount: b.units, max: b.units, sig: { sig: b.sig, nonce: String(b.nonce), deadline: String(b.deadline), units: b.units } }, now, v.available);
     if (!r.ok) return r;
     x.lots.set(tokenId, lot);
     await this.persistLot(c, lot);
@@ -220,11 +225,131 @@ export class Ledger extends DurableObject {
     return { ok: true, price: lot.price, leader: lot.leader, endAt: lot.endAt, released: r.released ?? null, outbid: Boolean(r.outbidImmediately) };
   }
 
+  /** Tanda tangan Bid (EIP-712, diperiksa lagi oleh kontrak saat klaim) + dana di wallet member sendiri. */
+  async verifyBid(c, lot, b) {
+    const env = this.env;
+    const cur = currencyOf(c);
+    if (!(Number(b.deadline) * 1000 > Date.now() + 3_600_000)) return { ok: false, error: 'deadline' };
+    const domain = domainSeparator({ name: 'AXTO Auction House', version: '1', chainId: Number(env.CHAIN_ID), verifyingContract: env.AUCTION_HOUSE });
+    const msg = { lotId: lot.lotId, collection: colAddr(env, c), tokenId: lot.tokenId, currency: cur === 'USDC' ? env.USDC : env.AXTO_TOKEN, maxAmount: BigInt(A.toBase(b.units, cur)), nonce: BigInt(b.nonce), deadline: BigInt(b.deadline) };
+    let signer;
+    try { signer = recover(typedHash(domain, bidStructHash(msg)), b.sig); } catch { return { ok: false, error: 'bad_signature' }; }
+    if (signer.toLowerCase() !== String(b.bidder).toLowerCase()) return { ok: false, error: 'bad_signature' };
+    // min(saldo, allowance ke AuctionHouse) − hold di lot lain (termasuk lot marketplace)
+    const onchain = A.fromBase((await spendable(env.BASE_RPC, msg.currency, signer, env.AUCTION_HOUSE)).toString(), cur);
+    return { ok: true, signer, available: A.availableFor(signer, onchain, this.holds(cur), lot.lotId) };
+  }
+
+  // ---------------- marketplace eksklusif (hanya axto.io, hanya AXTO, fee 10%) ----------------
+  /** Pasang listing dari kustodi: kind 'auction' (72 jam, start ≥ $1) atau 'buynow' (harga tetap). */
+  async marketList({ c, tokenId, seller, kind, units }) {
+    if (!COLLECTIONS[c]?.exclusive) return { ok: false, error: 'exclusive_only' };
+    const B = this.env.STORE;
+    const own = await readJSON(B, `c/ex-own/${c}/${tokenId}.json`);
+    if (!own || own.status !== 'custody' || own.owner.toLowerCase() !== String(seller).toLowerCase()) return { ok: false, error: 'not_owner' };
+    const x = this.s[c];
+    if (x.market.has(tokenId)) return { ok: false, error: 'already_listed' };
+    const min = A.startUnits(A.START_USD, 'AXTO');
+    if (!Number.isSafeInteger(units) || units < min) return { ok: false, error: 'price', min };
+    const n = (own.resales ?? 0) + 1;
+    const now = Date.now();
+    const lot = A.newLot({ lotId: lotIdHex(`${lotKey(c, tokenId)}:r${n}`), collection: c, tokenId, currency: 'AXTO', start: units, endAt: kind === 'buynow' ? now + 30 * 86_400_000 : now + A.ROUND_MS });
+    Object.assign(lot, { seller: own.owner, kind: kind === 'buynow' ? 'buynow' : 'auction', buyNow: kind === 'buynow' ? units : null, resale: n });
+    x.market.set(tokenId, lot);
+    await putJSON(B, `m/${c}/${tokenId}.json`, lot);
+    await appendLog(B, `market-${c}`, { ev: 'list', tokenId, seller: own.owner, kind: lot.kind, units });
+    return { ok: true, lotId: lot.lotId, endAt: lot.endAt };
+  }
+
+  async marketCancel({ c, tokenId, seller }) {
+    const x = this.s[c];
+    const lot = x?.market.get(tokenId);
+    if (!lot || lot.seller.toLowerCase() !== String(seller).toLowerCase()) return { ok: false, error: 'not_owner' };
+    if (lot.leader || lot.status !== 'live') return { ok: false, error: 'has_bids' };
+    x.market.delete(tokenId);
+    await this.env.STORE.delete(`m/${c}/${tokenId}.json`);
+    return { ok: true };
+  }
+
+  /** Tawar/beli di marketplace. Buy Now: tawaran tetap ≥ harga → lot langsung ditutup untuk pembeli. */
+  async marketBid(b) {
+    const x = this.s[b.c];
+    const lot = x?.market.get(b.tokenId);
+    if (!lot) return { ok: false, error: 'not_listed' };
+    if (lot.seller.toLowerCase() === String(b.bidder).toLowerCase()) return { ok: false, error: 'own_listing' };
+    const v = await this.verifyBid(b.c, lot, b);
+    if (!v.ok) return v;
+    const now = Date.now();
+    const kind = lot.kind === 'buynow' ? 'fixed' : b.kind === 'proxy' ? 'proxy' : 'fixed';
+    if (lot.kind === 'buynow' && b.units < lot.buyNow) return { ok: false, error: 'too_low', min: lot.buyNow };
+    const r = A.placeBid(lot, { bidder: v.signer, kind, amount: lot.kind === 'buynow' ? lot.buyNow : b.units, max: b.units, sig: { sig: b.sig, nonce: String(b.nonce), deadline: String(b.deadline), units: b.units } }, now, v.available);
+    if (!r.ok) return r;
+    if (lot.kind === 'buynow') {
+      lot.endAt = now;
+      A.close(lot, now);
+      await this.attest(b.c, lot);
+    }
+    await putJSON(this.env.STORE, `m/${b.c}/${b.tokenId}.json`, lot);
+    await appendLog(this.env.STORE, `market-${b.c}`, { ev: 'bid', tokenId: b.tokenId, bidder: v.signer, price: lot.price });
+    return { ok: true, price: lot.price, leader: lot.leader, endAt: lot.endAt, status: lot.status };
+  }
+
+  async marketTick(c, now) {
+    const x = this.s[c];
+    const B = this.env.STORE;
+    for (const lot of [...x.market.values()]) {
+      if (lot.status === 'live' && now >= lot.endAt) {
+        A.close(lot, now);
+        if (lot.status === 'unsold') { x.market.delete(lot.tokenId); await B.delete(`m/${c}/${lot.tokenId}.json`); continue; }
+        await this.attest(c, lot);
+        await putJSON(B, `m/${c}/${lot.tokenId}.json`, lot);
+      } else if (lot.status === 'awaiting_claim') {
+        let settled = false;
+        try { settled = Boolean((await vault(this.env, 'isSettled', { lotId: lot.lotId })).settled); } catch { settled = false; }
+        if (settled) {
+          await update(B, `c/ex-own/${c}/${lot.tokenId}.json`, (o) => ({ ...o, owner: lot.winner.bidder, since: now, resales: lot.resale, lotId: lot.lotId }));
+          await createOnce(B, `c/by/${lot.winner.bidder.toLowerCase()}/${c}-${lot.tokenId}.json`, { c, tokenId: lot.tokenId });
+          await B.delete(`c/by/${lot.seller.toLowerCase()}/${c}-${lot.tokenId}.json`);
+          await putJSON(B, `h/${c}/${lot.tokenId}-r${lot.resale}.json`, lot);
+          x.market.delete(lot.tokenId);
+          await B.delete(`m/${c}/${lot.tokenId}.json`);
+          await appendLog(B, `market-${c}`, { ev: 'sold', tokenId: lot.tokenId, seller: lot.seller, buyer: lot.winner.bidder, price: lot.winner.amount });
+        } else if (now >= lot.claim.until) {
+          // pembeli tidak klaim: listing kembali ke penjual (tanpa cascade di marketplace)
+          x.market.delete(lot.tokenId);
+          await B.delete(`m/${c}/${lot.tokenId}.json`);
+          await appendLog(B, `market-${c}`, { ev: 'expired', tokenId: lot.tokenId });
+        }
+      }
+    }
+  }
+
+  marketRows(c, { limit = 48, offset = 0 } = {}) {
+    const rows = [...(this.s[c]?.market.values() ?? [])].filter((l) => l.status === 'live').map((l) => ({ tokenId: l.tokenId, kind: l.kind, price: l.price, start: l.start, buyNow: l.buyNow, endAt: l.endAt, bids: l.bids.length, lotId: l.lotId }));
+    rows.sort((a, b) => a.endAt - b.endAt);
+    return { total: rows.length, currency: 'AXTO', rows: rows.slice(offset, offset + limit) };
+  }
+
+  /** WD: voucher mint dari vault untuk pemilik kustodi (member membayar gas mint). */
+  async withdraw({ c, tokenId, owner, collectionName }) {
+    const B = this.env.STORE;
+    if (this.s[c]?.market.has(tokenId)) return { ok: false, error: 'listed' };
+    const own = await readJSON(B, `c/ex-own/${c}/${tokenId}.json`);
+    if (!own || own.owner.toLowerCase() !== String(owner).toLowerCase() || !['custody', 'withdrawing'].includes(own.status)) return { ok: false, error: 'not_owner' };
+    const v = await vault(this.env, 'mintVoucher', { collection: colAddr(this.env, c), collectionName, tokenId: String(tokenId), owner: own.owner, custodyRef: `${c}:${tokenId}:${own.lotId}` });
+    await update(B, `c/ex-own/${c}/${tokenId}.json`, (o) => ({ ...o, status: 'withdrawing', wdAt: Date.now() }));
+    await appendLog(B, `wd-${c}`, { tokenId, owner: own.owner });
+    return { ok: true, voucher: v };
+  }
+
   // ---------------- jadwal (cron tiap 5 menit) ----------------
   async tick(now = Date.now()) {
     if (!this.genesis) return { skipped: 'genesis' };
     const report = {};
-    for (const c of KEYS) report[c] = await this.tickCollection(c, now);
+    for (const c of KEYS) {
+      report[c] = await this.tickCollection(c, now);
+      if (COLLECTIONS[c].exclusive) await this.marketTick(c, now);
+    }
     for (const c of KEYS) await this.flushSold(c);
     return report;
   }
@@ -335,8 +460,8 @@ export class Ledger extends DurableObject {
     if (!sig) return;
     const exclusive = COLLECTIONS[c].exclusive;
     const res = {
-      lotId: lot.lotId, collection: env[`COLLECTION_${c.replace('-', '_').toUpperCase()}`], tokenId: String(lot.tokenId), winner: lot.winner.bidder,
-      currency: exclusive ? env.AXTO_TOKEN : env.USDC, price: A.toBase(lot.winner.amount, currencyOf(c)), seller: '0x0000000000000000000000000000000000000000', // primer: 100% treasury
+      lotId: lot.lotId, collection: colAddr(env, c), tokenId: String(lot.tokenId), winner: lot.winner.bidder,
+      currency: exclusive ? env.AXTO_TOKEN : env.USDC, price: A.toBase(lot.winner.amount, currencyOf(c)), seller: lot.seller ?? '0x0000000000000000000000000000000000000000', // primer: 100% treasury; resale: 90% penjual + 10% fee
       mode: exclusive ? 2 : 0, deadline: String(Math.floor((lot.claim.until + 3_600_000) / 1000)),
     };
     try {
@@ -349,7 +474,7 @@ export class Ledger extends DurableObject {
 
   /** Data klaim untuk pemenang (dipanggil dari portal member). */
   claimData(c, tokenId, wallet) {
-    const lot = this.s[c].lots.get(tokenId);
+    const lot = this.s[c].lots.get(tokenId)?.status === 'awaiting_claim' ? this.s[c].lots.get(tokenId) : this.s[c].market.get(tokenId);
     if (!lot || lot.status !== 'awaiting_claim' || lot.winner.bidder.toLowerCase() !== String(wallet).toLowerCase() || !lot.claim.att) return null;
     return { until: lot.claim.until, ...lot.claim.att };
   }
@@ -359,7 +484,7 @@ export class Ledger extends DurableObject {
     const env = this.env;
     let done = false;
     if (!COLLECTIONS[c].exclusive) {
-      const owner = await ownerOf(env.BASE_RPC, env[`COLLECTION_${c.toUpperCase()}`], lot.tokenId);
+      const owner = await ownerOf(env.BASE_RPC, colAddr(env, c), lot.tokenId);
       done = owner && owner.toLowerCase() === lot.winner.bidder.toLowerCase();
     } else {
       try { done = Boolean((await vault(env, 'isSettled', { lotId: lot.lotId })).settled); } catch { done = false; }
@@ -379,7 +504,10 @@ export class Ledger extends DurableObject {
     await putJSON(B, `h/${c}/${lot.tokenId}.json`, lot);
     await B.delete(`l/${c}/${lot.tokenId}.json`);
     await appendLog(B, `sold-${c}`, { tokenId: lot.tokenId, winner: lot.winner });
-    if (COLLECTIONS[c].exclusive) await createOnce(B, `c/ex-own/${c}/${lot.tokenId}.json`, { owner: lot.winner.bidder, since: Date.now(), lotId: lot.lotId, status: 'custody' });
+    if (COLLECTIONS[c].exclusive) {
+      await createOnce(B, `c/ex-own/${c}/${lot.tokenId}.json`, { owner: lot.winner.bidder, since: Date.now(), lotId: lot.lotId, status: 'custody', resales: 0 });
+      await createOnce(B, `c/by/${lot.winner.bidder.toLowerCase()}/${c}-${lot.tokenId}.json`, { c, tokenId: lot.tokenId });
+    }
   }
 
   async flushSold(c) {

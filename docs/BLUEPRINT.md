@@ -518,22 +518,25 @@ Status diperbarui setiap commit. (Lihat juga README.)
 - [x] Renderer SVG + player HTML (jam, prangko + zoom galaksi, kaligrafi 3D + qari + penunjuk kata, model) — teruji QA
 - [x] Logika lelang murni (segel 10%, start $1 semua lot, +10%/proxy, hold, cascade, penawaran menunggu) — teruji
 - [x] Kontrak Solidity — dikompilasi & teruji (ganache)
-- [~] Worker axto-web (router, i18n, SEO, banner, portal, API, DO Ledger/Round, PayPal relay)
-- [~] Vault axto-vault (RPC, signer EIP-712, PayPal)
-- [~] Workflows CI, deploy, engine
+- [x] Worker axto-web: router, i18n ID/EN manual, SEO (hreflang, JSON-LD, sitemap), banner kanvas interaktif, AdSense 3 akun,
+  SIWE + profil terenkripsi, DO Ledger (segel 10%, lelang $1, hold lintas koleksi, cascade, kustodi, marketplace eksklusif
+  BN/auction 90/10, WD), engine commit ber-HMAC, PayPal relay — diuji lokal (wrangler dev) + tes kripto
+- [x] Vault axto-vault (repo coinaxto): HMAC per pesan + daftar metode, attestasi Result, voucher koin & WD, PayPal
+  order/capture/webhook terverifikasi — tes tanda tangan identik ethers/kontrak
+- [x] Workflows CI, deploy (cek AdSense live), engine tiap jam; `contracts/scripts/deploy.mjs` diuji di ganache
 
 ### Tahap B — Butuh tindakan pemilik
 - [P] Pasang Claude GitHub App di `p2nshooter/axto` & `p2nshooter/coinaxto` (agar kode bisa di-push)
 - [P] Putar ulang kunci OpenSea (axto-io) & simpan di secrets; tambahkan `PAYPAL_WEBHOOK_ID`
 - [P] Buat signer baru (vault), deploy kontrak di Base Sepolia lalu Base mainnet dari MetaMask admin, isi alamat ke
-  `wrangler.jsonc`
+  `worker/wrangler.toml` (keluaran `contracts/scripts/deploy.mjs`)
 - [P] Tambah zona axto.io ke Cloudflare (route otomatis aktif)
 - [P] Izin tertulis model; persetujuan PayPal untuk penjualan kripto; nasihat hukum koin
 - [P] Audit kontrak
 
 ### Tahap C — Peluncuran
 - [ ] Uji end-to-end di Base Sepolia (tawar → klaim → muncul di OpenSea testnet → refresh metadata)
-- [ ] Genesis ronde pertama (`GENESIS` di wrangler) — engine sudah memproduksi stok
+- [ ] Genesis ronde pertama (`GENESIS_MS` di wrangler) — engine sudah memproduksi stok
 - [ ] Monitoring 7 hari, lalu buka penjualan koin
 
 ---
