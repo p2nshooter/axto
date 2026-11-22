@@ -25,7 +25,7 @@ export function securityHeaders(n, { frame = false } = {}) {
     "font-src 'self' data:",
     "media-src 'self' https://everyayah.com https://verses.quran.com https://audio.qurancdn.com",
     "connect-src 'self' https://mainnet.base.org https://api.quran.com https://*.google.com https://*.googlesyndication.com https://*.doubleclick.net https://*.adtrafficquality.google",
-    "frame-src https://*.googlesyndication.com https://*.doubleclick.net https://*.google.com https://www.paypal.com",
+    "frame-src 'self' https://*.googlesyndication.com https://*.doubleclick.net https://*.google.com https://www.paypal.com",
     `frame-ancestors ${frame ? '*' : "'none'"}`,
     "base-uri 'none'",
     "object-src 'none'",

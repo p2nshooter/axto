@@ -8,6 +8,14 @@ const EXCL = ['ex-time', 'ex-stamp', 'ex-quran'];
 const fmt = (n, lang) => Number(n ?? 0).toLocaleString(lang === 'id' ? 'id-ID' : 'en-US');
 export const money = (units, cur, lang) => (cur === 'USDC' ? `$${(units / 100).toLocaleString(lang === 'id' ? 'id-ID' : 'en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : `${(units / 1000).toLocaleString(lang === 'id' ? 'id-ID' : 'en-US', { maximumFractionDigits: 3 })} AXTO`);
 const nftPath = (lang, c, id) => `/${lang}/nft/${c}/${id}`;
+const IMGV = 'v=3';
+const img = (c, id) => `/img/${c}/${id}.svg?${IMGV}`;
+/** Lencana jenis karya: publik (USDC, OpenSea, MetaMask) atau eksklusif (koin AXTO, kustodi axto.io, WD). */
+export const badge = (lang, c, long = false) => {
+  const k = T[lang].kind;
+  const ex = c.startsWith('ex-');
+  return `<span class="badge ${ex ? 'ex' : 'pub'}" title="${esc(ex ? k.exLong : k.pubLong)}">${esc(long ? (ex ? k.exLong : k.pubLong) : ex ? k.exShort : k.pubShort)}</span>`;
+};
 const collName = (lang, c) => {
   const base = c.replace('ex-', '');
   const n = T[lang].collections[base][0];
@@ -16,34 +24,38 @@ const collName = (lang, c) => {
 
 /** Banner animatif interaktif: kanvas (orbit, jam hidup, partikel prangko, kaligrafi), mengikuti kursor. */
 const BANNER_JS = `
-const cv=document.getElementById('hero-canvas');if(cv){const g=cv.getContext('2d');let W,H,mx=.5,my=.5,t0=performance.now();
-const R=()=>{const r=cv.getBoundingClientRect();W=cv.width=r.width*devicePixelRatio;H=cv.height=r.height*devicePixelRatio};R();addEventListener('resize',R);
-cv.addEventListener('pointermove',e=>{const r=cv.getBoundingClientRect();mx=(e.clientX-r.left)/r.width;my=(e.clientY-r.top)/r.height});
-const stars=Array.from({length:180},()=>({x:Math.random(),y:Math.random(),z:Math.random()*.9+.1}));
-const glyph=['ب','س','م','ا','ل','ه','ر','ح','ن','ي'];
+const cv=document.getElementById('hero-canvas');if(cv){const g=cv.getContext('2d');let W,H,mx=.5,my=.5,t0=performance.now();const dpr=Math.min(2,devicePixelRatio||1);
+const R=()=>{const r=cv.getBoundingClientRect();W=cv.width=r.width*dpr;H=cv.height=r.height*dpr};R();addEventListener('resize',R);
+addEventListener('pointermove',e=>{const r=cv.getBoundingClientRect();mx=Math.min(1,Math.max(0,(e.clientX-r.left)/r.width));my=Math.min(1,Math.max(0,(e.clientY-r.top)/r.height))});
+const stars=Array.from({length:120},()=>({x:Math.random(),y:Math.random(),z:Math.random()*.9+.1}));
+const glyph=['ب','س','م','ا','ل','ه','ر','ح','ن','ي','✦','◷'];
 const still=matchMedia('(prefers-reduced-motion: reduce)').matches;
 function frame(now){const t=(now-t0)/1000;g.clearRect(0,0,W,H);
-for(const s of stars){const x=((s.x+(mx-.5)*.04*s.z+t*.004*s.z)%1)*W,y=((s.y+(my-.5)*.04*s.z)%1)*H;g.fillStyle='rgba(180,200,255,'+(.25+.6*s.z)+')';g.fillRect(x,y,1.6*s.z*devicePixelRatio,1.6*s.z*devicePixelRatio)}
-const cx=W*(.68+(mx-.5)*.05),cy=H*(.5+(my-.5)*.05),r=Math.min(W,H)*.32;
-for(let i=0;i<4;i++){g.beginPath();g.ellipse(cx,cy,r*(1+i*.22),r*(.34+i*.08),-.35,0,7);g.strokeStyle='rgba(212,175,55,'+(.35-i*.07)+')';g.lineWidth=devicePixelRatio;g.stroke();
-const a=t*(.4-i*.07)+i*1.7;g.beginPath();g.arc(cx+Math.cos(a)*r*(1+i*.22)*Math.cos(-.35)-Math.sin(a)*r*(.34+i*.08)*Math.sin(-.35),cy+Math.cos(a)*r*(1+i*.22)*Math.sin(-.35)+Math.sin(a)*r*(.34+i*.08)*Math.cos(-.35),(4+i)*devicePixelRatio,0,7);g.fillStyle=['#d4af37','#7fb3ff','#e8e8f0','#9be3c4'][i];g.fill()}
-const d=new Date(),h=d.getHours()%12,m=d.getMinutes(),s=d.getSeconds()+d.getMilliseconds()/1000;
-g.beginPath();g.arc(cx,cy,r*.62,0,7);const gr=g.createRadialGradient(cx-r*.2,cy-r*.2,r*.05,cx,cy,r*.62);gr.addColorStop(0,'#2a3c66');gr.addColorStop(1,'#0e1428');g.fillStyle=gr;g.fill();g.strokeStyle='#d4af37';g.lineWidth=3*devicePixelRatio;g.stroke();
-for(let i=0;i<60;i++){const a=i/60*Math.PI*2,l=i%5?.94:.86;g.beginPath();g.moveTo(cx+Math.sin(a)*r*.58,cy-Math.cos(a)*r*.58);g.lineTo(cx+Math.sin(a)*r*.58*l,cy-Math.cos(a)*r*.58*l);g.strokeStyle=i%5?'rgba(255,255,255,.35)':'#d4af37';g.lineWidth=(i%5?1:2.5)*devicePixelRatio;g.stroke()}
-const hand=(a,l,w,c)=>{g.beginPath();g.moveTo(cx,cy);g.lineTo(cx+Math.sin(a)*r*l,cy-Math.cos(a)*r*l);g.strokeStyle=c;g.lineWidth=w*devicePixelRatio;g.lineCap='round';g.stroke()};
-hand((h+m/60)/12*Math.PI*2,.32,5,'#e8e8f0');hand((m+s/60)/60*Math.PI*2,.46,3.5,'#e8e8f0');hand(s/60*Math.PI*2,.52,1.5,'#d4af37');
-g.font=(28*devicePixelRatio)+'px serif';g.textAlign='center';
-for(let i=0;i<glyph.length;i++){const a=t*.25+i/glyph.length*Math.PI*2;g.fillStyle='rgba(212,175,55,'+(.35+.35*Math.sin(t+i))+')';g.fillText(glyph[i],cx+Math.cos(a)*r*1.55,cy+Math.sin(a)*r*.62+10)}
+for(const s of stars){const x=((s.x+(mx-.5)*.05*s.z+t*.003*s.z)%1)*W,y=((s.y+(my-.5)*.05*s.z)%1)*H;g.globalAlpha=.25+.6*s.z*(.6+.4*Math.sin(t*2+s.x*40));g.fillStyle='#b4c8ff';g.fillRect(x,y,1.8*s.z*dpr,1.8*s.z*dpr)}g.globalAlpha=1;
+const cx=W*(.5+(mx-.5)*.04),cy=H*(.5+(my-.5)*.04),r=Math.min(W,H)*.36;
+const P=(i,a)=>{const rx=r*(1+i*.16),ry=r*(.3+i*.07),k=-.35;return[cx+Math.cos(a)*rx*Math.cos(k)-Math.sin(a)*ry*Math.sin(k),cy+Math.cos(a)*rx*Math.sin(k)+Math.sin(a)*ry*Math.cos(k)]};
+for(let i=0;i<4;i++){g.beginPath();g.ellipse(cx,cy,r*(1+i*.16),r*(.3+i*.07),-.35,0,7);g.strokeStyle='rgba(212,175,55,'+(.4-i*.08)+')';g.lineWidth=dpr;g.stroke();
+const [x,y]=P(i,t*(.45-i*.08)+i*1.7);g.beginPath();g.arc(x,y,(3.5+i)*dpr,0,7);g.fillStyle=['#d4af37','#7fb3ff','#e8e8f0','#9be3c4'][i];g.shadowColor=g.fillStyle;g.shadowBlur=12*dpr;g.fill();g.shadowBlur=0}
+g.font=(22*dpr)+'px serif';g.textAlign='center';g.textBaseline='middle';
+for(let i=0;i<glyph.length;i++){const [x,y]=P(3,t*.18+i/glyph.length*Math.PI*2);g.fillStyle='rgba(212,175,55,'+(.3+.35*Math.sin(t+i))+')';g.fillText(glyph[i],x,y)}
 if(!still)requestAnimationFrame(frame)}requestAnimationFrame(frame)}
 document.querySelectorAll('[data-count]').forEach(el=>{const v=+el.dataset.count;let i=0;const step=()=>{i=Math.min(v,i+Math.ceil(v/40)||1);el.textContent=i.toLocaleString(document.documentElement.lang);if(i<v)requestAnimationFrame(step)};step()});`;
 
 export function home(lang, stats) {
   const t = T[lang];
-  const sum = (k) => PUBLIC.concat(EXCL).reduce((n, c) => n + (stats.collections?.[c]?.[k] ?? 0), 0);
+  const k = t.kind;
+  const sum = (key) => PUBLIC.concat(EXCL).reduce((n, c) => n + (stats.collections?.[c]?.[key] ?? 0), 0);
   const nextAt = stats.round ? (Date.now() < stats.round.startAt ? stats.round.startAt : stats.round.endAt) : null;
+  const pick = (c) => 1 + ((Date.now() >> 20) % Math.max(1, Math.min(1000, stats.collections?.[c]?.produced || 1)));
+  const show = [...PUBLIC, 'ex-quran'];
+  const card = (c) => `<article class="card ${c.startsWith('ex-') ? 'is-ex' : 'is-pub'}">
+    <a class="art" href="/${lang}/c/${c}"><img src="${img(c, pick(c))}" alt="${esc(collName(lang, c))}" loading="lazy" width="400" height="400"></a>
+    ${badge(lang, c)}
+    <h3>${esc(collName(lang, c))}</h3><p>${esc(t.collections[c.replace('ex-', '')][1])}</p>
+    <p class="meta">${fmt(COLLECTIONS[c].max, lang)} × 1/1 · ${fmt(stats.collections?.[c]?.produced, lang)} ${lang === 'id' ? 'diproduksi' : 'produced'}</p>
+    <a class="link" href="/${lang}/c/${c}">${esc(t.collections.open)} →</a></article>`;
   const body = `
 <section class="hero">
-  <canvas id="hero-canvas" aria-hidden="true"></canvas>
   <div class="hero-copy">
     <p class="kicker">${esc(t.hero.kicker)}</p>
     <h1>${esc(t.hero.title).replace('\n', '<br>')}</h1>
@@ -56,14 +68,22 @@ export function home(lang, stats) {
       ${nextAt ? `<div><dt>${esc(t.hero.next)}</dt><dd><time data-countdown="${nextAt}"></time></dd></div>` : ''}
     </dl>
   </div>
+  <div class="hero-visual" aria-hidden="true">
+    <canvas id="hero-canvas"></canvas>
+    <div class="showcase">${show.map((c, i) => `<a class="sc" style="--i:${i}" href="${nftPath(lang, c, pick(c))}" tabindex="-1"><img src="${img(c, pick(c))}" alt="" width="400" height="400"><span>${esc(collName(lang, c))}</span></a>`).join('')}</div>
+  </div>
 </section>
-<section class="grid4">
-  <h2>${esc(t.collections.title)}</h2>
-  ${PUBLIC.map((c) => `<article class="card">
-    <a href="/${lang}/c/${c}"><img src="/img/${c}/${1 + (Date.now() >> 20) % 1000}.svg" alt="${esc(t.collections[c][0])}" loading="lazy" width="400" height="400"></a>
-    <h3>${esc(t.collections[c][0])}</h3><p>${esc(t.collections[c][1])}</p>
-    <p class="meta">${fmt(COLLECTIONS[c].max, lang)} × 1/1 · ${fmt(stats.collections?.[c]?.produced, lang)} ${lang === 'id' ? 'diproduksi' : 'produced'}</p>
-    <a class="link" href="/${lang}/c/${c}">${esc(t.collections.open)} →</a></article>`).join('')}
+<section class="kinds">
+  <a class="kind pub" href="#publik"><b>${esc(k.pub)}</b><span>${esc(k.pubLong)}</span></a>
+  <a class="kind ex" href="#eksklusif"><b>${esc(k.ex)}</b><span>${esc(k.exLong)}</span></a>
+</section>
+<section class="grid4" id="publik">
+  <h2>${esc(k.pubTitle)}</h2><p class="lead wide">${esc(k.pubLead)}</p>
+  ${PUBLIC.map(card).join('')}
+</section>
+<section class="grid3 exsec" id="eksklusif">
+  <h2>${esc(k.exTitle)}</h2><p class="lead wide">${esc(k.exLead)}</p>
+  ${EXCL.map(card).join('')}
 </section>
 <section class="how"><h2>${esc(t.how.title)}</h2><ol>${t.how.steps.map(([h, p]) => `<li><h3>${esc(h)}</h3><p>${esc(p)}</p></li>`).join('')}</ol></section>
 <section class="duo">
@@ -79,8 +99,8 @@ function lotGrid(lang, c, rows, cur, withEnd) {
   const t = T[lang];
   if (!rows.length) return '';
   return `<ul class="lots">${rows.map((r) => `<li><a href="${nftPath(lang, c, r.tokenId)}">
-    <img src="/img/${c}/${r.tokenId}.svg" alt="${esc(collName(lang, c))} #${r.tokenId}" loading="lazy" width="300" height="300">
-    <span class="id">#${r.tokenId}</span>
+    <img src="${img(c, r.tokenId)}" alt="${esc(collName(lang, c))} #${r.tokenId}" loading="lazy" width="300" height="300">
+    <span class="id">#${r.tokenId}</span>${badge(lang, c)}
     <span class="price">${r.price ? `${esc(t.auction.highest)}: ${money(r.price, cur, lang)}` : `${esc(t.auction.start)}: ${money(r.start ?? 100, cur, lang)}`}</span>
     ${withEnd ? `<time data-countdown="${r.endAt}"></time>` : `<span>${r.bids} ${esc(t.waiting.offers)}</span>`}</a></li>`).join('')}</ul>`;
 }
@@ -93,6 +113,7 @@ export function auctionPage(lang, c, data, sort, stats) {
   const empty = !data.rows.length ? `<p class="empty">${esc(t.auction.empty)} ${stats.round ? `<time data-countdown="${stats.round.startAt > Date.now() ? stats.round.startAt : stats.round.endAt}"></time>` : '—'}</p>` : '';
   return `<section class="page"><h1>${esc(t.auction.title)}</h1>
   <nav class="tabs">${tabs}</nav><nav class="tabs small">${sorts}</nav>
+  <p class="kindline">${badge(lang, c, true)}</p>
   <p class="meta">${fmt(data.total, lang)} ${esc(t.auction.lots)} · ${esc(t.auction.start)}: ${money(100, data.currency, lang)}</p>
   ${empty}${lotGrid(lang, c, data.rows, data.currency, true)}</section>`;
 }
@@ -102,7 +123,7 @@ export function waitingPage(lang, c, data, order) {
   const tabs = [...PUBLIC, ...EXCL].map((k) => `<a href="${altPath('waiting', lang)}?c=${k}&amp;order=${order}"${k === c ? ' aria-current="true"' : ''}>${esc(collName(lang, k))}</a>`).join('');
   const ord = [['desc', t.auction.sortHighest], ['asc', t.auction.sortLowest]].map(([k, l]) => `<a href="${altPath('waiting', lang)}?c=${c}&amp;order=${k}"${k === order ? ' aria-current="true"' : ''}>${esc(l)}</a>`).join('');
   return `<section class="page"><h1>${esc(t.waiting.title)}</h1><p class="lead">${esc(t.waiting.lead)}</p>
-  <nav class="tabs">${tabs}</nav><nav class="tabs small">${ord}</nav>${lotGrid(lang, c, data.rows, data.currency, false)}</section>`;
+  <nav class="tabs">${tabs}</nav><nav class="tabs small">${ord}</nav><p class="kindline">${badge(lang, c, true)}</p>${lotGrid(lang, c, data.rows, data.currency, false)}</section>`;
 }
 
 export function collectionPage(lang, c, page, stats) {
@@ -115,13 +136,13 @@ export function collectionPage(lang, c, page, stats) {
   const base = c.replace('ex-', '');
   const t = T[lang];
   const pages = Math.max(1, Math.ceil(produced / per));
-  return `<section class="page"><h1>${esc(collName(lang, c))}</h1><p class="lead">${esc(t.collections[base][1])}</p>
+  return `<section class="page"><h1>${esc(collName(lang, c))}</h1><p class="kindline">${badge(lang, c, true)}</p><p class="lead">${esc(t.collections[base][1])}</p>
   <p class="meta">${fmt(produced, lang)} / ${fmt(COLLECTIONS[c].max, lang)}</p>
-  <ul class="lots">${ids.map((id) => `<li><a href="${nftPath(lang, c, id)}"><img src="/img/${c}/${id}.svg" alt="${esc(collName(lang, c))} #${id}" loading="lazy" width="300" height="300"><span class="id">#${id}</span></a></li>`).join('')}</ul>
+  <ul class="lots">${ids.map((id) => `<li><a href="${nftPath(lang, c, id)}"><img src="${img(c, id)}" alt="${esc(collName(lang, c))} #${id}" loading="lazy" width="300" height="300"><span class="id">#${id}</span></a></li>`).join('')}</ul>
   <nav class="pager">${page > 1 ? `<a rel="prev" href="/${lang}/c/${c}?p=${page - 1}">←</a>` : ''}<span>${page} / ${pages}</span>${page < pages ? `<a rel="next" href="/${lang}/c/${c}?p=${page + 1}">→</a>` : ''}</nav></section>`;
 }
 
-export function nftPage(lang, c, id, meta, lot, attrsId) {
+export function nftPage(lang, c, id, meta, lot, attrsId, opensea = '') {
   const t = T[lang];
   const attrs = lang === 'id' ? attrsId : meta.attributes;
   const live = lot.status === 'live' || lot.status === 'waiting';
@@ -129,6 +150,7 @@ export function nftPage(lang, c, id, meta, lot, attrsId) {
   return `<section class="nft">
   <div class="stage"><iframe src="/play/${c}/${id}" title="${esc(meta.name)}" loading="lazy" allow="autoplay; fullscreen" sandbox="allow-scripts allow-same-origin"></iframe></div>
   <div class="info">
+    <p class="kindline">${badge(lang, c, true)}</p>
     <h1>${esc(meta.name)}</h1>
     <p class="meta">${esc(t.nft.edition)} · ${esc(t.nft.rarity)}: ${esc(rarity)}</p>
     <div class="bidbox" data-c="${c}" data-id="${id}" data-currency="${lot.currency}" data-status="${lot.status}" data-min-fixed="${lot.minFixed}" data-min-proxy="${lot.minProxy}">
@@ -136,11 +158,11 @@ export function nftPage(lang, c, id, meta, lot, attrsId) {
       ${lot.endAt ? `<p>${esc(t.auction.endsIn)} <time data-countdown="${lot.endAt}"></time></p>` : ''}
       ${live ? `<p class="bidrow"><button class="btn gold" data-bid="auto" type="button">${esc(t.auction.bidAuto)}</button>
         <input type="number" min="0" step="0.01" inputmode="decimal" aria-label="${esc(t.auction.bidMax)}" placeholder="${esc(t.auction.bidMax)}">
-        <button class="btn" data-bid="proxy" type="button">${esc(t.auction.bid)}</button></p><p class="bidmsg" role="status"></p>` : `<p class="status">${esc(lot.status)}</p>`}
+        <button class="btn" data-bid="proxy" type="button">${esc(t.auction.bid)}</button></p><p class="bidmsg" role="status"></p>` : `<p class="status">${esc(t.kind.status[lot.status] ?? lot.status)}</p>`}
     </div>
     <h2>${esc(t.nft.traits)}</h2>
     <dl class="traits">${attrs.map((a) => `<div><dt>${esc(a.trait_type)}</dt><dd>${esc(a.value)}</dd></div>`).join('')}</dl>
-    <p><a class="link" href="/play/${c}/${id}" target="_blank" rel="noopener">${esc(t.nft.play)} ↗</a> · <a class="link" href="${altPath('verify', lang, `/${c}/${id}`)}">${esc(t.nft.certificate)}</a></p>
+    <p><a class="link" href="/play/${c}/${id}" target="_blank" rel="noopener">${esc(t.nft.play)} ↗</a> · <a class="link" href="${altPath('verify', lang, `/${c}/${id}`)}">${esc(t.nft.certificate)}</a>${opensea ? ` · <a class="link" href="${esc(opensea)}" target="_blank" rel="noopener">${esc(t.kind.opensea)} ↗</a>` : ''}</p>
     <details><summary>${esc(t.nft.history)} (${lot.bids.length})</summary><ol class="hist">${lot.bids.slice().reverse().map((b) => `<li>${esc(b.bidder.slice(0, 6))}…${esc(b.bidder.slice(-4))} · ${esc(b.kind)} · <time datetime="${new Date(b.at).toISOString()}">${new Date(b.at).toISOString().slice(0, 16).replace('T', ' ')}</time></li>`).join('')}</ol></details>
     <p class="desc">${esc(meta.description).replace(/\n/g, '<br>')}</p>
   </div></section>`;
@@ -148,8 +170,8 @@ export function nftPage(lang, c, id, meta, lot, attrsId) {
 
 export function exclusivePage(lang, stats) {
   const t = T[lang];
-  return `<section class="page"><h1>${esc(t.exclusive.title)}</h1><p class="lead">${esc(t.exclusive.lead)}</p>
-  <div class="grid3">${EXCL.map((c) => `<article class="card"><a href="/${lang}/c/${c}"><img src="/img/${c}/1.svg" alt="${esc(collName(lang, c))}" loading="lazy" width="400" height="400"></a>
+  return `<section class="page"><h1>${esc(t.exclusive.title)}</h1><p class="kindline">${badge(lang, 'ex-time', true)}</p><p class="lead">${esc(t.kind.exLead)}</p><p class="meta">${esc(t.exclusive.lead)}</p>
+  <div class="grid3">${EXCL.map((c) => `<article class="card is-ex"><a class="art" href="/${lang}/c/${c}"><img src="${img(c, 1)}" alt="${esc(collName(lang, c))}" loading="lazy" width="400" height="400"></a>
   <h3>${esc(collName(lang, c))}</h3><p class="meta">${fmt(COLLECTIONS[c].max, lang)} × 1/1 · ${fmt(stats.collections?.[c]?.sold, lang)} ${esc(t.hero.sold)}</p>
   <a class="link" href="${altPath('auction', lang)}?c=${c}">${esc(t.nav.auction)} →</a></article>`).join('')}</div>
   <div id="ex-market" data-lang="${lang}"></div></section>`;
@@ -185,7 +207,7 @@ export function adminPage(lang, ok, stats) {
 export function verifyPage(lang, c, id, meta, hash, owner) {
   const t = T[lang].verify;
   return `<section class="page"><h1>${esc(t.title)}</h1><p class="ok">✓ ${esc(t.ok)}</p>
-  <h2>${esc(meta.name)}</h2><p><img src="/img/${c}/${id}.svg" alt="" width="320" height="320"></p>
+  <h2>${esc(meta.name)}</h2><p class="kindline">${badge(lang, c, true)}</p><p><img src="${img(c, id)}" alt="" width="320" height="320"></p>
   <dl class="traits"><div><dt>${esc(t.hash)}</dt><dd><code>${esc(hash)}</code></dd></div><div><dt>${esc(T[lang].nft.owner)}</dt><dd>${owner ? `<code>${esc(owner)}</code>` : '—'}</dd></div></dl></section>`;
 }
 

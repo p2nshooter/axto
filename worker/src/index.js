@@ -4,11 +4,11 @@
  * Data member/lelang/kustodi: R2 (lewat DO Ledger). Kunci privat hanya di vault (Service Binding).
  */
 import { dna } from '../../engine/src/dna.js';
-import { metadata, contractMetadata, renderCtx, renderSvg, renderPlayer, attributesId } from '../../engine/src/metadata.js';
+import { metadata, contractMetadata, renderCtx, animatedSvg, renderPlayer, attributesId } from '../../engine/src/metadata.js';
 import { COLLECTIONS, sha256Hex } from '../../engine/src/core.js';
 import { canonical } from '../../engine/src/dna.js';
 import { MODELS } from '../../engine/src/catalog/model.js';
-import { LANGS, T, pickLang, pageFromSlug } from './i18n.js';
+import { LANGS, T, PATHS, pickLang, pageFromSlug } from './i18n.js';
 import { page, nonce, securityHeaders, esc } from './html.js';
 import * as P from './pages.js';
 import { ADS_TXT } from './adsense.js';
@@ -54,12 +54,17 @@ function assetProvider(env, origin) {
   return prov;
 }
 
+/** Versi render: naikkan saat tampilan karya berubah → cache tepi lama otomatis tidak terpakai. */
+const RENDER_V = '3';
 async function cached(request, ctx, make) {
   const cache = caches.default;
-  const hit = await cache.match(request);
+  const u = new URL(request.url);
+  u.searchParams.set('rv', RENDER_V);
+  const key = new Request(u.toString(), { method: 'GET' });
+  const hit = await cache.match(key);
   if (hit) return hit;
   const res = await make();
-  if (res.ok) ctx.waitUntil(cache.put(request, res.clone()));
+  if (res.ok) ctx.waitUntil(cache.put(key, res.clone()));
   return res;
 }
 
@@ -246,10 +251,19 @@ async function api(request, env, ctx, url) {
   return json({ error: 'not_found' }, 404);
 }
 
+/** Tautan OpenSea untuk karya publik bila kontrak koleksi sudah aktif. */
+function openseaUrl(env, c, id) {
+  if (COLLECTIONS[c]?.exclusive) return '';
+  const addr = env[`COLLECTION_${c.replace('-', '_').toUpperCase()}`];
+  const net = NETWORKS[Number(env.CHAIN_ID)];
+  if (!addr || !net) return '';
+  return `${Number(env.CHAIN_ID) === 8453 ? 'https://opensea.io' : 'https://testnets.opensea.io'}/assets/${net.opensea}/${addr}/${id}`;
+}
+
 async function svg(request, env, ctx, c, id, origin) {
   return cached(request, ctx, async () => {
     const d = dna(c, id);
-    const body = renderSvg(d, await renderCtx(d, assetProvider(env, origin)));
+    const body = animatedSvg(d, await renderCtx(d, assetProvider(env, origin)));
     return new Response(body, { headers: { 'content-type': 'image/svg+xml; charset=utf-8', 'cache-control': IMMUTABLE, 'access-control-allow-origin': '*', 'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'; font-src data:; img-src data: https:", 'x-content-type-options': 'nosniff' } });
   });
 }
@@ -310,7 +324,7 @@ async function html(request, env, ctx, url) {
     const meta = metadata(c, id, base);
     const lot = await L.lot(c, id);
     const product = { '@context': 'https://schema.org', '@type': 'Product', name: meta.name, image: meta.image, description: meta.description.slice(0, 300), brand: { '@type': 'Brand', name: 'AXTO' }, offers: { '@type': 'Offer', priceCurrency: 'USD', price: (lot.price || lot.start) / (lot.currency === 'USDC' ? 100 : 100), availability: lot.status === 'sold' ? 'https://schema.org/SoldOut' : 'https://schema.org/InStock', url: `${base}/${lang}/nft/${c}/${id}` } };
-    return out({ page: 'home', rest: `/nft/${c}/${id}`, title: meta.name, desc: meta.description.split('\n')[0].slice(0, 160), image: meta.image, body: P.nftPage(lang, c, id, meta, lot, attributesId(meta)), jsonld: [product] });
+    return out({ page: 'home', rest: `/nft/${c}/${id}`, title: meta.name, desc: meta.description.split('\n')[0].slice(0, 160), image: meta.image, body: P.nftPage(lang, c, id, meta, lot, attributesId(meta), openseaUrl(env, c, id)), jsonld: [product] });
   }
   const key = pageFromSlug(sub);
   if (key === 'auction') {
@@ -325,7 +339,11 @@ async function html(request, env, ctx, url) {
   }
   if (key === 'exclusive') return out({ page: key, title: T[lang].exclusive.title, body: P.exclusivePage(lang, stats) });
   if (key === 'coin') return out({ page: key, title: T[lang].coin.title, body: P.coinPage(lang, await readJSON(env.STORE, 'e/coin/sale.json'), env.PAYPAL_COIN_SALE === 'on') });
-  if (key === 'member') return out({ page: key, title: T[lang].member.title, body: P.memberPage(lang), noindex: true, private: true });
+  if (key === 'member') {
+    // wallet admin selalu ke Portal admin (perintah pemilik #34)
+    if ((await session(request, env))?.admin) return new Response(null, { status: 302, headers: { location: `/${lang}/${PATHS.admin[lang]}`, 'cache-control': 'private, no-store' } });
+    return out({ page: key, title: T[lang].member.title, body: P.memberPage(lang), noindex: true, private: true });
+  }
   if (key === 'admin') {
     const s = await session(request, env);
     const loader = s?.admin ? "const x=document.createElement('script');x.type='module';x.src='/admin-deploy.js';document.head.append(x);" : '';

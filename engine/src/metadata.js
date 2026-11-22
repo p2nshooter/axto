@@ -4,8 +4,8 @@
 import { collection, START_USD } from './core.js';
 import { dna, traitNameId } from './dna.js';
 import { SURAH, juzStart, pageStart, globalFromAyah, ayahFromGlobal } from './catalog/quran.js';
-import { timeSvg, timePlayer } from './render/time.js';
-import { stampSvg, stampPlayer } from './render/stamp.js';
+import { timeSvg, timePlayer, TIME_ANIM_CSS } from './render/time.js';
+import { stampSvg, stampPlayer, ANIM_CSS as STAMP_ANIM_CSS } from './render/stamp.js';
 import { quranSvg, quranPlayer } from './render/quran.js';
 import { modelSvg, modelPlayer } from './render/model.js';
 
@@ -186,6 +186,22 @@ export function renderSvg(d, ctx) {
     case 'model': return modelSvg(d, ctx);
     default: throw new Error('kind?');
   }
+}
+
+const QURAN_ANIM_CSS = '[stroke="#e9c46a"]{animation:qg 3.4s ease-in-out infinite}@keyframes qg{50%{stroke-opacity:.3}}text[fill="url(#mat)"]{animation:qt 5s ease-in-out infinite alternate}@keyframes qt{to{opacity:.82}}';
+const SWEEP_CSS = '.axsw{animation:axsw 7s ease-in-out infinite;pointer-events:none}@keyframes axsw{0%{transform:translateX(0)}55%,100%{transform:translateX(1700px)}}@media(prefers-reduced-motion:reduce){.axsw,[stroke],text{animation:none!important}}';
+const SWEEP = '<defs><linearGradient id="axswg" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset=".5" stop-color="#fff" stop-opacity=".16"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient></defs><g transform="rotate(16 500 500)"><rect class="axsw" x="-520" y="-300" width="240" height="1600" fill="url(#axswg)"/></g>';
+
+/**
+ * SVG beranimasi untuk <img> dan OpenSea `image`: gaya gerak disisipkan ke dalam SVG (tanpa skrip) + kilau cahaya yang
+ * menyapu karya. Model membawa animasinya sendiri di dalam SVG.
+ */
+export function animatedSvg(d, ctx) {
+  const s = renderSvg(d, ctx);
+  const css = { time: TIME_ANIM_CSS, stamp: STAMP_ANIM_CSS, quran: QURAN_ANIM_CSS, model: '' }[d.kind] + SWEEP_CSS;
+  const open = s.indexOf('>', s.indexOf('<svg')) + 1;
+  const close = s.lastIndexOf('</svg>');
+  return `${s.slice(0, open)}<style>${css}</style>${s.slice(open, close)}${SWEEP}${s.slice(close)}`;
 }
 
 /** Render player HTML. */

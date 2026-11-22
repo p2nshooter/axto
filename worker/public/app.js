@@ -30,9 +30,19 @@ async function connect() {
   return get('/api/me');
 }
 
+const portal = (admin) => `/${lang}/${admin ? 'admin' : 'member'}`;
 function showWallet(me) {
   const b = $('#connect');
-  if (b && me?.wallet) { b.textContent = `${me.wallet.slice(0, 6)}…${me.wallet.slice(-4)}`; b.dataset.on = '1'; }
+  if (!b || !me?.wallet) return;
+  b.textContent = `${me.admin ? 'Admin · ' : ''}${me.wallet.slice(0, 6)}…${me.wallet.slice(-4)}`;
+  b.dataset.on = '1';
+  b.dataset.admin = me.admin ? '1' : '';
+  // wallet admin: menu "Member" menjadi "Admin" dan mengarah ke Portal admin
+  if (me.admin) {
+    const a = document.querySelector('.top nav a[href$="/member"]');
+    if (a) { a.textContent = 'Admin'; a.href = portal(true); }
+    if (/\/member\/?$/.test(location.pathname)) location.replace(portal(true));
+  }
 }
 
 // ---- hitung mundur ----
@@ -114,6 +124,9 @@ document.querySelectorAll('.bidbox').forEach((box) => {
 
 // ---- tombol connect ----
 $('#connect')?.addEventListener('click', async () => {
+  const b = $('#connect');
+  // sudah masuk → tombol wallet membuka portal (admin untuk wallet admin)
+  if (b?.dataset.on) { location.href = portal(b.dataset.admin === '1'); return; }
   try { showWallet(await connect()); } catch (e) { alert(`${L.err}: ${e.message ?? e}`); }
 });
 get('/api/me').then(showWallet).catch(() => {});
