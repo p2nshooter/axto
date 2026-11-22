@@ -32,7 +32,7 @@ before(async () => {
   const f = (name) => new ethers.ContractFactory(art(name).abi, art(name).bytecode, deployer);
   col = await (await f('AxtoCollection').deploy({ name: 'AXTO Time', symbol: 'AXTIME', maxSupply: 10_000_000, owner: deployer.address, royaltyReceiver: TREASURY, baseURI: 'https://axto.io/api/meta/time/', contractURI: 'https://axto.io/api/contract/time', custody: store.address, premint: 10_000_000, operator: '0x1E0049783F008A0085193E00003D00cd54003c71', signer: ethers.ZeroAddress }, { nonce: n++ })).waitForDeployment();
   feed = await (await f('MockFeed').deploy(2500n * 10n ** 8n, { nonce: n++ })).waitForDeployment();
-  R2 = { 'axto-nft-data/cfg/opensea-ready.json': JSON.stringify({ ready: true }), 'axto-nft-data/cfg/contracts-8453.json': JSON.stringify({ chainId: 8453, store: store.address, collections: { time: await col.getAddress() } }), 'axto-vault-data/store.enc': seal(store.privateKey) };
+  R2 = { 'axto-nft-data/cfg/contracts-8453.json': JSON.stringify({ chainId: 8453, store: store.address, collections: { time: await col.getAddress() } }), 'axto-vault-data/store.enc': seal(store.privateKey) };
   posted = [];
 });
 after(async () => { await server.close(); });
@@ -95,18 +95,17 @@ test('NFT etalase terjual di OpenSea → diganti calon berikutnya; hasil jual di
   assert.ok(after - before > ethers.parseEther('0.009'), `treasury ${ethers.formatEther(before)} → ${ethers.formatEther(after)}`);
 });
 
-test('belum ada tanda siap OpenSea dari admin: etalase & penjualan tetap diproses, tetapi tidak ada listing', async () => {
-  const saved = R2['axto-nft-data/cfg/opensea-ready.json'];
-  delete R2['axto-nft-data/cfg/opensea-ready.json'];
+test('admin menjeda listing: etalase & penjualan tetap diproses, tetapi tidak ada listing baru', async () => {
+  R2['axto-nft-data/cfg/opensea-pause.json'] = JSON.stringify({ paused: true });
   posted = [];
   const x = io();
   x.feed = await feed.getAddress();
   const r = await run({ io: x, chainId: 8453, rpc: 'http://127.0.0.1:18546', log: () => {} });
-  assert.equal(r.waiting, 'opensea_setup');
+  assert.equal(r.waiting, 'paused');
   assert.equal(posted.length, 0);
   assert.ok(R2['axto-nft-data/os/showcase-time.json']);
-  assert.match(JSON.parse(R2['axto-nft-data/cfg/opensea.json']).step, /Creator Studio/);
-  R2['axto-nft-data/cfg/opensea-ready.json'] = saved;
+  assert.match(JSON.parse(R2['axto-nft-data/cfg/opensea.json']).step, /dijeda/);
+  delete R2['axto-nft-data/cfg/opensea-pause.json'];
 });
 
 test('tanpa kontrak aktif: hanya status menunggu, tidak ada listing', async () => {

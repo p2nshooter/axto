@@ -225,7 +225,9 @@ contract AxtoCollection is ERC721, ERC2981, Ownable2Step, Pausable, EIP712, ICre
         return super._update(to, tokenId, auth);
     }
 
+    /// @dev Perintah pemilik #48 (zero hand admin): antarmuka ERC-721C baru diumumkan setelah validator dipasang owner.
+    ///      Bawaan = ERC-721 + ERC-2981 biasa → langsung bisa dibeli di OpenSea tanpa pengaturan Creator Studio.
     function supportsInterface(bytes4 id) public view override(ERC721, ERC2981) returns (bool) {
-        return id == type(ICreatorToken).interfaceId || ERC721.supportsInterface(id) || ERC2981.supportsInterface(id);
+        return (id == type(ICreatorToken).interfaceId && _validator != address(0)) || ERC721.supportsInterface(id) || ERC2981.supportsInterface(id);
     }
 }

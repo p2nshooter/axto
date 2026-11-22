@@ -222,11 +222,16 @@ test('WD eksklusif: voucher signer → member mint sendiri; voucher sekali pakai
   await revert(as(colEx, bob).mintWithVoucher(v.to, v.tokenId, v.ref, v.deadline, sig));
 });
 
-test('ERC-721C: antarmuka terdeteksi, validator dipanggil saat transfer', async () => {
+test('ERC-721C tidur secara bawaan (#48 zero hand: OpenSea langsung bisa menjual); aktif setelah owner memasang validator', async () => {
   const iface = new ethers.Interface(['function getTransferValidator()', 'function getTransferValidationFunction()', 'function setTransferValidator(address)']);
   let id = 0n;
   for (const f of iface.fragments) id ^= BigInt(f.selector);
+  assert.equal(await col.supportsInterface(ethers.toBeHex(id, 4)), false);
+  await revert(as(col, alice).setTransferValidator(alice.address));
+  await (await col.setTransferValidator(signerW.address)).wait();
   assert.equal(await col.supportsInterface(ethers.toBeHex(id, 4)), true);
+  await (await col.setTransferValidator(ethers.ZeroAddress)).wait();
+  assert.equal(await col.supportsInterface(ethers.toBeHex(id, 4)), false);
   assert.equal(await col.supportsInterface('0x2a55205a'), true); // ERC-2981
   const [sel, isView] = await col.getTransferValidationFunction();
   assert.equal(isView, true);

@@ -5,7 +5,7 @@ name: Deploy kontrak otomatis (sistem)
 # (tampil di Portal admin); bila cukup → deploy berurutan & lanjutkan dari langkah terakhir; selesai → simpan ke worker.
 on:
   schedule:
-    - cron: '23 * * * *'
+    - cron: '*/10 * * * *' # #48: cek saldo deployer tiap 10 menit → deploy otomatis begitu terisi (selesai = keluar cepat)
   workflow_dispatch:
     inputs:
       chain:

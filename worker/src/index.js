@@ -184,17 +184,17 @@ async function api(request, env, ctx, url) {
     let signer = null;
     try { signer = (await vault(env, 'signerAddress', {})).address; } catch { signer = null; }
     const coin = { chainId: Number(env.CHAIN_ID), token: env.AXTO_TOKEN || '', sale: env.AXTO_SALE || '', wallets: { bank: env.COIN_WALLET, presale: env.PRESALE_WALLET, vesting: env.VESTING_WALLET, hold: env.HOLD_WALLET, treasury: env.TREASURY } };
-    const opensea = { status: await readJSON(env.STORE, 'cfg/opensea.json').catch(() => null), ready: await readJSON(env.STORE, 'cfg/opensea-ready.json').catch(() => null) };
+    const opensea = { status: await readJSON(env.STORE, 'cfg/opensea.json').catch(() => null), pause: await readJSON(env.STORE, 'cfg/opensea-pause.json').catch(() => null) };
     return json({ admin: env.ADMIN_WALLET, coinWallet: env.COIN_WALLET, treasury: env.TREASURY, signer, networks: NETWORKS, coin, opensea, active: await readJSON(env.STORE, 'cfg/active.json'), deployer: await readJSON(env.STORE, 'cfg/deployer.json') }, 200, { 'cache-control': 'private, no-store' });
   }
-  // #44: pemilik menandai OpenSea Creator Studio sudah diatur (creator earnings 10% → treasury, penegakan aktif) → listing mulai
-  if (p === '/api/admin/opensea-ready' && method === 'POST') {
+  // #48 zero hand: listing OpenSea berjalan sendiri; admin hanya bisa menjeda / melanjutkan
+  if (p === '/api/admin/opensea-pause' && method === 'POST') {
     if (!s?.admin) return json({ error: 'admin_only' }, 403);
     if (!(request.headers.get('content-type') ?? '').includes('application/json')) return json({ error: 'content_type' }, 415);
     const b = await readBody(request, 512);
-    const v = { ready: b.ready === true, by: s.wallet, at: new Date().toISOString() };
-    await env.STORE.put('cfg/opensea-ready.json', JSON.stringify(v), { httpMetadata: { contentType: 'application/json' } });
-    await appendLog(env.STORE, 'admin', { ev: 'opensea-ready', ready: v.ready, by: s.wallet });
+    const v = { paused: b.paused === true, by: s.wallet, at: new Date().toISOString() };
+    await env.STORE.put('cfg/opensea-pause.json', JSON.stringify(v), { httpMetadata: { contentType: 'application/json' } });
+    await appendLog(env.STORE, 'admin', { ev: 'opensea-pause', paused: v.paused, by: s.wallet });
     return json({ ok: true, ...v });
   }
   if (p === '/api/admin/contracts' && method === 'POST') {

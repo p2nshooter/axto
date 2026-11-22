@@ -136,11 +136,9 @@ export async function run({ io = realIO(), chainId: chainIn = Number(process.env
   }
 
   // 4) listing: etalase dulu, lalu ekor koleksi bergulir
-  // Gerbang: OpenSea baru bisa menjual kontrak ERC-721C setelah pemilik (wallet produksi 0x38Cd…) mengatur creator earnings
-  // 10% → 0xDC39… di OpenSea Creator Studio; mengaktifkan penegakan membatalkan listing lama, jadi listing menunggu tanda
-  // „siap" dari Portal admin (cfg/opensea-ready.json).
-  const ready = JSON.parse(io.r2get('axto-nft-data/cfg/opensea-ready.json') || '{}');
-  if (!ready.ready) { putStatus({ step: 'menunggu pengaturan OpenSea Creator Studio oleh pemilik', sold: Object.fromEntries(Object.entries(st.sold).map(([c, a]) => [c, a.length])) }); log('Menunggu tanda siap OpenSea dari Portal admin.'); return { waiting: 'opensea_setup', sold: st.sold, swept: status.swept ?? null }; }
+  // Zero hand admin (#48): listing berjalan sendiri begitu kontrak aktif. Admin hanya BISA menjeda (cfg/opensea-pause.json).
+  const pause = JSON.parse(io.r2get('axto-nft-data/cfg/opensea-pause.json') || '{}');
+  if (pause.paused) { putStatus({ step: 'dijeda admin', sold: Object.fromEntries(Object.entries(st.sold).map(([c, a]) => [c, a.length])) }); log('Listing dijeda dari Portal admin.'); return { waiting: 'paused', sold: st.sold, swept: status.swept ?? null }; }
   if (!process.env.OPENSEA_API_KEY && !io.fakeListing) { putStatus({ step: 'menunggu OPENSEA_API_KEY', sold: Object.fromEntries(Object.entries(st.sold).map(([c, a]) => [c, a.length])) }); return { waiting: 'apikey' }; }
   const feed = new ethers.Contract(io.feed ?? net.feed, ['function latestRoundData() view returns (uint80,int256,uint256,uint256,uint80)'], provider);
   const [, answer, , updatedAt] = await feed.latestRoundData();
