@@ -351,6 +351,7 @@ export class Ledger extends DurableObject {
       if (COLLECTIONS[c].exclusive) await this.marketTick(c, now);
     }
     for (const c of KEYS) await this.flushSold(c);
+    report.opensea = await this.openseaRefresh();
     return report;
   }
 
@@ -516,10 +517,31 @@ export class Ledger extends DurableObject {
     await putJSON(B, `h/${c}/${lot.tokenId}.json`, lot);
     await B.delete(`l/${c}/${lot.tokenId}.json`);
     await appendLog(B, `sold-${c}`, { tokenId: lot.tokenId, winner: lot.winner });
+    if (!COLLECTIONS[c].exclusive) await createOnce(B, `q/opensea/${c}-${lot.tokenId}.json`, { c, tokenId: lot.tokenId, at: Date.now() });
     if (COLLECTIONS[c].exclusive) {
       await createOnce(B, `c/ex-own/${c}/${lot.tokenId}.json`, { owner: lot.winner.bidder, since: Date.now(), lotId: lot.lotId, status: 'custody', resales: 0 });
       await createOnce(B, `c/by/${lot.winner.bidder.toLowerCase()}/${c}-${lot.tokenId}.json`, { c, tokenId: lot.tokenId });
     }
+  }
+
+  /** Dorong NFT yang baru di-mint ke OpenSea (refresh metadata). Tanpa API key / alamat kontrak → dilewati. */
+  async openseaRefresh(max = 50) {
+    const env = this.env;
+    if (!env.OPENSEA_API_KEY) return { skipped: 'no_key' };
+    const chain = { 8453: 'base', 84532: 'base_sepolia' }[Number(env.CHAIN_ID)];
+    const B = env.STORE;
+    let sent = 0;
+    for (const o of await listKeys(B, 'q/opensea/', max)) {
+      const job = await readJSON(B, o.key);
+      const addr = job && colAddr(env, job.c);
+      if (!job || !addr || !chain) continue;
+      const r = await fetch(`https://api.opensea.io/api/v2/chain/${chain}/contract/${addr}/nfts/${job.tokenId}/refresh`, { method: 'POST', headers: { 'x-api-key': env.OPENSEA_API_KEY, accept: 'application/json' } });
+      if (r.status === 429) break; // kuota menit habis → lanjut di tick berikutnya
+      if (r.ok || (r.status >= 400 && r.status < 500 && (job.tries ?? 0) >= 5)) await B.delete(o.key);
+      else if (!r.ok) await putJSON(B, o.key, { ...job, tries: (job.tries ?? 0) + 1 });
+      sent += r.ok ? 1 : 0;
+    }
+    return { sent };
   }
 
   async flushSold(c) {
