@@ -295,7 +295,7 @@ if (ex) {
     const a = document.createElement('a');
     a.href = `/${lang}/nft/${c}/${it.id}`;
     const im = document.createElement('img');
-    Object.assign(im, { src: `/img/${c}/${it.id}.svg?v=7`, alt: it.name, loading: 'lazy', width: 300, height: 300 });
+    Object.assign(im, { src: `/img/${c}/${it.id}.svg?v=8`, alt: it.name, loading: 'lazy', width: 300, height: 300 });
     const id = document.createElement('span'); id.className = 'id'; id.textContent = `#${fmtN(it.id)}`;
     const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = it.name;
     const tr = document.createElement('span'); tr.className = `tr t${it.tier}`; tr.textContent = I.tiers?.[it.tier] ?? '';
