@@ -49,7 +49,7 @@ before(async () => {
   vest = await deploy('AxtoVesting', await token.getAddress(), owner.address, E(3_000_000));
   lock = await deploy('AxtoLock', await token.getAddress(), treasury.address);
   // distribusi persis seperti skrip deploy
-  await (await token.setSale(await sale.getAddress())).wait();
+  await (await token.setSale(await sale.getAddress(), owner.address)).wait();
   for (const a of [await house.getAddress(), await vest.getAddress(), await lock.getAddress(), treasury.address]) await (await token.setTrusted(a, true)).wait();
   await (await token.transfer(await vest.getAddress(), E(3_000_000))).wait();
   await (await token.transfer(await lock.getAddress(), E(2_000_000))).wait();

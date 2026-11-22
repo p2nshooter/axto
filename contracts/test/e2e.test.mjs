@@ -101,7 +101,7 @@ before(async () => {
   house = await deploy('AxtoAuctionHouse', owner.address, treasury.address, signerW.address, [await usdc.getAddress(), await token.getAddress()]);
   col = await deploy('AxtoCollection', { name: 'AXTO Time', symbol: 'AXTIME', maxSupply: 2_000_000, owner: owner.address, royaltyReceiver: treasury.address, baseURI: 'https://axto.io/api/meta/time/', contractURI: 'https://axto.io/api/contract/time', custody: owner.address, premint: 2_000_000, operator: await house.getAddress(), signer: ZERO });
   colEx = await deploy('AxtoCollection', { name: 'AXTO Exclusive Time', symbol: 'AXXTIME', maxSupply: 50_000, owner: owner.address, royaltyReceiver: treasury.address, baseURI: 'https://axto.io/api/meta/ex-time/', contractURI: 'https://axto.io/api/contract/ex-time', custody: ZERO, premint: 0, operator: ZERO, signer: signerW.address });
-  await (await token.setSale(await sale.getAddress())).wait();
+  await (await token.setSale(await sale.getAddress(), owner.address)).wait();
   for (const a of [await house.getAddress(), treasury.address]) await (await token.setTrusted(a, true)).wait();
   for (const w of [alice, bob, carol]) await (await usdc.mint(w.address, U(1000))).wait();
   // env vault = konfigurasi produksi, kunci signer = wallet signer kontrak

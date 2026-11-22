@@ -24,6 +24,10 @@ import { ethers } from 'ethers';
 const ADMIN = '0x38Cd3F76a132f70b12C9E4ea6aDAFaCF62483166';
 const COIN = '0x6918A3C9a58E71B3bca993e8cDD2630D2DDB6469';
 const TREASURY = '0xDC39C04E704b1fec2BE648c49c842B2B17AfEBDA';
+// alamat milik pemilik (perintah #40): bank = pemegang 10 jt; presale/vesting/hold diisi pemilik sendiri dari bank
+const PRESALE_W = '0x114aa45B77f06C07B6Ee0aB03F89FAdaCDc6614C';
+const VESTING_W = '0x61A0CD9c14EDF48948E39144cc5d8aB4e8A17c62';
+const HOLD_W = '0xeef8b1c3BDE202A77Fe3B24d1f43EbA10498a94c';
 const NETS = {
   8453: { rpc: 'https://mainnet.base.org', usdc: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', feed: '0x71041dddad3595F9CEd3DcCFBe3D1F4b0a16Bb70', name: 'Base' },
   84532: { rpc: 'https://sepolia.base.org', usdc: '0x036CbD53842c5426634e7929541eC2318f3dCF7e', feed: '0x4aDC67696bA383F43DD60A9e78F2C97Fbbfc7cb1', name: 'Base Sepolia' },
@@ -182,7 +186,7 @@ async function main() {
 
   // 10.000.000 AXTO seluruhnya ke wallet koin pemilik (perintah #39); pemilik membagi sendiri ke alamat-alamatnya
   const token = await deploy('token', 'AxtoToken', me, COIN);
-  const sale = await deploy('sale', 'AxtoSale', COIN, token, net.usdc, net.feed, TREASURY, signer, COIN);
+  const sale = await deploy('sale', 'AxtoSale', COIN, token, net.usdc, net.feed, TREASURY, signer, PRESALE_W); // koin dijual dari wallet presale pemilik
   const house = await deploy('auctionHouse', 'AxtoAuctionHouse', ADMIN, TREASURY, signer, [net.usdc, token]);
   st.collections = st.collections ?? {};
   for (const [k, name, sym, max] of COLS) {
@@ -194,8 +198,8 @@ async function main() {
     save();
   }
   const T = new ethers.Contract(token, art('AxtoToken').abi, wallet);
-  await step('setSale', (o) => T.setSale(sale, o));
-  for (const [k, a] of [['trust:house', house], ['trust:treasury', TREASURY]]) await step(k, (o) => T.setTrusted(a, true, o));
+  await step('setSale', (o) => T.setSale(sale, PRESALE_W, o));
+  for (const [k, a] of [['trust:house', house], ['trust:treasury', TREASURY], ['trust:presale', PRESALE_W], ['trust:vesting', VESTING_W], ['trust:hold', HOLD_W]]) await step(k, (o) => T.setTrusted(a, true, o));
   await step('untrust deployer', (o) => T.setTrusted(me, false, o));
   await step('owner token → wallet koin', (o) => T.transferOwnership(COIN, o));
   st.done = true;

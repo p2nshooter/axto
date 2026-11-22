@@ -364,7 +364,11 @@ async function html(request, env, ctx, url) {
     return out({ page: key, title: T[lang].waiting.title, body: P.waitingPage(lang, c, await L.offers(c, { order }), order) });
   }
   if (key === 'exclusive') return out({ page: key, title: T[lang].exclusive.title, body: P.exclusivePage(lang, stats) });
-  if (key === 'coin') return out({ page: key, title: T[lang].coin.title, body: P.coinPage(lang, await readJSON(env.STORE, 'e/coin/sale.json'), env.PAYPAL_COIN_SALE === 'on') });
+  if (key === 'coin') {
+    const net = NETWORKS[Number(env.CHAIN_ID)] ?? NETWORKS[8453];
+    const addrs = { token: env.AXTO_TOKEN || '', sale: env.AXTO_SALE || '', bank: env.COIN_WALLET, presale: env.PRESALE_WALLET, vesting: env.VESTING_WALLET, hold: env.HOLD_WALLET, treasury: env.TREASURY, rpc: net.rpc, explorer: net.explorer };
+    return out({ page: key, title: T[lang].coin.title, body: P.coinPage(lang, await readJSON(env.STORE, 'e/coin/sale.json'), env.PAYPAL_COIN_SALE === 'on', addrs) });
+  }
   if (key === 'member') {
     // wallet admin selalu ke Portal admin (perintah pemilik #34)
     if ((await session(request, env))?.admin) return new Response(null, { status: 302, headers: { location: `/${lang}/${PATHS.admin[lang]}`, 'cache-control': 'private, no-store' } });

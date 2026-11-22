@@ -54,14 +54,16 @@ contract AxtoToken is ERC20, ERC20Permit, Ownable {
         emit TrustedUpdated(account, t);
     }
 
-    /// @notice Daftarkan kontrak presale (sekali). Presale menjual LANGSUNG dari wallet pemegang lewat izin (allowance)
-    ///  2.000.000 AXTO — koin tetap di wallet pemilik sampai terjual. Pemilik bisa mengubah/menarik izin itu kapan saja
-    ///  dengan `approve(sale, x)` dari wallet koinnya.
-    function setSale(address s) external onlyOwner {
+    /// @notice Daftarkan kontrak presale (sekali). Presale menjual LANGSUNG dari wallet presale pemilik (`source`) lewat
+    ///  izin (allowance) 2.000.000 AXTO — koin tetap di wallet itu sampai terjual. Pemilik bisa mengubah/menarik izin
+    ///  kapan saja dengan `approve(sale, x)` dari wallet presale-nya.
+    function setSale(address s, address source) external onlyOwner {
         require(sale == address(0), "sale set");
+        require(source != address(0), "source");
         sale = s;
         trusted[s] = true;
-        _approve(holder, s, PRESALE_TARGET);
+        // izin jual 2 jt dari wallet presale pemilik (perintah #40); pemilik mengisi wallet itu sendiri dari wallet bank
+        _approve(source, s, PRESALE_TARGET);
         emit SaleSet(s);
     }
 

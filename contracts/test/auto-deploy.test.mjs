@@ -11,6 +11,9 @@ import { ethers } from 'ethers';
 const ADMIN = '0x38Cd3F76a132f70b12C9E4ea6aDAFaCF62483166';
 const COIN = '0x6918A3C9a58E71B3bca993e8cDD2630D2DDB6469';
 const TREASURY = '0xDC39C04E704b1fec2BE648c49c842B2B17AfEBDA';
+const PRESALE_W = '0x114aa45B77f06C07B6Ee0aB03F89FAdaCDc6614C';
+const VESTING_W = '0x61A0CD9c14EDF48948E39144cc5d8aB4e8A17c62';
+const HOLD_W = '0xeef8b1c3BDE202A77Fe3B24d1f43EbA10498a94c';
 const art = (n) => JSON.parse(readFileSync(new URL(`../out/${n}.json`, import.meta.url), 'utf8'));
 let server, provider, deployer, signerW, result, mod;
 
@@ -69,16 +72,16 @@ test('koin 10 jt seluruhnya di wallet koin pemilik; presale menjual lewat allowa
   assert.equal(await t.totalSupply(), E(10_000_000));
   assert.equal(await t.balanceOf(COIN), E(10_000_000));
   assert.equal(await t.holder(), COIN);
-  assert.equal(await t.allowance(COIN, c.sale), E(2_000_000));
+  assert.equal(await t.allowance(PRESALE_W, c.sale), E(2_000_000)); // presale menjual dari wallet presale pemilik
   assert.equal(await t.balanceOf(c.sale), 0n);
   assert.equal(await t.balanceOf(result.deployer), 0n);
   assert.equal(await t.trusted(result.deployer), false);
   assert.equal(await t.sale(), c.sale);
-  for (const a of [c.auctionHouse, TREASURY, COIN]) assert.equal(await t.trusted(a), true);
+  for (const a of [c.auctionHouse, TREASURY, COIN, PRESALE_W, VESTING_W, HOLD_W]) assert.equal(await t.trusted(a), true);
   assert.equal(c.vesting, undefined);
   assert.equal(c.lock, undefined);
   const sale = new ethers.Contract(c.sale, art('AxtoSale').abi, provider);
-  assert.equal(await sale.holder(), COIN);
+  assert.equal(await sale.holder(), PRESALE_W);
 });
 
 test('aman diulang: run kedua tidak mendeploy apa pun lagi', async () => {

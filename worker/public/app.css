@@ -96,3 +96,6 @@ input{font:inherit;color:var(--text);background:#0e0e1a;border:1px solid var(--l
 .peek-stage iframe{width:100%;aspect-ratio:1;border:1px solid var(--line);border-radius:var(--radius);background:#000}
 .peek-name{margin:10px 0;font-weight:700;text-align:center}.peek-nav{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
 html.peeking{overflow:hidden}
+
+.addrs code{font-size:.8em;word-break:break-all}.addrs th{font-weight:600;width:42%}.addrs .bal{white-space:nowrap;font-variant-numeric:tabular-nums;text-align:right}
+@media (max-width:640px){.addrs tr{display:grid;grid-template-columns:1fr}.addrs th{width:auto;border-bottom:0;padding-bottom:0}.addrs .bal{text-align:left}}
