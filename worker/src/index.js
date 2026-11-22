@@ -4,7 +4,9 @@
  * Data member/lelang/kustodi: R2 (lewat DO Ledger). Kunci privat hanya di vault (Service Binding).
  */
 import { dna } from '../../engine/src/dna.js';
-import { metadata, contractMetadata, renderCtx, animatedSvg, renderPlayerLive, attributesId, browse } from '../../engine/src/metadata.js';
+import { metadata, contractMetadata, renderCtx, animatedSvg, renderPlayerLive, attributesId, browse, browseList, listFacets, seriesKey, seriesOptions, quranRef } from '../../engine/src/metadata.js';
+import { showcaseIds, SHOWCASE_KEYS, priceUsd } from '../../engine/src/showcase.js';
+import { collectionSeo, seriesSeo, surahSeo, hubSeo, breadcrumb, itemList, seriesLabel, surahInfo, BREAD } from './seo.js';
 import { COLLECTIONS, sha256Hex } from '../../engine/src/core.js';
 import { canonical } from '../../engine/src/dna.js';
 import { MODELS } from '../../engine/src/catalog/model.js';
@@ -23,11 +25,28 @@ import { vault } from './vault.js';
 export { Ledger };
 
 /** Nama EIP-712 kontrak eksklusif (harus sama dengan nama saat deploy, contracts/scripts/deploy.mjs). */
-export const EX_NAMES = { 'ex-time': 'AXTO Exclusive Time', 'ex-stamp': 'AXTO Exclusive Stamp', 'ex-quran': "AXTO Exclusive Qur'an" };
+export const EX_NAMES = { 'ex-time': 'AXTO Exclusive Time', 'ex-stamp': 'AXTO Exclusive Stamp', 'ex-quran': "AXTO Exclusive Qur'an", 'ex-model': 'AXTO Exclusive Model' };
 
 const IMMUTABLE = 'public, max-age=300, s-maxage=86400, stale-while-revalidate=604800';
 const json = (v, status = 200, extra = {}) => new Response(JSON.stringify(v), { status, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', ...extra } });
 const ledger = (env) => env.LEDGER.get(env.LEDGER.idFromName('main'));
+
+/**
+ * Etalase publik (perintah pemilik #45): 5.000 karya acak per jenis yang belum terjual, ditulis mesin listing ke R2
+ * (os/showcase-<c>.json) tiap jam. Sebelum ada (kontrak belum aktif) dihitung langsung dari urutan acak yang sama.
+ */
+const SHOW = new Map();
+async function showcase(env, c) {
+  const hit = SHOW.get(c);
+  if (hit && Date.now() - hit.at < 300_000) return hit;
+  let ids = null;
+  try { ids = (await readJSON(env.STORE, `os/showcase-${c}.json`))?.ids ?? null; } catch { ids = null; }
+  if (!Array.isArray(ids) || !ids.length) ids = showcaseIds(c).ids;
+  const v = { at: Date.now(), ids, set: new Set(ids), facets: null };
+  SHOW.set(c, v);
+  return v;
+}
+const facetsOf = (c, sc) => (sc.facets ??= listFacets(c, sc.ids));
 const validToken = (c, id) => COLLECTIONS[c] && Number.isSafeInteger(id) && id >= 1 && id <= COLLECTIONS[c].max;
 
 /** Penyedia data Qur'an & foto model dari ASSETS (tanpa R2). */
@@ -110,10 +129,15 @@ async function api(request, env, ctx, url) {
   // penjelajah koleksi cepat (perintah pemilik #37): karya berikutnya + saringan tier/seri, deterministik
   m = /^\/api\/browse\/([a-z-]+)$/.exec(p);
   if (m && COLLECTIONS[m[1]]) {
-    const produced = (await ledger(env).stats()).collections?.[m[1]]?.produced ?? 0;
     const q = url.searchParams;
     const tier = q.get('tier') === null || q.get('tier') === '' ? null : Number(q.get('tier'));
     const n = Math.min(120, Math.max(1, Number(q.get('n') ?? 60) | 0));
+    if (!COLLECTIONS[m[1]].exclusive) {
+      const sc = await showcase(env, m[1]);
+      const surah = Math.min(114, Math.max(0, Number(q.get('surah') ?? 0) | 0));
+      return json(browseList(m[1], sc.ids, { from: Number(q.get('from') ?? 1) | 0, n, tier: Number.isInteger(tier) && tier >= 0 && tier <= 4 ? tier : null, series: String(q.get('series') ?? '').slice(0, 32), surah }), 200, { 'cache-control': 'public, max-age=60' });
+    }
+    const produced = (await ledger(env).stats()).collections?.[m[1]]?.produced ?? 0;
     return json(browse(m[1], { from: Number(q.get('from') ?? 1) | 0, n, tier: Number.isInteger(tier) && tier >= 0 && tier <= 4 ? tier : null, series: String(q.get('series') ?? '').slice(0, 32), produced }), 200, { 'cache-control': 'public, max-age=60' });
   }
   m = /^\/api\/lots\/([a-z-]+)$/.exec(p);
@@ -160,7 +184,18 @@ async function api(request, env, ctx, url) {
     let signer = null;
     try { signer = (await vault(env, 'signerAddress', {})).address; } catch { signer = null; }
     const coin = { chainId: Number(env.CHAIN_ID), token: env.AXTO_TOKEN || '', sale: env.AXTO_SALE || '', wallets: { bank: env.COIN_WALLET, presale: env.PRESALE_WALLET, vesting: env.VESTING_WALLET, hold: env.HOLD_WALLET, treasury: env.TREASURY } };
-    return json({ admin: env.ADMIN_WALLET, coinWallet: env.COIN_WALLET, treasury: env.TREASURY, signer, networks: NETWORKS, coin, active: await readJSON(env.STORE, 'cfg/active.json'), deployer: await readJSON(env.STORE, 'cfg/deployer.json') }, 200, { 'cache-control': 'private, no-store' });
+    const opensea = { status: await readJSON(env.STORE, 'cfg/opensea.json').catch(() => null), ready: await readJSON(env.STORE, 'cfg/opensea-ready.json').catch(() => null) };
+    return json({ admin: env.ADMIN_WALLET, coinWallet: env.COIN_WALLET, treasury: env.TREASURY, signer, networks: NETWORKS, coin, opensea, active: await readJSON(env.STORE, 'cfg/active.json'), deployer: await readJSON(env.STORE, 'cfg/deployer.json') }, 200, { 'cache-control': 'private, no-store' });
+  }
+  // #44: pemilik menandai OpenSea Creator Studio sudah diatur (creator earnings 10% → treasury, penegakan aktif) → listing mulai
+  if (p === '/api/admin/opensea-ready' && method === 'POST') {
+    if (!s?.admin) return json({ error: 'admin_only' }, 403);
+    if (!(request.headers.get('content-type') ?? '').includes('application/json')) return json({ error: 'content_type' }, 415);
+    const b = await readBody(request, 512);
+    const v = { ready: b.ready === true, by: s.wallet, at: new Date().toISOString() };
+    await env.STORE.put('cfg/opensea-ready.json', JSON.stringify(v), { httpMetadata: { contentType: 'application/json' } });
+    await appendLog(env.STORE, 'admin', { ev: 'opensea-ready', ready: v.ready, by: s.wallet });
+    return json({ ok: true, ...v });
   }
   if (p === '/api/admin/contracts' && method === 'POST') {
     if (!s?.admin) return json({ error: 'admin_only' }, 403);
@@ -298,26 +333,36 @@ async function player(request, env, ctx, c, id, origin) {
   });
 }
 
-function sitemap(env, url) {
+async function sitemap(env, url) {
   const base = env.BASE_URL;
   const m = /^\/sitemap-([a-z-]+)-(\d+)\.xml$/.exec(url.pathname);
   const xml = (inner) => new Response(`<?xml version="1.0" encoding="UTF-8"?>\n${inner}`, { headers: { 'content-type': 'application/xml; charset=utf-8', 'cache-control': 'public, max-age=3600' } });
   if (url.pathname === '/sitemap.xml') {
     const parts = [];
-    parts.push(`<sitemap><loc>${base}/sitemap-pages-1.xml</loc></sitemap>`);
-    for (const c of KEYS) for (let i = 1; i <= Math.ceil(COLLECTIONS[c].max / 25_000); i += 1) parts.push(`<sitemap><loc>${base}/sitemap-${c}-${i}.xml</loc></sitemap>`);
+    parts.push(`<sitemap><loc>${base}/sitemap-pages-1.xml</loc></sitemap>`, `<sitemap><loc>${base}/sitemap-gallery-1.xml</loc></sitemap>`);
+    // #45: publik hanya etalase 5.000 per jenis (yang lain noindex); eksklusif seluruhnya (10.000 per koleksi)
+    for (const c of KEYS) for (let i = 1; i <= (COLLECTIONS[c].exclusive ? Math.ceil(COLLECTIONS[c].max / 25_000) : 1); i += 1) parts.push(`<sitemap><loc>${base}/sitemap-${c}-${i}.xml</loc></sitemap>`);
     return xml(`<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${parts.join('')}</sitemapindex>`);
   }
   if (!m) return null;
   const alt = (path) => LANGS.map((l) => `<xhtml:link rel="alternate" hreflang="${l}" href="${base}/${l}${path}"/>`).join('');
   const urls = [];
   if (m[1] === 'pages') {
-    for (const path of ['', '/lelang', '/menunggu', '/eksklusif', '/koin', ...KEYS.map((c) => `/c/${c}`)]) urls.push(`<url><loc>${base}/id${path}</loc>${alt(path)}</url>`);
+    for (const path of ['', '/lelang', '/menunggu', '/eksklusif', '/koin', '/galeri', ...KEYS.map((c) => `/c/${c}`)]) urls.push(`<url><loc>${base}/id${path}</loc>${alt(path)}</url>`);
+  } else if (m[1] === 'gallery') {
+    for (const c of SHOWCASE_KEYS) {
+      const f = listFacets(c, (await showcase(env, c)).ids);
+      for (const [k] of seriesOptions(c)) if (f.series[k]) urls.push(`<url><loc>${base}/id/c/${c}/${k}</loc>${alt(`/c/${c}/${k}`)}</url>`);
+      if (c === 'quran') for (const n of Object.keys(f.surah)) urls.push(`<url><loc>${base}/id/c/quran/surah/${n}</loc>${alt(`/c/quran/surah/${n}`)}</url>`);
+    }
+  } else if (COLLECTIONS[m[1]] && !COLLECTIONS[m[1]].exclusive) {
+    if (m[2] !== '1') return null;
+    for (const id of (await showcase(env, m[1])).ids) urls.push(`<url><loc>${base}/id/nft/${m[1]}/${id}</loc>${alt(`/nft/${m[1]}/${id}`)}</url>`);
   } else if (COLLECTIONS[m[1]]) {
     const c = m[1];
     const from = (Number(m[2]) - 1) * 25_000 + 1;
     const to = Math.min(COLLECTIONS[c].max, from + 24_999);
-    for (let id = from; id <= to; id += 1) urls.push(`<url><loc>${base}/en/nft/${c}/${id}</loc>${alt(`/nft/${c}/${id}`)}</url>`);
+    for (let id = from; id <= to; id += 1) urls.push(`<url><loc>${base}/id/nft/${c}/${id}</loc>${alt(`/nft/${c}/${id}`)}</url>`);
   } else return null;
   return xml(`<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">${urls.join('')}</urlset>`);
 }
@@ -332,8 +377,41 @@ async function html(request, env, ctx, url) {
   const stats = await L.stats();
   const sub = parts[1];
   if (!sub) {
+    stats.showcase = {};
+    for (const c of SHOWCASE_KEYS) stats.showcase[c] = (await showcase(env, c)).ids;
     const h = P.home(lang, stats);
     return out({ page: 'home', body: h.body, jsonld: h.jsonld, script: h.script });
+  }
+  if (sub === 'c' && COLLECTIONS[parts[2]] && !COLLECTIONS[parts[2]].exclusive) {
+    const c = parts[2];
+    const sc = await showcase(env, c);
+    const facets = facetsOf(c, sc);
+    let series = String(url.searchParams.get('series') ?? '').slice(0, 32);
+    let surah = 0;
+    let rest = `/c/${c}`;
+    if (c === 'quran' && parts[3] === 'surah' && /^\d{1,3}$/.test(parts[4] ?? '') && Number(parts[4]) >= 1 && Number(parts[4]) <= 114 && !parts[5]) { surah = Number(parts[4]); rest += `/surah/${surah}`; }
+    else if (parts[3]) {
+      if (parts[4] || !seriesOptions(c).some(([k]) => k === parts[3])) return out({ page: 'home', title: '404', body: P.notFound(lang), noindex: true }, 404);
+      series = parts[3];
+      rest += `/${series}`;
+    }
+    const count = surah ? facets.surah[surah] ?? 0 : series ? facets.series[series] ?? 0 : sc.ids.length;
+    const seo = surah ? surahSeo(lang, surah, count) : parts[3] ? seriesSeo(lang, c, series, count) : collectionSeo(lang, c, count);
+    const from = Math.max(1, Number(url.searchParams.get('from') ?? 1) | 0);
+    const tq = url.searchParams.get('tier');
+    const tier = tq !== null && tq !== '' && /^[0-4]$/.test(tq) ? Number(tq) : null;
+    const first = browseList(c, sc.ids, { from, n: 60, tier, series, surah });
+    const crumbs = [[BREAD[lang].home, `/${lang}`], [BREAD[lang].hub, `/${lang}/${PATHS.gallery[lang]}`], [P.collName(lang, c), `/${lang}/c/${c}`]];
+    if (surah) crumbs.push([`${surah}. ${surahInfo(surah)[2]}`, `/${lang}${rest}`]);
+    else if (parts[3]) crumbs.push([seriesLabel(c, series, lang), `/${lang}${rest}`]);
+    const filtered = url.searchParams.has('from') || tier !== null || url.searchParams.has('series');
+    return out({ page: 'home', rest, title: seo.title, desc: seo.desc, image: `${base}/img/${c}/${first.items[0]?.id ?? 1}.svg`, noindex: filtered || count === 0, jsonld: [breadcrumb(base, crumbs.map(([n, h]) => [n, h])), itemList(base, lang, c, first.items, seo.h1)], body: P.collectionPage(lang, c, { produced: sc.ids.length, from, tier, series, surah, first, facets, seo, crumbs, view: url.searchParams.get('view') ?? 'mosaic' }) });
+  }
+  if (sub === PATHS.gallery[lang] && !parts[2]) {
+    const facets = {};
+    for (const c of SHOWCASE_KEYS) facets[c] = facetsOf(c, await showcase(env, c));
+    const seo = hubSeo(lang);
+    return out({ page: 'gallery', title: seo.title, desc: seo.desc, jsonld: [breadcrumb(base, [[BREAD[lang].home, `/${lang}`], [BREAD[lang].hub, `/${lang}/${PATHS.gallery[lang]}`]])], body: P.galleryHub(lang, facets, seo) });
   }
   if (sub === 'c' && COLLECTIONS[parts[2]]) {
     const pg = Math.max(1, Number(url.searchParams.get('p') ?? 1) | 0);
@@ -349,6 +427,20 @@ async function html(request, env, ctx, url) {
   if (sub === 'nft' && validToken(parts[2], Number(parts[3]))) {
     const [c, id] = [parts[2], Number(parts[3])];
     const meta = metadata(c, id, base);
+    if (!COLLECTIONS[c].exclusive) {
+      const sc = await showcase(env, c);
+      const d = dna(c, id);
+      const sk = seriesKey(d);
+      const ref = d.kind === 'quran' ? quranRef(d) : null;
+      const usd = priceUsd(c, id);
+      const gal = ref && ref.series === 'ayah' ? [`/${lang}/c/quran/surah/${ref.surah}`, `${lang === 'id' ? 'Surah' : 'Surah'} ${ref.surahLt}`] : sk ? [`/${lang}/c/${c}/${sk}`, seriesLabel(c, sk, lang)] : [`/${lang}/c/${c}`, P.collName(lang, c)];
+      const crumbs = [[BREAD[lang].home, `/${lang}`], [P.collName(lang, c), `/${lang}/c/${c}`], [gal[1], gal[0]]];
+      const related = browseList(c, sc.ids, ref && ref.series === 'ayah' ? { surah: ref.surah, n: 9 } : { series: sk, n: 9 }).items.filter((it) => it.id !== id).slice(0, 8);
+      const os = openseaUrl(env, c, id);
+      const inStock = sc.set.has(id);
+      const product = { '@context': 'https://schema.org', '@type': 'Product', name: meta.name, image: meta.image, description: meta.description.slice(0, 500), sku: `${c}-${id}`, category: gal[1], brand: { '@type': 'Brand', name: 'AXTO' }, offers: { '@type': 'Offer', priceCurrency: 'USD', price: usd, availability: 'https://schema.org/InStock', url: os || `${base}/${lang}/nft/${c}/${id}`, seller: { '@type': 'Organization', name: 'AXTO' } } };
+      return out({ page: 'home', rest: `/nft/${c}/${id}`, title: `${meta.name} — $${usd}`, desc: `${meta.name}: NFT 1/1 ${gal[1]} · ${meta.attributes.find((a) => a.trait_type === 'Tier')?.value} · $${usd} ${lang === 'id' ? 'di OpenSea (jaringan Base)' : 'on OpenSea (Base network)'}.`.slice(0, 160), image: meta.image, noindex: !inStock, jsonld: [product, breadcrumb(base, [...crumbs, [meta.name, `/${lang}/nft/${c}/${id}`]])], body: P.nftPage(lang, c, id, meta, null, attributesId(meta), os, { usd, crumbs, related, galleryHref: gal[0], galleryName: gal[1] }) });
+    }
     const lot = await L.lot(c, id);
     const product = { '@context': 'https://schema.org', '@type': 'Product', name: meta.name, image: meta.image, description: meta.description.slice(0, 300), brand: { '@type': 'Brand', name: 'AXTO' }, offers: { '@type': 'Offer', priceCurrency: 'USD', price: (lot.price || lot.start) / (lot.currency === 'USDC' ? 100 : 100), availability: lot.status === 'sold' ? 'https://schema.org/SoldOut' : 'https://schema.org/InStock', url: `${base}/${lang}/nft/${c}/${id}` } };
     return out({ page: 'home', rest: `/nft/${c}/${id}`, title: meta.name, desc: meta.description.split('\n')[0].slice(0, 160), image: meta.image, body: P.nftPage(lang, c, id, meta, lot, attributesId(meta), openseaUrl(env, c, id)), jsonld: [product] });
@@ -400,7 +492,7 @@ export default {
     try {
       if (p === '/ads.txt') return new Response(ADS_TXT, { headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'public, max-age=3600' } });
       if (p === '/robots.txt') return new Response(`User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /internal/\nDisallow: /id/member\nDisallow: /en/member\nDisallow: /id/admin\nDisallow: /en/admin\nSitemap: ${env.BASE_URL}/sitemap.xml\n`, { headers: { 'content-type': 'text/plain; charset=utf-8' } });
-      if (p.startsWith('/sitemap')) return sitemap(env, url) ?? new Response('not found', { status: 404 });
+      if (p.startsWith('/sitemap')) return (await sitemap(env, url)) ?? new Response('not found', { status: 404 });
       if (p.startsWith('/api/') || p.startsWith('/internal/')) return await api(request, env, ctx, url);
       let m = /^\/img\/([a-z-]+)\/(\d+)\.svg$/.exec(p);
       if (m && validToken(m[1], Number(m[2]))) return await svg(request, env, ctx, m[1], Number(m[2]), url.origin);

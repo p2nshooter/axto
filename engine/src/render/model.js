@@ -4,8 +4,8 @@
  * dan seluruh gerak digambar sebagai vektor dengan animasi CSS DI DALAM SVG → bergerak juga sebagai <img> dan di OpenSea.
  * Tanpa ctx.head (belum ada izin) → kepala ilustrasi berkerudung netral.
  */
-import { esc, rng } from '../core.js';
-import { svgOpen, linear, radial, r1, text, hallmark } from './common.js';
+import { esc, rng, collection } from '../core.js';
+import { svgOpen, linear, radial, r1, text, hallmark, exclusiveBadge } from './common.js';
 import { modelParts } from '../catalog/model.js';
 
 const SKIN = '#e4b49a';
@@ -332,7 +332,7 @@ export function modelSvg(d, ctx = {}) {
 
   const badge = `<g><rect x="36" y="36" width="${series[1].length * 15 + series[2].length * 12 + 90}" height="50" rx="25" fill="#000" fill-opacity=".5"/>${text(64, 69, `${series[1].toUpperCase()} · ${series[2]}`, 'font-family="Helvetica,Arial,sans-serif" font-size="19" font-weight="700" letter-spacing="1.5" fill="#fff"')}</g>`;
   const defs = `<defs>${linear('sky', [setting[3], setting[4]], 0, 0, 0, 1)}${linear('dusk', ['#3b2a6e', '#e8625a', '#fbc46a'], 0, 0, 0, 1)}${linear('aur', ['#39ff9f', '#5fd3ff', '#c6a7ff'], 0, 0, 1, 0)}${radial('halo', '#fff6c2', '#fff6c200', 0.5, 0.5, 0.5)}<filter id="cerah" color-interpolation-filters="sRGB">${CERAH}${tone}</filter></defs>`;
-  return `${svgOpen(1000, 1000)}<style>${CSS}</style>${defs}<g class="m-${mo}">${bg.back}${lightLayer(light, d.seed)}${shadow}${figure}${bg.front}</g>${badge}${hallmark(1000, 1000)}</svg>`;
+  return `${svgOpen(1000, 1000)}<style>${CSS}</style>${defs}<g class="m-${mo}">${bg.back}${lightLayer(light, d.seed)}${shadow}${figure}${bg.front}</g>${badge}${d.exclusive ? exclusiveBadge(1000, d.tokenId, collection(d.key).max, d.pick[9]?.[1] ?? 'Exclusive') : ''}${hallmark(1000, 1000)}</svg>`;
 }
 
 export function modelPlayer(d, meta, ctx = {}, opts = {}) {

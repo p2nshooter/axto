@@ -1,0 +1,45 @@
+name: Listing OpenSea otomatis (wallet toko)
+
+# Perintah pemilik #44/#45: seluruh NFT publik dijual otomatis di OpenSea dengan harga tetap per tier
+# (Classic $10 · Rare $25 · Epic $75 · Legendary $250 · Masterpiece $1000). Etalase axto.io (5.000 acak per jenis)
+# dilisting dulu dan diganti otomatis bila terjual; sisa koleksi bergulir. Hasil penjualan diteruskan ke treasury.
+# Sebelum kontrak aktif, skrip hanya menulis status „menunggu kontrak".
+on:
+  schedule:
+    - cron: '41 * * * *'
+  workflow_dispatch:
+    inputs:
+      chain:
+        description: 'Chain id (8453 = Base, 84532 = Base Sepolia)'
+        required: false
+        default: '8453'
+
+concurrency:
+  group: opensea-list
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  list:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Pasang mesin listing
+        working-directory: market
+        run: npm ci --omit=dev --no-audit --no-fund
+      - name: Listing, deteksi penjualan, perbarui etalase, teruskan hasil ke treasury
+        working-directory: market
+        env:
+          CLOUDFLARE_API_KEY: ${{ secrets.CLOUDFLARE_API_KEY }}
+          CLOUDFLARE_EMAIL: ${{ secrets.CLOUDFLARE_EMAIL }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          OPENSEA_API_KEY: ${{ secrets.OPENSEA_API_KEY }}
+          CHAIN_ID: ${{ inputs.chain || '8453' }}
+          BUDGET_MIN: '45'
+        run: node opensea-list.mjs

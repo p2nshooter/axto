@@ -2,7 +2,7 @@
  * Renderer TIME: SVG statis (image) + player hidup (animation_url). Angka digambar oleh digitsSvg() yang
  * mandiri (tanpa impor) sehingga sumbernya bisa disisipkan ke player dan dipakai ulang di browser tiap detik.
  */
-import { esc, rng } from '../core.js';
+import { esc, rng, collection } from '../core.js';
 import { svgOpen, linear, radial, starPath, polyPath, polarPath, roundRect, starfield, girihPattern, r1, exclusiveBadge, hallmark, lum } from './common.js';
 
 /** Gambar angka "HH:MM" + detik. Mandiri: semua helper di dalam fungsi. */
@@ -145,7 +145,7 @@ export function timeSvg(d, at = '10:08', sec = '42') {
   }
   const motionFx = { spin: `<circle cx="500" cy="500" r="440" fill="none" stroke="${on}" stroke-opacity=".25" stroke-width="2" stroke-dasharray="4 18" class="spin"/>`, aurora: `<path d="M0 260Q500 120 1000 300V0H0Z" fill="${on}" opacity=".12" class="drift"/>`, supernova: `<circle cx="500" cy="500" r="470" fill="none" stroke="${on}" stroke-opacity=".35" stroke-width="6" class="pulse"/>`, particles: starfield(d.seed ^ 0x55, 1000, 1000, 50, on), wave: `<path d="M0 880Q250 820 500 880T1000 880V1000H0Z" fill="${on}" opacity=".12" class="drift"/>` }[motion[0]] ?? '';
   const defs = `<defs>${radial('bgG', bg[0], bg[1])}${linear('frameG', frameC)}${linear('strap', [frameC[3], frameC[1], frameC[3]], 0, 0, 1, 0)}${girihPattern('girih', on, 80, 0.18)}<filter id="glow" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter><filter id="soft"><feGaussianBlur stdDeviation="18"/></filter><filter id="liq" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="2.4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter><g id="sil">${frame}</g></defs>`;
-  const ex = d.exclusive ? exclusiveBadge(1000, d.tokenId, 50000, finish[1]) + `<use href="#sil" fill="none" stroke="#f2cf6b" stroke-width="6" stroke-dasharray="2 10"/>` : '';
+  const ex = d.exclusive ? exclusiveBadge(1000, d.tokenId, collection(d.key).max, finish[1]) + `<use href="#sil" fill="none" stroke="#f2cf6b" stroke-width="6" stroke-dasharray="2 10"/>` : '';
   return `${svgOpen(1000, 1000)}${defs}<rect width="1000" height="1000" fill="url(#bgG)"/>${backdropSvg(backdrop[0], d.seed, bg)}${motionFx}${extra}<g fill="url(#frameG)" stroke="${frameC[2]}" stroke-width="6">${frame}</g><g fill="none" stroke="#fff" stroke-opacity=".35" stroke-width="2" transform="translate(500 500) scale(.9) translate(-500 -500)">${frame}</g><path d="${roundRect(px, py, pw, ph, 28)}" fill="${lum(on) < 0.2 ? '#fff' : '#000'}" fill-opacity="${lum(on) < 0.2 ? '.78' : '.62'}"/><g id="digits">${digitsSvg(digit[0], at, sec, px + pw * 0.07, py + ph * 0.18, pw * 0.74, ph * 0.64, on, off, d.seed)}</g>${gemSvg}${ex}${hallmark(1000, 1000, on)}</svg>`;
 }
 

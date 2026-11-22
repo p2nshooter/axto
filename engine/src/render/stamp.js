@@ -2,6 +2,7 @@
  * Renderer STAMP: prangko vektor (image) + player (animasi motif, zoom vektor tanpa pecah, galaksi deep-zoom).
  */
 import { esc, rng, pad } from '../core.js';
+import { collection } from '../core.js';
 import { svgOpen, linear, radial, starPath, polyPath, perforatedRect, starfield, r1, text, exclusiveBadge, hallmark } from './common.js';
 import { motif } from './motifs.js';
 
@@ -119,7 +120,7 @@ export function stampSvg(d) {
     margin = `<rect x="60" y="40" width="880" height="920" rx="6" fill="${paper}" opacity=".96"/><rect x="80" y="60" width="840" height="880" fill="none" stroke="${a1}" stroke-width="3"/>${text(500, 100, `${series[1]} — ${realm[1]}`, `text-anchor="middle" font-family="Georgia,serif" font-size="26" font-style="italic" fill="${ink}"`)}${text(500, 925, `Souvenir · ${year[4]} · No. ${serial}`, `text-anchor="middle" font-family="Georgia,serif" font-size="18" fill="${ink}"`)}`;
   }
   if (frame[0] === 'airmail') margin = `<g>${Array.from({ length: 40 }, (_, i) => `<path d="M${i * 50 - 50} 0l25 0l-40 60h-25z" fill="${i % 2 ? '#c62a24' : '#1e3a8a'}"/><path d="M${i * 50 - 50} 1000l25 0l-40 -60h-25z" fill="${i % 2 ? '#1e3a8a' : '#c62a24'}"/>`).join('')}</g>`;
-  const ex = d.exclusive ? exclusiveBadge(1000, d.tokenId, 50000, finish[1]) : '';
+  const ex = d.exclusive ? exclusiveBadge(1000, d.tokenId, collection(d.key).max, finish[1]) : '';
   const cancel = mode[0] === 'static' && d.seed % 5 === 0 ? `<g fill="none" stroke="#222" stroke-opacity=".35" stroke-width="3"><circle cx="760" cy="300" r="90"/><circle cx="760" cy="300" r="72"/>${[0, 1, 2, 3].map((i) => `<path d="M560 ${360 + i * 18}q50 -16 100 0t100 0"/>`).join('')}</g>` : '';
   return `${svgOpen(1000, 1000)}<defs>${radial('page', '#2a241b', bgPage)}</defs><rect width="1000" height="1000" fill="url(#page)"/>${margin}<g filter="drop-shadow(0 10px 14px rgba(0,0,0,.45))">${body}</g>${cancel}${ex}${hallmark(1000, 1000, '#e9dcc0')}</svg>`;
 }

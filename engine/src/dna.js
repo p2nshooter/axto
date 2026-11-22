@@ -27,7 +27,7 @@ const TRAIT_NAMES_ID = {
   Series: 'Seri', Subject: 'Subjek', Frame: 'Bingkai', Palette: 'Palet', Mode: 'Mode', Year: 'Tahun', Denomination: 'Nominal',
   Pose: 'Pose', Outfit: 'Busana', Prop: 'Properti', Scene: 'Latar', Animation: 'Animasi', Hue: 'Rona', Composition: 'Komposisi',
   Illumination: 'Iluminasi', Material: 'Bahan', Background: 'Latar', Finish: 'Edisi', Setting: 'Latar', Light: 'Cahaya',
-  Motion: 'Gerak', Accessory: 'Aksesori',
+  Motion: 'Gerak', Accessory: 'Aksesori', Gallery: 'Galeri', Tier: 'Tingkat', Edition: 'Edisi', Collection: 'Koleksi',
 };
 export const traitNameId = (n) => TRAIT_NAMES_ID[n] ?? n;
 

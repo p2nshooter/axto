@@ -99,3 +99,15 @@ html.peeking{overflow:hidden}
 
 .cw code{font-size:.8em;word-break:break-all}.cw th{font-weight:600;width:42%}.btn.sm{padding:.2em .7em;font-size:.8em}
 @media (max-width:640px){.cw tr{display:grid;grid-template-columns:1fr}.cw th{width:auto;border-bottom:0;padding-bottom:0}}
+/* #44/#45: etalase publik → OpenSea, galeri seri & surah */
+.crumbs{font-size:.85em;color:var(--muted);margin:4px 0 8px}.crumbs a{color:var(--muted)}.crumbs [aria-current]{color:var(--text)}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0;padding:0;list-style:none}.chips a{display:inline-flex;gap:6px;align-items:center;padding:5px 12px;border-radius:999px;border:1px solid var(--line);background:var(--panel);text-decoration:none;font-size:.88em}
+.chips a[aria-current]{border-color:var(--gold);color:#f3d77a}.chips small{color:var(--muted)}
+.surahs{margin:6px 0 12px}.surahs summary{cursor:pointer;color:var(--gold)}.surahs ol{columns:3 180px;padding-left:1.4em;font-size:.88em;margin:8px 0}.surahs a{text-decoration:none}.surahs a[aria-current]{color:#f3d77a;font-weight:700}.surahs small{color:var(--muted)}
+.prices{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}.prices .tr{font-size:.8em;padding:3px 9px}
+.xgrid .pr,.lots .pr{position:absolute;right:6px;bottom:6px;padding:1px 8px;border-radius:999px;background:rgba(11,11,16,.82);color:#f3d77a;font-weight:800;font-size:.8em}
+.lots.rel li a{position:relative}
+.buybox{margin:14px 0;padding:16px;border-radius:var(--radius);border:1px solid #8a6a1c;background:linear-gradient(160deg,#1d1708,#141425)}
+.buybox .price{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 12px;margin:0 0 10px}.buybox .price span{color:var(--muted);font-size:.9em}.buybox .price b{font-size:2em;color:#f3d77a;line-height:1}.buybox .price small{flex-basis:100%;color:var(--muted)}
+.btn.big{padding:14px 24px;font-size:1.05em}.btn[aria-disabled]{opacity:.6;cursor:default}
+.hub .hubsec{margin:22px 0;padding:16px;border:1px solid var(--line);border-radius:var(--radius);background:var(--panel)}.hub .hubsec h2{margin:0 0 4px}.hub .hubsec h2 a{text-decoration:none}.hub .hubsec h2 small{color:var(--muted);font-size:.6em}

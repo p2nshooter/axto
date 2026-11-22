@@ -1,0 +1,16 @@
+{
+  "name": "axto-market",
+  "private": true,
+  "type": "module",
+  "description": "Mesin listing OpenSea otomatis (perintah pemilik #44/#45): wallet toko sistem menjual 8 jt NFT publik di OpenSea",
+  "scripts": {
+    "test": "node --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "@opensea/sdk": "12.15.0",
+    "ethers": "6.16.0"
+  },
+  "devDependencies": {
+    "ganache": "7.9.2"
+  }
+}

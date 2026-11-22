@@ -12,11 +12,18 @@ const BANK = '0x6918A3C9a58E71B3bca993e8cDD2630D2DDB6469'; // bank koin AXTO (ko
 let provider, owner, treasury, signerW, alice, bob, carol, chainId;
 let usdc, feed, token, sale, house, col, colEx, vest, lock, premintRcpt;
 
+/** nonce eksplisit & tahan ganache usang: max(latest, pending), coba ulang bila ganache menolak nonce. */
+async function freshNonce(provider, addr) { return Math.max(await provider.getTransactionCount(addr, 'latest'), await provider.getTransactionCount(addr, 'pending')); }
+async function sendDeploy(provider, f, addr, args) {
+  for (let i = 0, n = await freshNonce(provider, addr); ; i += 1, n += 1) {
+    try { return await f.deploy(...args, { nonce: n }); } catch (e) { if (i >= 4 || !/correct nonce|nonce too low/i.test(String(e.message))) throw e; }
+  }
+}
 async function deploy(name, ...args) {
   const a = art(name);
   const f = new ethers.ContractFactory(a.abi, a.bytecode, owner);
   // nonce eksplisit: ganache kadang memberi nonce "pending" usang setelah deploy besar (premint 2 jt)
-  const c = await f.deploy(...args, { nonce: await provider.getTransactionCount(owner.address, 'latest') });
+  const c = await sendDeploy(provider, f, owner.address, args);
   await c.waitForDeployment();
   return c;
 }

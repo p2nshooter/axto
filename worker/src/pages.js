@@ -3,9 +3,11 @@ import { T, PATHS } from './i18n.js';
 import { esc, altPath } from './html.js';
 import { COLLECTIONS } from '../../engine/src/core.js';
 import { seriesOptions } from '../../engine/src/metadata.js';
+import { OPENSEA_PRICE_USD } from '../../engine/src/core.js';
+import { seriesLabel, surahInfo, BREAD } from './seo.js';
 
 const PUBLIC = ['time', 'stamp', 'quran', 'model'];
-const EXCL = ['ex-time', 'ex-stamp', 'ex-quran'];
+const EXCL = ['ex-time', 'ex-stamp', 'ex-quran', 'ex-model'];
 const fmt = (n, lang) => Number(n ?? 0).toLocaleString(lang === 'id' ? 'id-ID' : 'en-US');
 export const money = (units, cur, lang) => (cur === 'USDC' ? `$${(units / 100).toLocaleString(lang === 'id' ? 'id-ID' : 'en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : `${(units / 1000).toLocaleString(lang === 'id' ? 'id-ID' : 'en-US', { maximumFractionDigits: 3 })} AXTO`);
 const nftPath = (lang, c, id) => `/${lang}/nft/${c}/${id}`;
@@ -47,13 +49,16 @@ export function home(lang, stats) {
   const k = t.kind;
   const sum = (key) => PUBLIC.concat(EXCL).reduce((n, c) => n + (stats.collections?.[c]?.[key] ?? 0), 0);
   const nextAt = stats.round ? (Date.now() < stats.round.startAt ? stats.round.startAt : stats.round.endAt) : null;
-  const pick = (c) => 1 + ((Date.now() >> 20) % Math.max(1, Math.min(1000, stats.collections?.[c]?.produced || 1)));
+  const pick = (c) => (stats.showcase?.[c]?.length ? stats.showcase[c][(Date.now() >> 20) % stats.showcase[c].length] : 1 + ((Date.now() >> 20) % Math.max(1, Math.min(1000, stats.collections?.[c]?.produced || 1))));
+  const stock = PUBLIC.reduce((n, c) => n + (stats.showcase?.[c]?.length ?? 0), 0);
+  const exTotal = EXCL.reduce((n, c) => n + COLLECTIONS[c].max, 0);
   const show = [...PUBLIC, 'ex-quran'];
+  void sum;
   const card = (c) => `<article class="card ${c.startsWith('ex-') ? 'is-ex' : 'is-pub'}">
     <a class="art" href="/${lang}/c/${c}"><img src="${img(c, pick(c))}" alt="${esc(collName(lang, c))}" loading="lazy" width="400" height="400"></a>
     ${badge(lang, c)}
     <h3>${esc(collName(lang, c))}</h3><p>${esc(t.collections[c.replace('ex-', '')][1])}</p>
-    <p class="meta">${fmt(COLLECTIONS[c].max, lang)} × 1/1 · ${fmt(stats.collections?.[c]?.produced, lang)} ${lang === 'id' ? 'diproduksi' : 'produced'}</p>
+    <p class="meta">${c.startsWith('ex-') ? `${fmt(COLLECTIONS[c].max, lang)} × 1/1 · ${lang === 'id' ? 'lelang koin AXTO' : 'AXTO coin auction'}` : `${fmt(stats.showcase?.[c]?.length ?? 0, lang)} ${lang === 'id' ? 'karya pilihan · $10–$1.000 · OpenSea' : 'picks · $10–$1,000 · OpenSea'}`}</p>
     <a class="link" href="/${lang}/c/${c}">${esc(t.collections.open)} →</a></article>`;
   const body = `
 <section class="hero">
@@ -61,11 +66,11 @@ export function home(lang, stats) {
     <p class="kicker">${esc(t.hero.kicker)}</p>
     <h1>${esc(t.hero.title).replace('\n', '<br>')}</h1>
     <p class="lead">${esc(t.hero.lead)}</p>
-    <p class="cta"><a class="btn gold" href="${altPath('auction', lang)}">${esc(t.hero.cta)}</a> <a class="btn ghost" href="${altPath('coin', lang)}">${esc(t.hero.cta2)}</a></p>
+    <p class="cta"><a class="btn gold" href="${altPath('gallery', lang)}">${esc(t.hero.cta)}</a> <a class="btn ghost" href="${altPath('auction', lang)}">${esc(t.nav.auction)}</a></p>
     <dl class="counters">
+      <div><dt>${esc(t.hero.stock)}</dt><dd data-count="${stock}">0</dd></div>
+      <div><dt>${esc(t.hero.exStock)}</dt><dd data-count="${exTotal}">0</dd></div>
       <div><dt>${esc(t.hero.live)}</dt><dd data-count="${sum('live')}">0</dd></div>
-      <div><dt>${esc(t.hero.ready)}</dt><dd data-count="${sum('ready')}">0</dd></div>
-      <div><dt>${esc(t.hero.sold)}</dt><dd data-count="${sum('sold')}">0</dd></div>
       ${nextAt ? `<div><dt>${esc(t.hero.next)}</dt><dd><time data-countdown="${nextAt}"></time></dd></div>` : ''}
     </dl>
   </div>
@@ -108,8 +113,7 @@ function lotGrid(lang, c, rows, cur, withEnd) {
 
 export function auctionPage(lang, c, data, sort, stats) {
   const t = T[lang];
-  const all = [...PUBLIC, ...EXCL];
-  const tabs = all.map((k) => `<a href="${altPath('auction', lang)}?c=${k}&amp;sort=${sort}"${k === c ? ' aria-current="true"' : ''}>${esc(collName(lang, k))}</a>`).join('');
+  const tabs = EXCL.map((k) => `<a href="${altPath('auction', lang)}?c=${k}&amp;sort=${sort}"${k === c ? ' aria-current="true"' : ''}>${esc(collName(lang, k))}</a>`).join('');
   const sorts = [['ending', t.auction.sortEnding], ['highest', t.auction.sortHighest], ['lowest', t.auction.sortLowest]].map(([k, l]) => `<a href="${altPath('auction', lang)}?c=${c}&amp;sort=${k}"${k === sort ? ' aria-current="true"' : ''}>${esc(l)}</a>`).join('');
   const empty = !data.rows.length ? `<p class="empty">${esc(t.auction.empty)} ${stats.round ? `<time data-countdown="${stats.round.startAt > Date.now() ? stats.round.startAt : stats.round.endAt}"></time>` : '—'}</p>` : '';
   return `<section class="page"><h1>${esc(t.auction.title)}</h1>
@@ -121,7 +125,7 @@ export function auctionPage(lang, c, data, sort, stats) {
 
 export function waitingPage(lang, c, data, order) {
   const t = T[lang];
-  const tabs = [...PUBLIC, ...EXCL].map((k) => `<a href="${altPath('waiting', lang)}?c=${k}&amp;order=${order}"${k === c ? ' aria-current="true"' : ''}>${esc(collName(lang, k))}</a>`).join('');
+  const tabs = EXCL.map((k) => `<a href="${altPath('waiting', lang)}?c=${k}&amp;order=${order}"${k === c ? ' aria-current="true"' : ''}>${esc(collName(lang, k))}</a>`).join('');
   const ord = [['desc', t.auction.sortHighest], ['asc', t.auction.sortLowest]].map(([k, l]) => `<a href="${altPath('waiting', lang)}?c=${c}&amp;order=${k}"${k === order ? ' aria-current="true"' : ''}>${esc(l)}</a>`).join('');
   return `<section class="page"><h1>${esc(t.waiting.title)}</h1><p class="lead">${esc(t.waiting.lead)}</p>
   <nav class="tabs">${tabs}</nav><nav class="tabs small">${ord}</nav><p class="kindline">${badge(lang, c, true)}</p>${lotGrid(lang, c, data.rows, data.currency, false)}</section>`;
@@ -142,16 +146,21 @@ export function collectionPage(lang, c, o) {
     : { views: ['Mosaic', 'Gallery', 'List'], jump: 'Jump to #', tier: 'All tiers', series: 'All series', peek: 'Quick look', detail: 'Open details', prev: 'Previous', next: 'Next', close: 'Close', found: 'works', loading: 'Loading…', none: 'No matching works in this range.', more: 'Load more' };
   const opts = seriesOptions(c);
   const view = ['mosaic', 'gallery', 'list'].includes(o.view) ? o.view : 'mosaic';
-  const tile = (it) => `<li data-id="${it.id}" data-tier="${it.tier}"><a href="${nftPath(lang, c, it.id)}"><img src="${img(c, it.id)}" alt="${esc(it.name)}" loading="lazy" width="300" height="300"><span class="id">#${fmt(it.id, lang)}</span><span class="nm">${esc(it.name)}</span><span class="tr t${it.tier}">${esc(TIER_NAMES[lang][it.tier])}</span></a></li>`;
+  const tile = (it) => `<li data-id="${it.id}" data-tier="${it.tier}"><a href="${nftPath(lang, c, it.id)}"><img src="${img(c, it.id)}" alt="${esc(it.name)}" loading="lazy" width="300" height="300"><span class="id">#${fmt(it.id, lang)}</span><span class="nm">${esc(it.name)}</span><span class="tr t${it.tier}">${esc(TIER_NAMES[lang][it.tier])}</span>${it.usd ? `<span class="pr">$${fmt(it.usd, lang)}</span>` : ''}</a></li>`;
+  const pub = !COLLECTIONS[c].exclusive;
+  const crumbs = o.crumbs ? `<nav class="crumbs" aria-label="breadcrumb">${o.crumbs.map(([n, h], i) => (i < o.crumbs.length - 1 ? `<a href="${h}">${esc(n)}</a>` : `<span aria-current="page">${esc(n)}</span>`)).join(' › ')}</nav>` : '';
+  const chips = pub && o.facets ? `<nav class="chips" aria-label="${esc(L.series)}"><a href="/${lang}/c/${c}"${!o.series && !o.surah ? ' aria-current="true"' : ''}>${esc(lang === 'id' ? 'Semua' : 'All')} <small>${fmt(o.produced, lang)}</small></a>${opts.filter(([k]) => o.facets.series[k]).map(([k]) => `<a href="/${lang}/c/${c}/${k}"${o.series === k && !o.surah ? ' aria-current="true"' : ''}>${esc(seriesLabel(c, k, lang))} <small>${fmt(o.facets.series[k], lang)}</small></a>`).join('')}</nav>` : '';
+  const surahs = pub && c === 'quran' && o.facets ? `<details class="surahs"${o.surah ? ' open' : ''}><summary>${esc(lang === 'id' ? 'Telusuri per surah (114)' : 'Browse by surah (114)')}</summary><ol>${Object.keys(o.facets.surah).map(Number).sort((a, b) => a - b).map((n) => `<li><a href="/${lang}/c/quran/surah/${n}"${o.surah === n ? ' aria-current="true"' : ''}>${n}. ${esc(surahInfo(n)[2])} <small>${fmt(o.facets.surah[n], lang)}</small></a></li>`).join('')}</ol></details>` : '';
+  const priceRow = pub ? `<p class="prices">${TIER_NAMES[lang].map((n, i) => `<span class="tr t${i}">${esc(n)} $${fmt(OPENSEA_PRICE_USD[i], lang)}</span>`).join('')}</p>` : '';
   const qs = (extra) => new URLSearchParams({ ...(o.tier !== null ? { tier: String(o.tier) } : {}), ...(o.series ? { series: o.series } : {}), view, ...extra }).toString().replace(/&/g, '&amp;');
-  return `<section class="page explorer" id="explorer" data-c="${c}" data-lang="${lang}" data-produced="${o.produced}" data-next="${o.first.next ?? ''}" data-from="${o.from}">
-  <h1>${esc(collName(lang, c))}</h1><p class="kindline">${badge(lang, c, true)}</p><p class="lead">${esc(t.collections[base][1])}</p>
+  return `<section class="page explorer" id="explorer" data-c="${c}" data-lang="${lang}" data-produced="${o.produced}" data-next="${o.first.next ?? ''}" data-from="${o.from}" data-surah="${o.surah || ''}">
+  ${crumbs}<h1>${esc(o.seo?.h1 ?? collName(lang, c))}</h1><p class="kindline">${badge(lang, c, true)}</p><p class="lead">${esc(o.seo?.intro ?? t.collections[base][1])}</p>${priceRow}${chips}${surahs}
   <div class="xbar">
     <div class="views" role="group" aria-label="View">${['mosaic', 'gallery', 'list'].map((v, i) => `<button type="button" data-view="${v}"${v === view ? ' aria-pressed="true"' : ' aria-pressed="false"'}>${esc(L.views[i])}</button>`).join('')}</div>
     <label class="jump"><span>${esc(L.jump)}<output>${fmt(o.from, lang)}</output></span><input type="range" min="1" max="${Math.max(1, o.produced)}" step="1" value="${o.from}" aria-label="${esc(L.jump)}"></label>
     <select class="ftier" aria-label="Tier"><option value="">${esc(L.tier)}</option>${TIER_NAMES[lang].map((n, i) => `<option value="${i}"${o.tier === i ? ' selected' : ''}>${esc(n)}</option>`).join('')}</select>
     ${opts.length ? `<select class="fseries" aria-label="Series"><option value="">${esc(L.series)}</option>${opts.map(([k, en, id]) => `<option value="${esc(k)}"${o.series === k ? ' selected' : ''}>${esc(lang === 'id' ? id : en)}</option>`).join('')}</select>` : ''}
-    <span class="meta xcount">${fmt(o.produced, lang)} / ${fmt(COLLECTIONS[c].max, lang)}</span>
+    <span class="meta xcount">${pub ? `${fmt(o.produced, lang)} ${lang === 'id' ? 'karya pilihan dari' : 'picks of'} ${fmt(COLLECTIONS[c].max, lang)}` : `${fmt(o.produced, lang)} / ${fmt(COLLECTIONS[c].max, lang)}`}</span>
   </div>
   <ul class="xgrid v-${view}">${o.first.items.map(tile).join('')}</ul>
   ${o.first.items.length ? '' : `<p class="empty">${esc(L.none)}</p>`}
@@ -165,9 +174,19 @@ export function collectionPage(lang, c, o) {
 </section>`;
 }
 
-export function nftPage(lang, c, id, meta, lot, attrsId, opensea = '') {
+/** Kotak beli karya publik (perintah pemilik #44/#45): harga tetap per tier, tombol langsung ke listing OpenSea. */
+function buyBox(lang, c, id, meta, opensea, usd) {
+  const t = T[lang];
+  const tier = meta.attributes.find((a) => a.trait_type === 'Tier')?.value;
+  return `<div class="buybox"><p class="price"><span>${esc(t.kind.fixed)}</span><b>$${fmt(usd, lang)}</b><small>${lang === 'id' ? `dibayar ETH di jaringan Base · tingkat ${esc(TIER_NAMES.id[TIER_NAMES.en.indexOf(tier)] ?? tier)}` : `paid in ETH on Base · ${esc(tier)} tier`}</small></p>
+  ${opensea ? `<a class="btn gold big" href="${esc(opensea)}" target="_blank" rel="noopener">${esc(t.kind.buy)} ↗</a>` : `<span class="btn ghost big" aria-disabled="true">${esc(t.kind.soon)}</span>`}
+  <p class="meta">${lang === 'id' ? 'Pembayaran dan pengiriman NFT terjadi langsung di OpenSea; NFT masuk ke wallet Anda begitu transaksi selesai. Royalti 10% berlaku pada setiap penjualan ulang.' : 'Payment and delivery happen directly on OpenSea; the NFT lands in your wallet as soon as the transaction completes. A 10% royalty applies to every resale.'}</p></div>`;
+}
+
+export function nftPage(lang, c, id, meta, lot, attrsId, opensea = '', pubInfo = null) {
   const t = T[lang];
   const attrs = lang === 'id' ? attrsId : meta.attributes;
+  if (pubInfo) return nftPublicPage(lang, c, id, meta, attrs, opensea, pubInfo);
   const live = lot.status === 'live' || lot.status === 'waiting';
   const rarity = meta.attributes.find((a) => a.trait_type === 'Tier')?.value;
   return `<section class="nft">
@@ -189,6 +208,42 @@ export function nftPage(lang, c, id, meta, lot, attrsId, opensea = '') {
     <details><summary>${esc(t.nft.history)} (${lot.bids.length})</summary><ol class="hist">${lot.bids.slice().reverse().map((b) => `<li>${esc(b.bidder.slice(0, 6))}…${esc(b.bidder.slice(-4))} · ${esc(b.kind)} · <time datetime="${new Date(b.at).toISOString()}">${new Date(b.at).toISOString().slice(0, 16).replace('T', ' ')}</time></li>`).join('')}</ol></details>
     <p class="desc">${esc(meta.description).replace(/\n/g, '<br>')}</p>
   </div></section>`;
+}
+
+function nftPublicPage(lang, c, id, meta, attrs, opensea, info) {
+  const t = T[lang];
+  const rarity = meta.attributes.find((a) => a.trait_type === 'Tier')?.value;
+  const crumbs = `<nav class="crumbs" aria-label="breadcrumb">${info.crumbs.map(([n, h]) => `<a href="${h}">${esc(n)}</a>`).join(' › ')}</nav>`;
+  const rel = info.related.length ? `<h2>${esc(lang === 'id' ? 'Karya lain di galeri ini' : 'More from this gallery')}</h2><ul class="lots rel">${info.related.map((it) => `<li><a href="${nftPath(lang, c, it.id)}"><img src="${img(c, it.id)}" alt="${esc(it.name)}" loading="lazy" width="300" height="300"><span class="id">#${fmt(it.id, lang)}</span><span class="pr">$${fmt(it.usd, lang)}</span></a></li>`).join('')}</ul>` : '';
+  return `<section class="nft">
+  <div class="stage"><iframe src="/play/${c}/${id}" title="${esc(meta.name)}" loading="lazy" allow="autoplay; fullscreen" sandbox="allow-scripts allow-same-origin"></iframe></div>
+  <div class="info">
+    ${crumbs}
+    <p class="kindline">${badge(lang, c, true)}</p>
+    <h1>${esc(meta.name)}</h1>
+    <p class="meta">${esc(t.nft.edition)} · ${esc(t.nft.rarity)}: ${esc(rarity)} · ${lang === 'id' ? 'Galeri' : 'Gallery'}: <a class="link" href="${info.galleryHref}">${esc(info.galleryName)}</a></p>
+    ${buyBox(lang, c, id, meta, opensea, info.usd)}
+    <h2>${esc(t.nft.traits)}</h2>
+    <dl class="traits">${attrs.map((a) => `<div><dt>${esc(a.trait_type)}</dt><dd>${esc(a.value)}</dd></div>`).join('')}</dl>
+    <p><a class="link" href="/play/${c}/${id}" target="_blank" rel="noopener">${esc(t.nft.play)} ↗</a> · <a class="link" href="${altPath('verify', lang, `/${c}/${id}`)}">${esc(t.nft.certificate)}</a>${opensea ? ` · <a class="link" href="${esc(opensea)}" target="_blank" rel="noopener">${esc(t.kind.opensea)} ↗</a>` : ''}</p>
+    <p class="desc">${esc(meta.description).replace(/\n/g, '<br>')}</p>
+    ${rel}
+  </div></section>`;
+}
+
+/** Induk galeri: semua galeri & seri (tautan internal untuk pengunjung dan mesin pencari). */
+export function galleryHub(lang, facets, seo) {
+  const t = T[lang];
+  const sec = (c) => {
+    const f = facets[c];
+    const total = Object.values(f.series).reduce((a, b) => a + b, 0);
+    return `<section class="hubsec"><h2><a href="/${lang}/c/${c}">${esc(collName(lang, c))}</a> <small>${fmt(total, lang)}</small></h2><p>${esc(t.collections[c][1])}</p>
+    <ul class="chips">${seriesOptions(c).filter(([k]) => f.series[k]).map(([k]) => `<li><a href="/${lang}/c/${c}/${k}">${esc(seriesLabel(c, k, lang))} <small>${fmt(f.series[k], lang)}</small></a></li>`).join('')}</ul>
+    ${c === 'quran' ? `<details class="surahs"><summary>${esc(lang === 'id' ? 'Per surah' : 'By surah')}</summary><ol>${Object.keys(f.surah).map(Number).sort((a, b) => a - b).map((n) => `<li><a href="/${lang}/c/quran/surah/${n}">${n}. ${esc(surahInfo(n)[2])} <small>${fmt(f.surah[n], lang)}</small></a></li>`).join('')}</ol></details>` : ''}</section>`;
+  };
+  return `<section class="page hub"><nav class="crumbs"><a href="/${lang}">${esc(BREAD[lang].home)}</a> › <span aria-current="page">${esc(BREAD[lang].hub)}</span></nav><h1>${esc(seo.h1)}</h1><p class="lead">${esc(seo.desc)}</p>
+  ${PUBLIC.map(sec).join('')}
+  <section class="hubsec ex"><h2><a href="${altPath('exclusive', lang)}">${esc(t.kind.exTitle)}</a></h2><p>${esc(t.kind.exLead)}</p><ul class="chips">${EXCL.map((c) => `<li><a href="/${lang}/c/${c}">${esc(collName(lang, c))} <small>${fmt(COLLECTIONS[c].max, lang)}</small></a></li>`).join('')}</ul></section></section>`;
 }
 
 export function exclusivePage(lang, stats) {
@@ -252,4 +307,4 @@ export function notFound(lang) {
   return `<section class="page"><h1>404 — ${esc(t.notFound)}</h1><p><a class="btn" href="/${lang}">${esc(t.back)}</a></p></section>`;
 }
 
-export { PUBLIC, EXCL, PATHS, collName };
+export { PUBLIC, EXCL, PATHS, collName, TIER_NAMES };

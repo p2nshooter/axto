@@ -6,9 +6,10 @@
  *    (axto-vault-data/deployer.enc; kunci enkripsi diturunkan dari CLOUDFLARE_API_KEY). Tidak pernah ke repo/log.
  * 2. Status publik (alamat, saldo, kebutuhan gas, langkah) → axto-nft-data/cfg/deployer.json → tampil di Portal admin.
  * 3. Saldo cukup → deploy berurutan; kepemilikan langsung ke wallet pemilik sejak konstruktor:
- *    AuctionHouse + 7 koleksi → admin NFT; AxtoSale → wallet koin; AxtoToken diserahkan ke wallet koin di akhir.
- *    Koleksi publik (4 × 2.000.000) tercetak penuh saat deploy (ERC-2309) ke wallet admin → tampil di profil OpenSea pemilik;
- *    AuctionHouse menjadi operator untuk memindahkannya ke pemenang yang membayar.
+ *    AuctionHouse + 8 koleksi → admin NFT; AxtoSale → wallet koin; AxtoToken diserahkan ke wallet koin di akhir.
+ *    Koleksi publik (4 × 2.000.000) tercetak penuh saat deploy (ERC-2309) ke WALLET TOKO sistem (perintah #44; kunci
+ *    terenkripsi di vault seperti deployer) dengan konduit OpenSea sebagai operator → mesin listing (opensea-list.mjs)
+ *    menjualnya otomatis di OpenSea. Eksklusif (4 × 10.000) tanpa premint: dilelang koin AXTO di axto.io, mint saat WD.
  * 4. Selesai → POST /internal/contracts (HMAC) → worker memverifikasi on-chain & menyimpan + vault setConfig.
  *
  * ENV: CLOUDFLARE_API_KEY, CLOUDFLARE_EMAIL, CLOUDFLARE_ACCOUNT_ID, CHAIN_ID (8453 | 84532), [AXTO_API]
@@ -34,8 +35,11 @@ const NETS = {
 };
 const COLS = [
   ['time', 'AXTO Time', 'AXTIME', 2_000_000], ['stamp', 'AXTO Stamp', 'AXSTAMP', 2_000_000], ['quran', "AXTO Qur'an", 'AXQURAN', 2_000_000], ['model', 'AXTO Model', 'AXMODEL', 2_000_000],
-  ['ex-time', 'AXTO Exclusive Time', 'AXXTIME', 50_000], ['ex-stamp', 'AXTO Exclusive Stamp', 'AXXSTAMP', 50_000], ['ex-quran', "AXTO Exclusive Qur'an", 'AXXQURAN', 50_000],
+  // #44: eksklusif koin AXTO 4 × 10.000 (ex-model ditambahkan di akhir → alamat koleksi sebelumnya tidak bergeser)
+  ['ex-time', 'AXTO Exclusive Time', 'AXXTIME', 10_000], ['ex-stamp', 'AXTO Exclusive Stamp', 'AXXSTAMP', 10_000], ['ex-quran', "AXTO Exclusive Qur'an", 'AXXQURAN', 10_000], ['ex-model', 'AXTO Exclusive Model', 'AXXMODEL', 10_000],
 ];
+/** Konduit OpenSea (Seaport) — sama di semua jaringan; disetujui sejak konstruktor agar listing tanpa transaksi persetujuan. */
+export const OPENSEA_CONDUIT = '0x1E0049783F008A0085193E00003D00cd54003c71';
 /** Gas terukur di ganache untuk seluruh urutan ini (lihat test/auto-deploy.test.mjs), dibulatkan ke atas. */
 export const TOTAL_GAS = 32_000_000n;
 
@@ -141,6 +145,19 @@ async function main() {
   const st = JSON.parse(r2get(stKey) || '{}');
   const save = () => r2put(stKey, JSON.stringify(st));
 
+  // wallet toko sistem (#44): pemegang 8 jt NFT publik & penanda tangan listing OpenSea; kuncinya hanya di vault
+  if (!st.store) {
+    let spk = LOCAL ? process.env.LOCAL_STORE_KEY : null;
+    if (!spk) {
+      const sealedStore = r2get('axto-vault-data/store.enc');
+      if (sealedStore) spk = open(sealedStore);
+      else { spk = ethers.Wallet.createRandom().privateKey; r2put('axto-vault-data/store.enc', seal(spk)); log('Wallet toko sistem dibuat (kunci terenkripsi di bucket privat vault).'); }
+    }
+    st.store = new ethers.Wallet(spk).address;
+    save();
+  }
+  const STORE = st.store;
+
   const fee = await provider.getFeeData();
   const maxFee = fee.maxFeePerGas ?? fee.gasPrice ?? 10_000_000n;
   const spent = BigInt(st.gasUsed ?? 0);
@@ -148,7 +165,7 @@ async function main() {
   const need = (left * maxFee * 3n) / 2n + ethers.parseEther('0.0001'); // +50% & cadangan biaya data L1
   const bal = await provider.getBalance(me);
   const status = (step, extra = {}) => {
-    const s = { address: me, chainId, network: net.name, balance: ethers.formatEther(bal), need: ethers.formatEther(need), step, at: new Date().toISOString(), ...extra };
+    const s = { address: me, store: st.store, chainId, network: net.name, balance: ethers.formatEther(bal), need: ethers.formatEther(need), step, at: new Date().toISOString(), ...extra };
     if (!LOCAL) r2put('axto-nft-data/cfg/deployer.json', JSON.stringify(s));
     return s;
   };
@@ -201,7 +218,7 @@ async function main() {
   for (const [k, name, sym, max] of COLS) {
     if (st.collections[k]) continue;
     const ex = k.startsWith('ex-');
-    const cfg = { name, symbol: sym, maxSupply: max, owner: ADMIN, royaltyReceiver: TREASURY, baseURI: `${BASE}/api/meta/${k}/`, contractURI: `${BASE}/api/contract/${k}`, custody: ex ? ethers.ZeroAddress : ADMIN, premint: ex ? 0 : max, operator: ex ? ethers.ZeroAddress : house, signer: ex ? signer : ethers.ZeroAddress };
+    const cfg = { name, symbol: sym, maxSupply: max, owner: ADMIN, royaltyReceiver: TREASURY, baseURI: `${BASE}/api/meta/${k}/`, contractURI: `${BASE}/api/contract/${k}`, custody: ex ? ethers.ZeroAddress : STORE, premint: ex ? 0 : max, operator: ex ? ethers.ZeroAddress : OPENSEA_CONDUIT, signer: ex ? signer : ethers.ZeroAddress };
     st.collections[k] = await deploy(`col:${k}`, 'AxtoCollection', cfg);
     delete st[`col:${k}`];
     save();
@@ -215,7 +232,7 @@ async function main() {
   save();
   if (!LOCAL) { st.verified = await verifyAll(chainId, st); save(); }
 
-  const body = JSON.stringify({ chainId, token, sale, auctionHouse: house, collections: st.collections });
+  const body = JSON.stringify({ chainId, token, sale, auctionHouse: house, store: STORE, collections: st.collections });
   if (!LOCAL) {
     const key = process.env.ENGINE_HMAC_KEY || createHmac('sha256', process.env.CLOUDFLARE_API_KEY).update('axto:ENGINE_HMAC_KEY').digest('hex');
     const ts = Date.now();

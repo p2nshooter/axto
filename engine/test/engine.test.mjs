@@ -26,7 +26,7 @@ test('ruang kombinasi setiap koleksi > max', () => {
     assert.ok(spaceSize(k) >= COLLECTIONS[k].max, `${k}: ${spaceSize(k)} < ${COLLECTIONS[k].max}`);
   }
   assert.equal(planTotal(PLANS.quran), 2_000_000);
-  assert.equal(planTotal(PLANS['ex-quran']), 50_000);
+  assert.equal(planTotal(PLANS['ex-quran']), 10_000);
 });
 
 test('DNA unik (sampel 30.000 per koleksi + ujung rentang)', () => {
@@ -52,7 +52,13 @@ test('tier = label kelangkaan (5 tingkat, distribusi wajar); harga mulai $1 untu
   for (let i = 1; i <= 20000; i += 1) cnt[dna('stamp', i).tier.rank] += 1;
   assert.ok(cnt[0] > cnt[4] * 5, JSON.stringify(cnt));
   assert.ok(cnt.every((n) => n > 0), JSON.stringify(cnt));
-  for (const [c, id] of [['time', 7], ['stamp', 1_999_999], ['quran', 2_000_000], ['model', 3], ['ex-time', 50_000], ['ex-quran', 1]]) {
+  // #44: publik dijual harga tetap per tier di OpenSea; eksklusif dilelang koin AXTO mulai $1 di axto.io
+  for (const [c, id] of [['time', 7], ['stamp', 1_999_999], ['quran', 2_000_000], ['model', 3]]) {
+    const d = dna(c, id);
+    const price = metadata(c, id).attributes.find((a) => a.trait_type === 'Price (USD)');
+    assert.equal(price.value, String([10, 25, 75, 250, 1000][d.tier.rank]), c);
+  }
+  for (const [c, id] of [['ex-time', 10_000], ['ex-quran', 1], ['ex-model', 77]]) {
     const price = metadata(c, id).attributes.find((a) => a.trait_type === 'Starting Price (USD)');
     assert.equal(price.value, '1', c);
   }
@@ -61,7 +67,8 @@ test('tier = label kelangkaan (5 tingkat, distribusi wajar); harga mulai $1 untu
 test('tokenId di luar rentang ditolak', () => {
   assert.throws(() => dna('time', 0));
   assert.throws(() => dna('time', 2_000_001));
-  assert.throws(() => dna('ex-time', 50_001));
+  assert.throws(() => dna('ex-time', 10_001));
+  assert.throws(() => dna('ex-model', 10_001));
 });
 
 test('QA: sampel semua koleksi lolos (termasuk teks Qur\'an sama persis dengan sumber)', async () => {

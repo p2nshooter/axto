@@ -2,7 +2,7 @@
  * Renderer QURAN: kaligrafi vektor (image) + player 3D dengan bacaan qari pilihan, gulir otomatis, penunjuk kata.
  * Teks diambil APA ADANYA dari dataset (ctx.ar) — renderer tidak pernah mengubah teks ayat.
  */
-import { esc, rng } from '../core.js';
+import { esc, rng, collection } from '../core.js';
 import { svgOpen, linear, radial, starPath, polyPath, girihPattern, roundRect, r1, text, exclusiveBadge, hallmark, starfield, lum } from './common.js';
 import { AMIRI_WOFF2_B64 } from './font-amiri.js';
 
@@ -130,7 +130,7 @@ export function quranSvg(d, ctx, opts = {}) {
     body += text(500, 830, 'The Complete Mushaf · 604 pages · zoomable', `text-anchor="middle" font-family="Georgia,serif" font-size="24" fill="${gold}"`);
   }
   const frameSvg = { 'gold-frame': `<rect x="24" y="24" width="952" height="952" fill="none" stroke="${gold}" stroke-width="10"/>`, 'double-rule': `<rect x="30" y="30" width="940" height="940" fill="none" stroke="${gold}" stroke-width="3"/><rect x="44" y="44" width="912" height="912" fill="none" stroke="${gold}" stroke-width="1.5"/>`, 'floral-border': `<g fill="${gold}" opacity=".7">${Array.from({ length: 40 }, (_, i) => `<circle cx="${r1(25 + (i % 20) * 50)}" cy="${i < 20 ? 25 : 975}" r="7"/>`).join('')}</g>`, 'star-border': `<g fill="${gold}" opacity=".6">${Array.from({ length: 20 }, (_, i) => `<path d="${starPath(30, 30 + i * 49, 12, 5, 8)}"/><path d="${starPath(970, 30 + i * 49, 12, 5, 8)}"/>`).join('')}</g>`, manuscript: `<rect x="40" y="40" width="920" height="920" fill="none" stroke="${gold}" stroke-width="16" stroke-opacity=".5"/><rect x="62" y="62" width="876" height="876" fill="none" stroke="#2c5aa0" stroke-width="4"/>`, 'arch-frame': `<path d="M60 960V360Q60 60 500 40Q940 60 940 360V960Z" fill="none" stroke="${gold}" stroke-width="6"/>`, 'medallion-ring': `<circle cx="500" cy="500" r="480" fill="none" stroke="${gold}" stroke-width="6" stroke-dasharray="2 12"/>` }[frame[0]] ?? '';
-  const ex = d.exclusive ? exclusiveBadge(1000, d.tokenId, 50000, finish[1]) : '';
+  const ex = d.exclusive ? exclusiveBadge(1000, d.tokenId, collection(d.key).max, finish[1]) : '';
   const cosmic = bg[0] === 'cosmos' ? starfield(d.seed, 1000, 1000, 120) : '';
   return `${svgOpen(1000, 1000)}${defs}<rect width="1000" height="1000" fill="url(#bgq)"/>${cosmic}${illumination('il', illum[0], gold, d.seed)}${frameSvg}${body}${ex}${hallmark(1000, 1000, gold)}</svg>`;
 }

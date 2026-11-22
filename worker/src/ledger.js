@@ -20,6 +20,8 @@ import { withCfg } from './config.js';
 import { recover, domainSeparator, bidStructHash, typedHash, lotIdHex, spendable, ownerOf, isAddress } from './eth.js';
 
 export const KEYS = Object.keys(COLLECTIONS);
+/** #44: lelang di axto.io hanya untuk edisi eksklusif (koin AXTO); koleksi publik dijual harga tetap di OpenSea. */
+export const AUCTION_KEYS = KEYS.filter((c) => COLLECTIONS[c].exclusive);
 export const colAddr = (env, c) => env[`COLLECTION_${c.replace('-', '_').toUpperCase()}`];
 const currencyOf = (c) => (COLLECTIONS[c].exclusive ? 'AXTO' : 'USDC');
 /**
@@ -204,6 +206,7 @@ export class Ledger extends DurableObject {
     const { c, tokenId, bidder, kind } = b;
     const x = this.s[c];
     if (!x) return { ok: false, error: 'collection' };
+    if (!COLLECTIONS[c].exclusive) return { ok: false, error: 'opensea_only' }; // #44: publik dibeli di OpenSea
     if (!Number.isSafeInteger(tokenId) || tokenId < 1 || tokenId > COLLECTIONS[c].max) return { ok: false, error: 'token' };
     if (!isAddress(bidder)) return { ok: false, error: 'bidder' };
     if (this.isSold(c, tokenId)) return { ok: false, error: 'sold' };
@@ -356,9 +359,9 @@ export class Ledger extends DurableObject {
     await this.refreshEnv();
     if (!this.genesis) return { skipped: 'genesis' };
     const report = {};
-    for (const c of KEYS) {
+    for (const c of AUCTION_KEYS) {
       report[c] = await this.tickCollection(c, now);
-      if (COLLECTIONS[c].exclusive) await this.marketTick(c, now);
+      await this.marketTick(c, now);
     }
     for (const c of KEYS) await this.flushSold(c);
     report.opensea = await this.openseaRefresh();

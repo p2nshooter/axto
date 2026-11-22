@@ -39,8 +39,35 @@ if (box) {
       }
     }
     say(`Admin NFT: ${s.admin} · Signer vault: ${s.signer || '—'}`, 'meta');
+    openseaBox(s);
     coinWallets(s);
   });
+}
+
+// Penjualan OpenSea otomatis (#44/#45): status mesin listing + tanda „OpenSea siap" setelah pemilik mengatur Creator Studio.
+function openseaBox(s) {
+  const o = s.opensea ?? {};
+  const st = o.status ?? {};
+  box.append(el('h2', id ? 'Penjualan OpenSea (wallet toko sistem)' : 'OpenSea sales (system store wallet)'));
+  if (st.store) say(`${id ? 'Wallet toko' : 'Store wallet'}: ${st.store}`, 'meta');
+  say(`${id ? 'Langkah' : 'Step'}: ${st.step ?? (id ? 'belum berjalan' : 'not started')}${st.at ? ` · ${new Date(st.at).toLocaleString()}` : ''}`);
+  if (st.listedTotal != null) say(`${id ? 'Listing terkirim' : 'Listings sent'}: ${Number(st.listedTotal).toLocaleString()} · ${id ? 'etalase terlisting' : 'showcase listed'}: ${JSON.stringify(st.showcase ?? {})} · ${id ? 'terjual' : 'sold'}: ${JSON.stringify(st.sold ?? {})}${st.ethUsd ? ` · ETH $${st.ethUsd}` : ''}`, 'meta');
+  if (st.swept) say(`${id ? 'Terakhir diteruskan ke treasury' : 'Last forwarded to treasury'}: ${st.swept.eth} ETH`, 'ok');
+  for (const e of st.errors ?? []) say(e, 'muted');
+  const ready = o.ready?.ready === true;
+  const steps = el('ol');
+  for (const t of id
+    ? ['Masuk ke opensea.io dengan wallet produksi (pemilik kontrak).', 'Buka Creator Studio → tiap koleksi AXTO (Time, Stamp, Qur\'an, Model).', 'Creator earnings 10%, alamat payout = treasury; aktifkan penegakan (enforcement).', 'Tekan tombol di bawah — listing otomatis dimulai pada putaran berikutnya (≤ 1 jam).']
+    : ['Sign in to opensea.io with the production wallet (contract owner).', 'Open Creator Studio → each AXTO collection (Time, Stamp, Qur\'an, Model).', 'Creator earnings 10%, payout address = treasury; turn enforcement on.', 'Press the button below — automatic listing starts on the next run (≤ 1 hour).']) steps.append(el('li', t));
+  if (!ready) box.append(steps);
+  const b = el('button', ready ? (id ? '✓ OpenSea siap — listing berjalan (klik untuk menjeda)' : '✓ OpenSea ready — listing runs (click to pause)') : (id ? 'Creator Studio sudah diatur → mulai listing' : 'Creator Studio is set → start listing'), ready ? 'btn' : 'btn gold');
+  b.type = 'button';
+  b.addEventListener('click', async () => {
+    b.disabled = true;
+    const r = await (await fetch('/api/admin/opensea-ready', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ready: !ready }) })).json();
+    b.textContent = r.ok ? (r.ready ? '✓' : '⏸') : (r.error || 'error');
+  });
+  box.append(b);
 }
 
 // Wallet koin AXTO perusahaan + saldo langsung dari blockchain — RAHASIA, hanya di Portal admin (perintah pemilik #43:

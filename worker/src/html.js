@@ -61,7 +61,7 @@ export function page(opts) {
     { '@context': 'https://schema.org', '@type': 'WebSite', name: 'AXTO', url: base, inLanguage: t.htmlLang },
     ...jsonld,
   ];
-  const nav = [['auction', t.nav.auction], ['waiting', t.nav.waiting], ['exclusive', t.nav.exclusive], ['coin', t.nav.coin], ['member', t.nav.member]];
+  const nav = [['gallery', t.nav.gallery], ['auction', t.nav.auction], ['waiting', t.nav.waiting], ['exclusive', t.nav.exclusive], ['coin', t.nav.coin], ['member', t.nav.member]];
   return `<!doctype html>
 <html lang="${t.htmlLang}">
 <head>

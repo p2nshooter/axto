@@ -1,7 +1,7 @@
 /**
  * Metadata token (standar OpenSea) + konteks render. Semua deterministik dari dna().
  */
-import { collection, START_USD } from './core.js';
+import { collection, START_USD, OPENSEA_PRICE_USD } from './core.js';
 import { dna, traitNameId } from './dna.js';
 import { SURAH, juzStart, pageStart, globalFromAyah, ayahFromGlobal } from './catalog/quran.js';
 import { timeSvg, timePlayer, TIME_ANIM_CSS } from './render/time.js';
@@ -9,6 +9,19 @@ import { stampSvg, stampPlayer, ANIM_CSS as STAMP_ANIM_CSS } from './render/stam
 import { quranSvg, quranPlayer } from './render/quran.js';
 import { modelSvg, modelPlayer } from './render/model.js';
 import { modelTraits } from './catalog/model.js';
+
+/** Seri koleksi TIME = kategori bentuk (untuk saringan OpenSea & penjelajah). [id, EN, ID] */
+export const TIME_SERIES = [['wrist', 'Wristwear', 'Jam Tangan'], ['body', 'Jewelry & Wearables', 'Perhiasan'], ['bag', 'Bags & Charms', 'Tas & Charm'], ['apparel', 'Apparel', 'Busana'], ['home', 'Home', 'Rumah'], ['vehicle', 'Vehicle', 'Kendaraan'], ['public', 'Public Spaces', 'Ruang Publik'], ['digital', 'Digital Screens', 'Layar Digital'], ['novel', 'Novelty', 'Unik']];
+const TIME_SERIES_NAME = Object.fromEntries(TIME_SERIES.map((x) => [x[0], x[1]]));
+const QURAN_SERIES_NAME = { ayah: 'Ayah', page: 'Mushaf Page', juz: 'Juz', mushaf: 'Complete Mushaf' };
+const GALLERY_KIND = { time: 'Time', stamp: 'Stamps', quran: "Qur'an", model: 'Models' };
+
+/** Nama seri (EN) sebuah token — dipakai sifat „Series" & „Gallery" agar NFT tersusun rapi dan mudah dicari di OpenSea. */
+export function seriesName(d) {
+  if (d.kind === 'time') return TIME_SERIES_NAME[d.pick[0][4]] ?? 'Other';
+  if (d.kind === 'quran') return QURAN_SERIES_NAME[d.series.series];
+  return d.pick[1][1];
+}
 
 const KIND_NAME = { time: 'AXTO Time', stamp: 'AXTO Stamps', quran: 'AXTO Quran Calligraphy', model: 'AXTO Models' };
 const KIND_NAME_ID = { time: 'AXTO Jam', stamp: 'AXTO Prangko', quran: 'AXTO Kaligrafi Al-Qur\'an', model: 'AXTO Model' };
@@ -126,7 +139,8 @@ function description(d, ref, base) {
     model: 'Karya figur beranimasi dari seri model AXTO, dibuat dengan izin tertulis model.',
   }[d.kind];
   const only = c.exclusive ? '\n\nExclusive edition — sold only on axto.io. / Edisi eksklusif — hanya dijual di axto.io.' : '';
-  return `${en}\n\n${id}${only}\n\nEdition ${edition} · Rarity: ${d.tier.name} · Auction starts at $${START_USD} / Lelang mulai $${START_USD} · Certificate: ${cert}\n\n© AXTO (axto.io). The owner may display the artwork for personal and promotional use; copyright of the artwork remains with AXTO. Resale royalty 10%.`;
+  const sale = c.exclusive ? 'AXTO coin auction at axto.io / Lelang koin AXTO di axto.io' : `Price $${OPENSEA_PRICE_USD[d.tier.rank]} on OpenSea / Harga $${OPENSEA_PRICE_USD[d.tier.rank]} di OpenSea`;
+  return `${en}\n\n${id}${only}\n\nGallery: ${GALLERY_KIND[d.kind]} · ${seriesName(d)} · Edition ${edition} · Rarity: ${d.tier.name} · ${sale} · Certificate: ${cert}\n\n© AXTO (axto.io). The owner may display the artwork for personal and promotional use; copyright of the artwork remains with AXTO. Resale royalty 10%.`;
 }
 
 /** Metadata ERC-721 untuk tokenURI. */
@@ -135,16 +149,20 @@ export function metadata(key, tokenId, base = 'https://axto.io') {
   const c = collection(key);
   const ref = d.kind === 'quran' ? quranRef(d) : null;
   const mt = d.kind === 'model' ? modelTraits(d) : null;
-  const attrs = d.pick.map((o, i) => ({ trait_type: d.names[i], value: mt ? mt[i] : d.kind === 'stamp' && d.names[i] === 'Subject' ? d.pick[1][4][o[4]] : o[1] }));
+  const attrs = d.pick.map((o, i) => ({ trait_type: d.names[i], value: mt ? (mt[i] ?? o[1]) : d.kind === 'stamp' && d.names[i] === 'Subject' ? d.pick[1][4][o[4]] : o[1] }));
+  // Galeri & seri (perintah pemilik #44): setiap NFT punya „Gallery" dan „Series" → saringan rapi di OpenSea & axto.io
+  const sname = seriesName(d);
+  if (d.kind === 'time') attrs.unshift({ trait_type: 'Series', value: sname });
+  attrs.unshift({ trait_type: 'Gallery', value: `${c.exclusive ? 'Exclusive ' : ''}${GALLERY_KIND[d.kind]} · ${sname}` });
   if (ref) {
-    attrs.unshift({ trait_type: 'Series', value: { ayah: 'Ayah', page: 'Mushaf Page', juz: 'Juz', mushaf: 'Complete Mushaf' }[ref.series] });
+    attrs.splice(1, 0, { trait_type: 'Series', value: sname });
     if (ref.series === 'ayah') attrs.push({ trait_type: 'Surah', value: `${ref.surah}. ${ref.surahLt}` }, { display_type: 'number', trait_type: 'Ayah', value: ref.ayah }, { display_type: 'number', trait_type: 'Page', value: ref.page });
     if (ref.series === 'page') attrs.push({ display_type: 'number', trait_type: 'Page', value: ref.page }, { display_type: 'number', trait_type: 'Juz', value: ref.juz });
     if (ref.series === 'juz') attrs.push({ display_type: 'number', trait_type: 'Juz', value: ref.juz });
   }
   attrs.push(
     { trait_type: 'Tier', value: d.tier.name },
-    { trait_type: 'Starting Price (USD)', value: String(START_USD) },
+    c.exclusive ? { trait_type: 'Starting Price (USD)', value: String(START_USD) } : { trait_type: 'Price (USD)', value: String(OPENSEA_PRICE_USD[d.tier.rank]) },
     { trait_type: 'Edition', value: '1/1' },
     { trait_type: 'Collection', value: c.exclusive ? 'Exclusive' : 'Public' },
     { display_type: 'number', trait_type: 'Uniqueness Score', value: d.score },
@@ -170,7 +188,7 @@ export function contractMetadata(key, base = 'https://axto.io') {
   const name = `${c.exclusive ? 'AXTO Exclusive — ' : ''}${KIND_NAME[c.kind]}`;
   return {
     name,
-    description: `${name}: ${c.max.toLocaleString('en-US')} unique 1/1 living artworks by AXTO. Every token is generated from a mathematically unique DNA — no duplicates, never reprinted. Live 72-hour auctions at axto.io. / ${KIND_NAME_ID[c.kind]}: ${c.max.toLocaleString('id-ID')} karya 1/1 unik, lelang 72 jam di axto.io.`,
+    description: `${name}: ${c.max.toLocaleString('en-US')} unique 1/1 living artworks by AXTO. Every token is generated from a mathematically unique DNA — no duplicates, never reprinted. ${c.exclusive ? 'Exclusive edition: sold only in AXTO coin auctions at axto.io.' : `Browse by Gallery and Series${seriesOptions(key).length ? ` (${seriesOptions(key).map((x) => x[1]).join(', ')})` : ''}. Price by rarity: Classic $10 · Rare $25 · Epic $75 · Legendary $250 · Masterpiece $1000.`} / ${KIND_NAME_ID[c.kind]}: ${c.max.toLocaleString('id-ID')} karya 1/1 unik${c.exclusive ? ', hanya dilelang dengan koin AXTO di axto.io.' : ', telusuri per Galeri & Seri.'}`,
     image: `${base}/logo-512.png`,
     banner_image: `${base}/og/${key}.svg`,
     external_link: `${base}/en/c/${key}`,
@@ -229,12 +247,14 @@ export function seriesOptions(key) {
   if (kind === 'stamp') return STAMP_SERIES.map((s) => [s[0], s[1], s[2]]);
   if (kind === 'model') return MODEL_SERIES.map((s) => [s[0], s[1], s[2]]);
   if (kind === 'quran') return QURAN_SERIES;
+  if (kind === 'time') return TIME_SERIES;
   return [];
 }
 
-function seriesKey(d) {
+export function seriesKey(d) {
   if (d.kind === 'stamp' || d.kind === 'model') return d.pick[1][0];
   if (d.kind === 'quran') return d.series.series;
+  if (d.kind === 'time') return d.pick[0][4];
   return '';
 }
 
@@ -281,4 +301,38 @@ export function renderPlayerLive(d, meta, ctx, opts) {
   const html = renderPlayer(d, meta, ctx, opts);
   const i = html.lastIndexOf('</body>');
   return i < 0 ? html + INTERACT : `${html.slice(0, i)}${INTERACT}${html.slice(i)}`;
+}
+
+/**
+ * Penjelajah atas daftar tetap (etalase 5.000 acak per jenis, perintah pemilik #45). `from` = posisi 1-based dalam
+ * daftar; saringan tier, seri dan surah (kaligrafi Al-Qur'an). Mengembalikan harga tetap OpenSea per karya.
+ */
+export function browseList(key, ids, { from = 1, n = 60, tier = null, series = '', surah = 0 } = {}) {
+  const items = [];
+  let i = Math.max(1, from);
+  for (; i <= ids.length && items.length < n; i += 1) {
+    const id = ids[i - 1];
+    const d = dna(key, id);
+    if (tier !== null && d.tier.rank !== tier) continue;
+    if (series && seriesKey(d) !== series) continue;
+    const ref = d.kind === 'quran' ? quranRef(d) : null;
+    if (surah && !(ref && ref.series === 'ayah' && ref.surah === surah)) continue;
+    items.push({ id, name: title(d, ref), tier: d.tier.rank, series: seriesKey(d), usd: OPENSEA_PRICE_USD[d.tier.rank] });
+  }
+  return { items, next: i <= ids.length ? i : null };
+}
+
+/** Hitung karya per seri / per surah dalam daftar (untuk halaman galeri & tautan internal). */
+export function listFacets(key, ids) {
+  const series = {};
+  const surah = {};
+  const tiers = [0, 0, 0, 0, 0];
+  for (const id of ids) {
+    const d = dna(key, id);
+    const k = seriesKey(d);
+    series[k] = (series[k] ?? 0) + 1;
+    tiers[d.tier.rank] += 1;
+    if (d.kind === 'quran') { const r = quranRef(d); if (r.series === 'ayah') surah[r.surah] = (surah[r.surah] ?? 0) + 1; }
+  }
+  return { series, surah, tiers };
 }

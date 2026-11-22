@@ -300,6 +300,7 @@ if (ex) {
     const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = it.name;
     const tr = document.createElement('span'); tr.className = `tr t${it.tier}`; tr.textContent = I.tiers?.[it.tier] ?? '';
     a.append(im, id, nm, tr);
+    if (it.usd) { const pr = document.createElement('span'); pr.className = 'pr'; pr.textContent = `$${fmtN(it.usd)}`; a.append(pr); }
     li.append(a);
     return li;
   };
@@ -311,6 +312,7 @@ if (ex) {
     const q = new URLSearchParams({ from: String(next), n: '60' });
     if (st.tier !== '') q.set('tier', st.tier);
     if (st.series) q.set('series', st.series);
+    if (ex.dataset.surah) q.set('surah', ex.dataset.surah);
     try {
       const r = await get(`/api/browse/${c}?${q}`);
       for (const it of r.items) grid.append(tile(it));

@@ -9,7 +9,7 @@ export const NETWORKS = {
   84532: { name: 'Base Sepolia (uji)', rpc: 'https://sepolia.base.org', usdc: '0x036CbD53842c5426634e7929541eC2318f3dCF7e', feed: '0x4aDC67696bA383F43DD60A9e78F2C97Fbbfc7cb1', opensea: 'base_sepolia', explorer: 'https://sepolia.basescan.org' },
   8453: { name: 'Base', rpc: 'https://mainnet.base.org', usdc: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', feed: '0x71041dddad3595F9CEd3DcCFBe3D1F4b0a16Bb70', opensea: 'base', explorer: 'https://basescan.org' },
 };
-export const COL_KEYS = ['time', 'stamp', 'quran', 'model', 'ex-time', 'ex-stamp', 'ex-quran'];
+export const COL_KEYS = ['time', 'stamp', 'quran', 'model', 'ex-time', 'ex-stamp', 'ex-quran', 'ex-model'];
 const colVar = (c) => `COLLECTION_${c.replace('-', '_').toUpperCase()}`;
 
 let cache = { at: 0, cfg: null };
@@ -52,7 +52,7 @@ export async function saveContracts(env, admin, body) {
   const prev = await readJSON(env.STORE, 'cfg/active.json').catch(() => null);
   // ronde pertama: segel saat ini juga, live 1 jam kemudian (lelang 72 jam mulai $1) — tidak diubah bila disimpan ulang
   const genesis = prev?.chainId === chainId && prev?.genesis ? prev.genesis : Math.ceil((Date.now() + 65 * 60_000) / 60_000) * 60_000;
-  const cfg = { chainId, token: body.token, sale: body.sale, auctionHouse: body.auctionHouse, vesting: body.vesting ?? null, lock: body.lock ?? null, usdc: net.usdc, collections: Object.fromEntries(COL_KEYS.map((k) => [k, body.collections[k]])), genesis, savedAt: Date.now(), by: admin };
+  const cfg = { chainId, token: body.token, sale: body.sale, auctionHouse: body.auctionHouse, store: isAddress(body.store) ? body.store : null, vesting: body.vesting ?? null, lock: body.lock ?? null, usdc: net.usdc, collections: Object.fromEntries(COL_KEYS.map((k) => [k, body.collections[k]])), genesis, savedAt: Date.now(), by: admin };
   await putJSON(env.STORE, `cfg/contracts-${chainId}.json`, cfg);
   await putJSON(env.STORE, 'cfg/active.json', cfg);
   await appendLog(env.STORE, 'admin', { ev: 'contracts', chainId, by: admin });

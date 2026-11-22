@@ -43,10 +43,17 @@ function memR2() {
 let provider, owner, treasury, signerW, alice, bob, carol, chainId;
 let usdc, token, sale, house, col, colEx, env;
 
+/** nonce eksplisit & tahan ganache usang: max(latest, pending), coba ulang bila ganache menolak nonce. */
+async function freshNonce(provider, addr) { return Math.max(await provider.getTransactionCount(addr, 'latest'), await provider.getTransactionCount(addr, 'pending')); }
+async function sendDeploy(provider, f, addr, args) {
+  for (let i = 0, n = await freshNonce(provider, addr); ; i += 1, n += 1) {
+    try { return await f.deploy(...args, { nonce: n }); } catch (e) { if (i >= 4 || !/correct nonce|nonce too low/i.test(String(e.message))) throw e; }
+  }
+}
 async function deploy(name, ...args) {
   const a = art(name);
   // nonce eksplisit: ganache kadang memberi nonce "pending" usang setelah deploy besar (premint 2 jt)
-  const c = await new ethers.ContractFactory(a.abi, a.bytecode, owner).deploy(...args, { nonce: await provider.getTransactionCount(owner.address, 'latest') });
+  const c = await sendDeploy(provider, new ethers.ContractFactory(a.abi, a.bytecode, owner), owner.address, args);
   await c.waitForDeployment();
   return c;
 }

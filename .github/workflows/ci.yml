@@ -36,6 +36,11 @@ jobs:
           (cd vault-src && npm ci --no-audit --no-fund)
           cd contracts && (npm ci --no-audit --no-fund || npm install --no-audit --no-fund --no-save) && node scripts/compile.mjs
           VAULT_DIR="$GITHUB_WORKSPACE/vault-src" node --test test/*.test.mjs
+      - name: Mesin listing OpenSea (wallet toko, etalase, penjualan → treasury)
+        working-directory: market
+        run: |
+          npm ci --no-audit --no-fund
+          node --test test/*.test.mjs
       - name: Worker (kripto, bundel)
         working-directory: worker
         run: |

@@ -118,9 +118,11 @@ export const COLLECTIONS = {
   stamp: { key: 'stamp', kind: 'stamp', max: 2_000_000, salt: 'axto/stamp/v1', exclusive: false, symbol: 'AXSTAMP' },
   quran: { key: 'quran', kind: 'quran', max: 2_000_000, salt: 'axto/quran/v1', exclusive: false, symbol: 'AXQURAN' },
   model: { key: 'model', kind: 'model', max: 2_000_000, salt: 'axto/model/v1', exclusive: false, symbol: 'AXMODEL', requiresConsent: true },
-  'ex-time': { key: 'ex-time', kind: 'time', max: 50_000, salt: 'axto/ex-time/v1', exclusive: true, symbol: 'AXXTIME' },
-  'ex-stamp': { key: 'ex-stamp', kind: 'stamp', max: 50_000, salt: 'axto/ex-stamp/v1', exclusive: true, symbol: 'AXXSTAMP' },
-  'ex-quran': { key: 'ex-quran', kind: 'quran', max: 50_000, salt: 'axto/ex-quran/v1', exclusive: true, symbol: 'AXXQURAN' },
+  // perintah pemilik #44: eksklusif (dibayar koin AXTO, dilelang & berputar di axto.io) cukup 10.000 per koleksi × 4 = 40.000
+  'ex-time': { key: 'ex-time', kind: 'time', max: 10_000, salt: 'axto/ex-time/v1', exclusive: true, symbol: 'AXXTIME' },
+  'ex-stamp': { key: 'ex-stamp', kind: 'stamp', max: 10_000, salt: 'axto/ex-stamp/v1', exclusive: true, symbol: 'AXXSTAMP' },
+  'ex-quran': { key: 'ex-quran', kind: 'quran', max: 10_000, salt: 'axto/ex-quran/v1', exclusive: true, symbol: 'AXXQURAN' },
+  'ex-model': { key: 'ex-model', kind: 'model', max: 10_000, salt: 'axto/ex-model/v1', exclusive: true, symbol: 'AXXMODEL', requiresConsent: true },
 };
 
 export function collection(key) {
@@ -139,6 +141,9 @@ export function assertTokenId(c, tokenId) {
 export const START_USD = 1;
 
 /** Tier kelangkaan (bukan harga). Persentil skor keunikan → tier; rank menentukan fitur player. */
+/** Harga „Buy now" OpenSea per tier untuk koleksi publik, USD (perintah pemilik #44); dikonversi ke ETH saat listing. */
+export const OPENSEA_PRICE_USD = [10, 25, 75, 250, 1000];
+
 export const TIERS = [
   { rank: 0, upTo: 0.5, name: 'Classic' },
   { rank: 1, upTo: 0.75, name: 'Rare' },

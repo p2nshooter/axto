@@ -9,7 +9,7 @@ export const TOTAL_AYAH = SURAH.reduce((a, s) => a + s[5], 0); // 6236
 /** Rencana seri per koleksi. ayah: {total} dibagi rata; sisanya 1 varian ekstra pada ayat-ayat awal. */
 export const PLANS = {
   quran: { ayah: 1_993_805, page: 10, juz: 5, mushaf: 5 },
-  'ex-quran': { ayah: 6236 * 7, page: 10, juz: 10, mushaf: 8 },
+  'ex-quran': { ayah: 6236, page: 6, juz: 4, mushaf: 20 }, // 10.000 (#44): tiap ayat tepat satu karya
 };
 
 export function planTotal(plan) {
