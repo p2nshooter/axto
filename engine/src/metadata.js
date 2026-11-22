@@ -216,3 +216,69 @@ export function renderPlayer(d, meta, ctx, opts) {
     default: throw new Error('kind?');
   }
 }
+
+/* ------------------------------------------------------------------ penjelajah koleksi (perintah pemilik #37) */
+import { SERIES as STAMP_SERIES } from './catalog/stamp.js';
+import { SERIES as MODEL_SERIES } from './catalog/model.js';
+
+const QURAN_SERIES = [['ayah', 'Ayah', 'Ayat'], ['page', 'Mushaf Page', 'Halaman Mushaf'], ['juz', 'Juz', 'Juz'], ['mushaf', 'Complete Mushaf', 'Mushaf Lengkap']];
+
+/** Pilihan saringan seri per koleksi: [kunci, EN, ID]. */
+export function seriesOptions(key) {
+  const kind = collection(key).kind;
+  if (kind === 'stamp') return STAMP_SERIES.map((s) => [s[0], s[1], s[2]]);
+  if (kind === 'model') return MODEL_SERIES.map((s) => [s[0], s[1], s[2]]);
+  if (kind === 'quran') return QURAN_SERIES;
+  return [];
+}
+
+function seriesKey(d) {
+  if (d.kind === 'stamp' || d.kind === 'model') return d.pick[1][0];
+  if (d.kind === 'quran') return d.series.series;
+  return '';
+}
+
+/**
+ * Ambil karya untuk penjelajah: mulai dari `from`, sampai `n` karya yang cocok dengan saringan (tier, seri),
+ * memindai paling banyak `scan` nomor. Murni deterministik (tanpa R2).
+ */
+export function browse(key, { from = 1, n = 60, tier = null, series = '', produced = 0, scan = 4000 } = {}) {
+  const items = [];
+  let id = Math.max(1, from);
+  const end = Math.min(produced, id + scan - 1);
+  for (; id <= end && items.length < n; id += 1) {
+    const d = dna(key, id);
+    if (tier !== null && d.tier.rank !== tier) continue;
+    if (series && seriesKey(d) !== series) continue;
+    items.push({ id, name: title(d, d.kind === 'quran' ? quranRef(d) : null), tier: d.tier.rank, series: seriesKey(d) });
+  }
+  return { items, next: id <= produced ? id : null };
+}
+
+/*
+ * Lapisan gerak interaktif untuk semua player (perintah pemilik #37: „selain css setiap animasi masih terlalu standar").
+ *  - miring 3D mengikuti jari/kursor (dan giroskop di Android); saat diam karya tetap "bernapas" dengan gerak Lissajous
+ *  - kilau holografik yang mengikuti titik sentuh
+ *  - percikan cahaya emas saat karya disentuh/diklik
+ *  - prangko tidak dimiringkan (seret & zoom vektornya tetap presisi)
+ */
+const INTERACT = `<style>#axfx{position:fixed;inset:0;pointer-events:none;z-index:9}#axsh{position:fixed;inset:0;pointer-events:none;z-index:8;mix-blend-mode:soft-light;opacity:.55;background:radial-gradient(circle at var(--x,50%) var(--y,40%),rgba(255,255,255,.85),rgba(255,230,160,.25) 18%,transparent 46%),linear-gradient(115deg,transparent 30%,rgba(120,200,255,.18) 45%,rgba(255,120,220,.16) 55%,transparent 70%);background-size:100% 100%,240% 240%;background-position:0 0,var(--h,50%) 50%;transition:opacity .4s}@media(prefers-reduced-motion:reduce){#axsh,#axfx{display:none}}</style><div id="axsh"></div><canvas id="axfx"></canvas><script>(()=>{if(matchMedia('(prefers-reduced-motion: reduce)').matches)return;
+const T=document.querySelector('#s')||document.querySelector('#art')||document.querySelector('body>svg:not(#w)');const stamp=!!document.querySelector('#st');
+const sh=document.getElementById('axsh'),cv=document.getElementById('axfx'),g=cv.getContext('2d');let W,H,dpr=Math.min(2,devicePixelRatio||1);const R=()=>{W=cv.width=innerWidth*dpr;H=cv.height=innerHeight*dpr;cv.style.width=innerWidth+'px';cv.style.height=innerHeight+'px'};R();addEventListener('resize',R);
+let tx=0,ty=0,cx=0,cy=0,last=0,px=.5,py=.4;const P=[];
+const aim=(x,y)=>{px=x/innerWidth;py=y/innerHeight;tx=(px-.5)*2;ty=(py-.5)*2;last=performance.now()};
+addEventListener('pointermove',e=>aim(e.clientX,e.clientY),{passive:true});
+addEventListener('deviceorientation',e=>{if(e.gamma==null)return;tx=Math.max(-1,Math.min(1,e.gamma/30));ty=Math.max(-1,Math.min(1,(e.beta-40)/30));px=.5+tx/2;py=.5+ty/2;last=performance.now()});
+addEventListener('pointerdown',e=>{aim(e.clientX,e.clientY);for(let i=0;i<26;i++){const a=Math.random()*Math.PI*2,v=1.5+Math.random()*4.5;P.push({x:e.clientX*dpr,y:e.clientY*dpr,vx:Math.cos(a)*v*dpr,vy:Math.sin(a)*v*dpr-1.5*dpr,l:1,c:['#f3d77a','#fff6c2','#7fb3ff','#ff9be0'][i%4],r:(1.5+Math.random()*2.5)*dpr})}},{passive:true});
+if(T&&!stamp){T.style.transformStyle='preserve-3d';T.style.willChange='transform'}
+function f(now){const idle=now-last>2500;if(idle){const t=now/1000;tx=Math.sin(t*.6)*.45;ty=Math.sin(t*.43+1)*.35;px=.5+tx/2;py=.45+ty/2}
+cx+=(tx-cx)*.08;cy+=(ty-cy)*.08;if(T&&!stamp)T.style.transform='perspective(1100px) rotateY('+(cx*7).toFixed(2)+'deg) rotateX('+(-cy*6).toFixed(2)+'deg) translateZ(0)';
+sh.style.setProperty('--x',(px*100).toFixed(1)+'%');sh.style.setProperty('--y',(py*100).toFixed(1)+'%');sh.style.setProperty('--h',(50+cx*40).toFixed(1)+'%');
+g.clearRect(0,0,W,H);for(let i=P.length-1;i>=0;i--){const p=P[i];p.x+=p.vx;p.y+=p.vy;p.vy+=.08*dpr;p.l-=.018;if(p.l<=0){P.splice(i,1);continue}g.globalAlpha=p.l;g.fillStyle=p.c;g.beginPath();g.arc(p.x,p.y,p.r,0,7);g.fill()}g.globalAlpha=1;requestAnimationFrame(f)}requestAnimationFrame(f)})();</script>`;
+
+/** Player + lapisan gerak interaktif. */
+export function renderPlayerLive(d, meta, ctx, opts) {
+  const html = renderPlayer(d, meta, ctx, opts);
+  const i = html.lastIndexOf('</body>');
+  return i < 0 ? html + INTERACT : `${html.slice(0, i)}${INTERACT}${html.slice(i)}`;
+}

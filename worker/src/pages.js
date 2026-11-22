@@ -2,6 +2,7 @@
 import { T, PATHS } from './i18n.js';
 import { esc, altPath } from './html.js';
 import { COLLECTIONS } from '../../engine/src/core.js';
+import { seriesOptions } from '../../engine/src/metadata.js';
 
 const PUBLIC = ['time', 'stamp', 'quran', 'model'];
 const EXCL = ['ex-time', 'ex-stamp', 'ex-quran'];
@@ -126,20 +127,42 @@ export function waitingPage(lang, c, data, order) {
   <nav class="tabs">${tabs}</nav><nav class="tabs small">${ord}</nav><p class="kindline">${badge(lang, c, true)}</p>${lotGrid(lang, c, data.rows, data.currency, false)}</section>`;
 }
 
-export function collectionPage(lang, c, page, stats) {
-  const per = 48;
-  const produced = stats.collections?.[c]?.produced ?? 0;
-  const from = (page - 1) * per + 1;
-  const to = Math.min(produced, from + per - 1);
-  const ids = [];
-  for (let i = from; i <= to; i += 1) ids.push(i);
+const TIER_NAMES = { id: ['Klasik', 'Langka', 'Epik', 'Legendaris', 'Mahakarya'], en: ['Classic', 'Rare', 'Epic', 'Legendary', 'Masterpiece'] };
+
+/**
+ * Penjelajah koleksi cepat (perintah pemilik #37): tanpa tombol "next" yang lambat. Mozaik rapat yang terus memuat saat
+ * digulir, penggeser untuk lompat ke nomor mana pun, saringan tier & seri, tiga tampilan (Mozaik · Galeri · Daftar) dan
+ * pratinjau cepat yang bisa digeser antar karya. 60 karya pertama dirender server (SEO + tanpa JS tetap jalan).
+ */
+export function collectionPage(lang, c, o) {
   const base = c.replace('ex-', '');
   const t = T[lang];
-  const pages = Math.max(1, Math.ceil(produced / per));
-  return `<section class="page"><h1>${esc(collName(lang, c))}</h1><p class="kindline">${badge(lang, c, true)}</p><p class="lead">${esc(t.collections[base][1])}</p>
-  <p class="meta">${fmt(produced, lang)} / ${fmt(COLLECTIONS[c].max, lang)}</p>
-  <ul class="lots">${ids.map((id) => `<li><a href="${nftPath(lang, c, id)}"><img src="${img(c, id)}" alt="${esc(collName(lang, c))} #${id}" loading="lazy" width="300" height="300"><span class="id">#${id}</span></a></li>`).join('')}</ul>
-  <nav class="pager">${page > 1 ? `<a rel="prev" href="/${lang}/c/${c}?p=${page - 1}">←</a>` : ''}<span>${page} / ${pages}</span>${page < pages ? `<a rel="next" href="/${lang}/c/${c}?p=${page + 1}">→</a>` : ''}</nav></section>`;
+  const L = lang === 'id'
+    ? { views: ['Mozaik', 'Galeri', 'Daftar'], jump: 'Lompat ke #', tier: 'Semua tier', series: 'Semua seri', peek: 'Pratinjau cepat', detail: 'Buka detail', prev: 'Sebelumnya', next: 'Berikutnya', close: 'Tutup', found: 'karya', loading: 'Memuat…', none: 'Tidak ada karya yang cocok di rentang ini.', more: 'Muat lebih banyak' }
+    : { views: ['Mosaic', 'Gallery', 'List'], jump: 'Jump to #', tier: 'All tiers', series: 'All series', peek: 'Quick look', detail: 'Open details', prev: 'Previous', next: 'Next', close: 'Close', found: 'works', loading: 'Loading…', none: 'No matching works in this range.', more: 'Load more' };
+  const opts = seriesOptions(c);
+  const view = ['mosaic', 'gallery', 'list'].includes(o.view) ? o.view : 'mosaic';
+  const tile = (it) => `<li data-id="${it.id}" data-tier="${it.tier}"><a href="${nftPath(lang, c, it.id)}"><img src="${img(c, it.id)}" alt="${esc(it.name)}" loading="lazy" width="300" height="300"><span class="id">#${fmt(it.id, lang)}</span><span class="nm">${esc(it.name)}</span><span class="tr t${it.tier}">${esc(TIER_NAMES[lang][it.tier])}</span></a></li>`;
+  const qs = (extra) => new URLSearchParams({ ...(o.tier !== null ? { tier: String(o.tier) } : {}), ...(o.series ? { series: o.series } : {}), view, ...extra }).toString().replace(/&/g, '&amp;');
+  return `<section class="page explorer" id="explorer" data-c="${c}" data-lang="${lang}" data-produced="${o.produced}" data-next="${o.first.next ?? ''}" data-from="${o.from}">
+  <h1>${esc(collName(lang, c))}</h1><p class="kindline">${badge(lang, c, true)}</p><p class="lead">${esc(t.collections[base][1])}</p>
+  <div class="xbar">
+    <div class="views" role="group" aria-label="View">${['mosaic', 'gallery', 'list'].map((v, i) => `<button type="button" data-view="${v}"${v === view ? ' aria-pressed="true"' : ' aria-pressed="false"'}>${esc(L.views[i])}</button>`).join('')}</div>
+    <label class="jump"><span>${esc(L.jump)}<output>${fmt(o.from, lang)}</output></span><input type="range" min="1" max="${Math.max(1, o.produced)}" step="1" value="${o.from}" aria-label="${esc(L.jump)}"></label>
+    <select class="ftier" aria-label="Tier"><option value="">${esc(L.tier)}</option>${TIER_NAMES[lang].map((n, i) => `<option value="${i}"${o.tier === i ? ' selected' : ''}>${esc(n)}</option>`).join('')}</select>
+    ${opts.length ? `<select class="fseries" aria-label="Series"><option value="">${esc(L.series)}</option>${opts.map(([k, en, id]) => `<option value="${esc(k)}"${o.series === k ? ' selected' : ''}>${esc(lang === 'id' ? id : en)}</option>`).join('')}</select>` : ''}
+    <span class="meta xcount">${fmt(o.produced, lang)} / ${fmt(COLLECTIONS[c].max, lang)}</span>
+  </div>
+  <ul class="xgrid v-${view}">${o.first.items.map(tile).join('')}</ul>
+  ${o.first.items.length ? '' : `<p class="empty">${esc(L.none)}</p>`}
+  <p class="xmore"><a class="btn ghost" href="/${lang}/c/${c}?${qs({ from: String(o.first.next ?? o.from) })}" data-more>${esc(L.more)}</a></p>
+  <div class="peek" hidden role="dialog" aria-modal="true" aria-label="${esc(L.peek)}">
+    <div class="peek-in"><div class="peek-stage"><iframe title="${esc(L.peek)}" allow="autoplay; fullscreen" sandbox="allow-scripts allow-same-origin"></iframe></div>
+    <p class="peek-name"></p>
+    <p class="peek-nav"><button type="button" class="btn" data-peek="prev" aria-label="${esc(L.prev)}">←</button><a class="btn gold" data-peek="detail" href="#">${esc(L.detail)}</a><button type="button" class="btn" data-peek="next" aria-label="${esc(L.next)}">→</button><button type="button" class="btn ghost" data-peek="close" aria-label="${esc(L.close)}">✕</button></p></div>
+  </div>
+  <script type="application/json" id="x-i18n">${JSON.stringify({ tiers: TIER_NAMES[lang], loading: L.loading, none: L.none }).replace(/</g, '\\u003c')}</script>
+</section>`;
 }
 
 export function nftPage(lang, c, id, meta, lot, attrsId, opensea = '') {

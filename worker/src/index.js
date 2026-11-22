@@ -4,7 +4,7 @@
  * Data member/lelang/kustodi: R2 (lewat DO Ledger). Kunci privat hanya di vault (Service Binding).
  */
 import { dna } from '../../engine/src/dna.js';
-import { metadata, contractMetadata, renderCtx, animatedSvg, renderPlayer, attributesId } from '../../engine/src/metadata.js';
+import { metadata, contractMetadata, renderCtx, animatedSvg, renderPlayerLive, attributesId, browse } from '../../engine/src/metadata.js';
 import { COLLECTIONS, sha256Hex } from '../../engine/src/core.js';
 import { canonical } from '../../engine/src/dna.js';
 import { MODELS } from '../../engine/src/catalog/model.js';
@@ -55,7 +55,7 @@ function assetProvider(env, origin) {
 }
 
 /** Versi render: naikkan saat tampilan karya berubah → cache tepi lama otomatis tidak terpakai. */
-const RENDER_V = '5';
+const RENDER_V = '6';
 async function cached(request, ctx, make) {
   const cache = caches.default;
   const u = new URL(request.url);
@@ -107,6 +107,15 @@ async function api(request, env, ctx, url) {
   if (m && COLLECTIONS[m[1]]) return json(contractMetadata(m[1], env.BASE_URL), 200, { 'cache-control': IMMUTABLE, 'access-control-allow-origin': '*' });
 
   if (p === '/api/stats') return json(await ledger(env).stats(), 200, { 'cache-control': 'public, max-age=30' });
+  // penjelajah koleksi cepat (perintah pemilik #37): karya berikutnya + saringan tier/seri, deterministik
+  m = /^\/api\/browse\/([a-z-]+)$/.exec(p);
+  if (m && COLLECTIONS[m[1]]) {
+    const produced = (await ledger(env).stats()).collections?.[m[1]]?.produced ?? 0;
+    const q = url.searchParams;
+    const tier = q.get('tier') === null || q.get('tier') === '' ? null : Number(q.get('tier'));
+    const n = Math.min(120, Math.max(1, Number(q.get('n') ?? 60) | 0));
+    return json(browse(m[1], { from: Number(q.get('from') ?? 1) | 0, n, tier: Number.isInteger(tier) && tier >= 0 && tier <= 4 ? tier : null, series: String(q.get('series') ?? '').slice(0, 32), produced }), 200, { 'cache-control': 'public, max-age=60' });
+  }
   m = /^\/api\/lots\/([a-z-]+)$/.exec(p);
   if (m && COLLECTIONS[m[1]]) return json(await ledger(env).lots(m[1], { sort: url.searchParams.get('sort') ?? 'ending', offset: Number(url.searchParams.get('o') ?? 0) }));
   m = /^\/api\/offers\/([a-z-]+)$/.exec(p);
@@ -272,7 +281,7 @@ async function player(request, env, ctx, c, id, origin) {
   return cached(request, ctx, async () => {
     const d = dna(c, id);
     const meta = metadata(c, id, env.BASE_URL);
-    const html = renderPlayer(d, meta, await renderCtx(d, assetProvider(env, origin)), { base: env.BASE_URL });
+    const html = renderPlayerLive(d, meta, await renderCtx(d, assetProvider(env, origin)), { base: env.BASE_URL });
     // /play boleh di-frame (OpenSea animation_url); tanpa iklan
     return new Response(html, { headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': IMMUTABLE, 'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer' } });
   });
@@ -317,7 +326,14 @@ async function html(request, env, ctx, url) {
   }
   if (sub === 'c' && COLLECTIONS[parts[2]]) {
     const pg = Math.max(1, Number(url.searchParams.get('p') ?? 1) | 0);
-    return out({ page: 'home', rest: `/c/${parts[2]}`, title: P.collName(lang, parts[2]), body: P.collectionPage(lang, parts[2], pg, stats) });
+    const c = parts[2];
+    const produced = stats.collections?.[c]?.produced ?? 0;
+    const from = Math.min(Math.max(1, Number(url.searchParams.get('from') ?? (pg - 1) * 60 + 1) | 0), Math.max(1, produced));
+    const tq = url.searchParams.get('tier');
+    const tier = tq !== null && tq !== '' && /^[0-4]$/.test(tq) ? Number(tq) : null;
+    const series = String(url.searchParams.get('series') ?? '').slice(0, 32);
+    const first = browse(c, { from, n: 60, tier, series, produced });
+    return out({ page: 'home', rest: `/c/${c}`, title: P.collName(lang, c), body: P.collectionPage(lang, c, { produced, from, tier, series, first, view: url.searchParams.get('view') ?? 'mosaic' }) });
   }
   if (sub === 'nft' && validToken(parts[2], Number(parts[3]))) {
     const [c, id] = [parts[2], Number(parts[3])];

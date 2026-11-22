@@ -337,5 +337,5 @@ export function modelSvg(d, ctx = {}) {
 
 export function modelPlayer(d, meta, ctx = {}, opts = {}) {
   const n = opts.nonce ? ` nonce="${opts.nonce}"` : '';
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(meta.name)}</title><style${n}>html,body{margin:0;height:100%;background:#000;overflow:hidden}svg{width:100vmin;height:100vmin;display:block;margin:auto}</style></head><body>${modelSvg(d, ctx)}</body></html>`;
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(meta.name)}</title><style${n}>html,body{margin:0;height:100%;background:#000;overflow:hidden}body{display:grid;place-items:center}svg{width:100vmin;height:100vmin;display:block}</style></head><body>${modelSvg(d, ctx)}</body></html>`;
 }

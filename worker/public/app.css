@@ -70,3 +70,29 @@ input{font:inherit;color:var(--text);background:#0e0e1a;border:1px solid var(--l
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 
 .status{display:inline-block;padding:4px 12px;border-radius:999px;background:#1d1d36;border:1px solid var(--line);font-weight:600}
+/* penjelajah koleksi cepat (#37) */
+.xbar{position:sticky;top:58px;z-index:5;display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:10px;margin:8px -6px 12px;background:rgba(11,11,16,.9);backdrop-filter:blur(8px);border:1px solid var(--line);border-radius:var(--radius)}
+.views{display:inline-flex;border:1px solid var(--line);border-radius:999px;overflow:hidden}.views button{font:inherit;font-size:.88em;padding:6px 12px;background:transparent;color:var(--muted);border:0;cursor:pointer}.views button[aria-pressed="true"]{background:var(--gold);color:#16120a;font-weight:700}
+.jump{display:grid;gap:2px;flex:1 1 200px;min-width:0;font-size:.82em;color:var(--muted)}.jump output{color:var(--text);font-weight:700;margin-left:4px}.jump input{width:100%;accent-color:#d4af37;padding:0;border:0;background:none}
+.xbar select{font:inherit;font-size:.88em;color:var(--text);background:#0e0e1a;border:1px solid var(--line);border-radius:10px;padding:6px 8px;max-width:46vw}
+.xgrid{list-style:none;padding:0;margin:0;display:grid;gap:6px}
+.xgrid li a{position:relative;display:block;text-decoration:none;border-radius:10px;overflow:hidden;background:#000;border:1px solid var(--line)}
+.xgrid img{width:100%;aspect-ratio:1;display:block;transition:transform .35s}
+.xgrid a:hover img{transform:scale(1.06)}
+.xgrid .id{position:absolute;left:5px;top:5px;font-size:.7em;font-weight:700;padding:1px 6px;border-radius:999px;background:#000a}
+.xgrid .nm,.xgrid .tr{display:none}
+.tr{font-size:.72em;font-weight:700;padding:1px 7px;border-radius:999px;width:max-content}
+.tr.t0{background:#2a2a3a;color:#c9c9d9}.tr.t1{background:#12305a;color:#bcd7ff}.tr.t2{background:#3a1f5a;color:#d9b8ff}.tr.t3{background:#4a3606;color:#f3d77a}.tr.t4{background:linear-gradient(90deg,#ff6aa2,#f3d77a,#5fd3ff);color:#16120a}
+.xgrid li[data-tier="4"] a{box-shadow:0 0 0 2px #f3d77a88}.xgrid li[data-tier="3"] a{box-shadow:0 0 0 1px #d4af3788}
+.v-mosaic{grid-template-columns:repeat(auto-fill,minmax(96px,1fr))}
+@media (min-width:820px){.v-mosaic{grid-template-columns:repeat(auto-fill,minmax(128px,1fr))}}
+.v-gallery{grid-auto-flow:column;grid-auto-columns:min(78vw,420px);overflow-x:auto;scroll-snap-type:x mandatory;padding-bottom:10px;gap:12px}
+.v-gallery li{scroll-snap-align:center}.v-gallery .nm,.v-gallery .tr{display:block;position:static;padding:6px 8px 0;color:var(--text)}.v-gallery .tr{margin:4px 8px 8px}
+.v-list{grid-template-columns:1fr}.v-list li a{display:grid;grid-template-columns:64px 1fr auto;gap:10px;align-items:center;padding:6px;background:var(--panel)}
+.v-list img{width:64px;border-radius:8px}.v-list .id{position:static;background:none;padding:0}.v-list .nm{display:block;font-size:.86em;color:var(--muted);grid-column:2;grid-row:1;padding-top:18px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.v-list .tr{display:block}
+.xmore{text-align:center;margin:18px 0}
+.peek{position:fixed;inset:0;z-index:50;display:grid;place-items:center;background:rgba(5,5,10,.88);backdrop-filter:blur(6px);padding:12px}
+.peek[hidden]{display:none}.peek-in{width:min(94vw,640px)}
+.peek-stage iframe{width:100%;aspect-ratio:1;border:1px solid var(--line);border-radius:var(--radius);background:#000}
+.peek-name{margin:10px 0;font-weight:700;text-align:center}.peek-nav{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
+html.peeking{overflow:hidden}

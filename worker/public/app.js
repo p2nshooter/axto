@@ -236,3 +236,121 @@ document.querySelectorAll('[data-buy]').forEach((b) => b.addEventListener('click
     out.textContent = lang === 'id' ? 'Buka wallet Anda untuk membeli langsung dari kontrak AxtoSale.' : 'Open your wallet to buy directly from the AxtoSale contract.';
   } catch (e) { out.textContent = `${L.err}: ${e.message ?? e}`; }
 }));
+
+// ---- penjelajah koleksi cepat (perintah pemilik #37) ----
+const ex = $('#explorer');
+if (ex) {
+  const c = ex.dataset.c;
+  const produced = Number(ex.dataset.produced);
+  const I = JSON.parse($('#x-i18n')?.textContent || '{}');
+  const grid = $('.xgrid', ex);
+  const more = $('[data-more]', ex);
+  const range = $('.jump input', ex);
+  const out = $('.jump output', ex);
+  const ftier = $('.ftier', ex);
+  const fseries = $('.fseries', ex);
+  let next = ex.dataset.next ? Number(ex.dataset.next) : null;
+  let busy = false;
+  const st = { from: Number(ex.dataset.from), tier: ftier?.value ?? '', series: fseries?.value ?? '', view: [...ex.querySelectorAll('[data-view]')].find((b) => b.getAttribute('aria-pressed') === 'true')?.dataset.view ?? 'mosaic' };
+  const fmtN = (n) => Number(n).toLocaleString(lang === 'id' ? 'id-ID' : 'en-US');
+  const sync = () => {
+    const q = new URLSearchParams({ from: String(st.from), view: st.view });
+    if (st.tier !== '') q.set('tier', st.tier);
+    if (st.series) q.set('series', st.series);
+    history.replaceState(null, '', `${location.pathname}?${q}`);
+  };
+  const tile = (it) => {
+    const li = document.createElement('li');
+    li.dataset.id = String(it.id);
+    li.dataset.tier = String(it.tier);
+    const a = document.createElement('a');
+    a.href = `/${lang}/nft/${c}/${it.id}`;
+    const im = document.createElement('img');
+    Object.assign(im, { src: `/img/${c}/${it.id}.svg?v=5`, alt: it.name, loading: 'lazy', width: 300, height: 300 });
+    const id = document.createElement('span'); id.className = 'id'; id.textContent = `#${fmtN(it.id)}`;
+    const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = it.name;
+    const tr = document.createElement('span'); tr.className = `tr t${it.tier}`; tr.textContent = I.tiers?.[it.tier] ?? '';
+    a.append(im, id, nm, tr);
+    li.append(a);
+    return li;
+  };
+  async function load(reset) {
+    if (busy || (!reset && next === null)) return;
+    busy = true;
+    if (more) more.textContent = I.loading;
+    if (reset) { grid.replaceChildren(); next = st.from; }
+    const q = new URLSearchParams({ from: String(next), n: '60' });
+    if (st.tier !== '') q.set('tier', st.tier);
+    if (st.series) q.set('series', st.series);
+    try {
+      const r = await get(`/api/browse/${c}?${q}`);
+      for (const it of r.items) grid.append(tile(it));
+      next = r.next;
+      if (reset && !r.items.length) { const p = document.createElement('li'); p.className = 'empty'; p.textContent = I.none; grid.append(p); }
+    } finally {
+      busy = false;
+      if (more) { more.hidden = next === null; more.textContent = more.dataset.label || more.textContent; }
+      sync();
+    }
+  }
+  if (more) { more.dataset.label = more.textContent; more.addEventListener('click', (e) => { e.preventDefault(); load(false); }); }
+  // gulir tanpa henti
+  const sentinel = more?.parentElement;
+  if (sentinel && 'IntersectionObserver' in window) new IntersectionObserver((es) => { if (es.some((e) => e.isIntersecting)) load(false); }, { rootMargin: '1200px 0px' }).observe(sentinel);
+  // lompat
+  let jt;
+  range?.addEventListener('input', () => { out.textContent = fmtN(range.value); clearTimeout(jt); jt = setTimeout(() => { st.from = Number(range.value); load(true); }, 220); });
+  ftier?.addEventListener('change', () => { st.tier = ftier.value; load(true); });
+  fseries?.addEventListener('change', () => { st.series = fseries.value; load(true); });
+  // tampilan
+  ex.querySelectorAll('[data-view]').forEach((b) => b.addEventListener('click', () => {
+    st.view = b.dataset.view;
+    ex.querySelectorAll('[data-view]').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+    grid.className = `xgrid v-${st.view}`;
+    sync();
+  }));
+  // pratinjau cepat: ketuk karya → player besar; geser/tekan panah untuk karya berikutnya
+  const pk = $('.peek', ex);
+  const fr = $('iframe', pk);
+  const nameEl = $('.peek-name', pk);
+  const det = $('[data-peek="detail"]', pk);
+  let cur = null;
+  const items = () => [...grid.querySelectorAll('li[data-id]')];
+  const show = (li) => {
+    if (!li) return;
+    cur = li;
+    const id = li.dataset.id;
+    fr.src = `/play/${c}/${id}`;
+    nameEl.textContent = li.querySelector('.nm')?.textContent ?? `#${id}`;
+    det.href = `/${lang}/nft/${c}/${id}`;
+    pk.hidden = false;
+    document.documentElement.classList.add('peeking');
+    const all = items();
+    if (all.indexOf(li) > all.length - 6) load(false);
+  };
+  const step = (d) => { const all = items(); const i = all.indexOf(cur); show(all[Math.max(0, Math.min(all.length - 1, i + d))]); };
+  const close = () => { pk.hidden = true; fr.src = 'about:blank'; document.documentElement.classList.remove('peeking'); cur?.querySelector('a')?.focus(); };
+  grid.addEventListener('click', (e) => {
+    const a = e.target.closest('a');
+    if (!a || e.metaKey || e.ctrlKey || e.shiftKey) return;
+    e.preventDefault();
+    show(a.parentElement);
+  });
+  pk.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-peek]');
+    if (e.target === pk) close();
+    if (!b) return;
+    if (b.dataset.peek === 'prev') step(-1);
+    if (b.dataset.peek === 'next') step(1);
+    if (b.dataset.peek === 'close') close();
+  });
+  addEventListener('keydown', (e) => {
+    if (pk.hidden) return;
+    if (e.key === 'ArrowRight') step(1);
+    if (e.key === 'ArrowLeft') step(-1);
+    if (e.key === 'Escape') close();
+  });
+  let tx = null;
+  pk.addEventListener('touchstart', (e) => { tx = e.touches[0].clientX; }, { passive: true });
+  pk.addEventListener('touchend', (e) => { if (tx === null) return; const dx = e.changedTouches[0].clientX - tx; if (Math.abs(dx) > 50) step(dx < 0 ? 1 : -1); tx = null; }, { passive: true });
+}
