@@ -47,7 +47,7 @@ COIN_WALLET = "0x6918A3C9a58E71B3bca993e8cDD2630D2DDB6469" # owner koin AXTO (To
 TREASURY = "0xDC39C04E704b1fec2BE648c49c842B2B17AfEBDA"
 GENESIS_MS = "0"   # 0 = lelang belum dibuka; diisi saat peluncuran (ms epoch, Senin 00:00 UTC)
 PAYPAL_COIN_SALE = "off" # on hanya setelah PayPal menyetujui penjualan aset kripto untuk akun ini
-MODEL_CONSENT = "" # isi "luaja-1" hanya setelah izin tertulis model tersimpan (engine/consent/luaja-1.json)
+MODEL_CONSENT = "luaja-1,model-2" # izin wali tercatat 22 Nov 2026 (engine/consent/*.json, perintah pemilik #33)
 # Rahasia (wrangler secret put): SESSION_KEY, DATA_KEY, ENGINE_HMAC_KEY, VAULT_HMAC_KEY, OPENSEA_API_KEY
 BASE_RPC = "https://mainnet.base.org"
 USDC = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" # USDC native di Base

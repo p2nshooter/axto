@@ -8,6 +8,7 @@ import { timeSvg, timePlayer, TIME_ANIM_CSS } from './render/time.js';
 import { stampSvg, stampPlayer, ANIM_CSS as STAMP_ANIM_CSS } from './render/stamp.js';
 import { quranSvg, quranPlayer } from './render/quran.js';
 import { modelSvg, modelPlayer } from './render/model.js';
+import { modelTraits } from './catalog/model.js';
 
 const KIND_NAME = { time: 'AXTO Time', stamp: 'AXTO Stamps', quran: 'AXTO Quran Calligraphy', model: 'AXTO Models' };
 const KIND_NAME_ID = { time: 'AXTO Jam', stamp: 'AXTO Prangko', quran: 'AXTO Kaligrafi Al-Qur\'an', model: 'AXTO Model' };
@@ -96,7 +97,7 @@ export function title(d, ref) {
   switch (d.kind) {
     case 'time': return `${ex}AXTO Time ${id} — ${p[1][1]} ${p[0][1]}`;
     case 'stamp': return `${ex}${p[0][1]} · ${p[1][1]} ${p[6][4]} ${id}`;
-    case 'model': return `${ex}AXTO Model ${id} — ${p[1][1]} · ${p[2][1]}`;
+    case 'model': { const m = modelTraits(d); return `${ex}AXTO Model ${id} — ${m[1]} · ${m[2]}`; }
     case 'quran': {
       const r = ref ?? quranRef(d);
       if (r.series === 'ayah') return `${ex}Quran ${r.surahLt} ${r.surah}:${r.ayah} — ${p[0][1]} ${id}`;
@@ -133,7 +134,8 @@ export function metadata(key, tokenId, base = 'https://axto.io') {
   const d = dna(key, tokenId);
   const c = collection(key);
   const ref = d.kind === 'quran' ? quranRef(d) : null;
-  const attrs = d.pick.map((o, i) => ({ trait_type: d.names[i], value: d.kind === 'stamp' && d.names[i] === 'Subject' ? d.pick[1][4][o[4]] : o[1] }));
+  const mt = d.kind === 'model' ? modelTraits(d) : null;
+  const attrs = d.pick.map((o, i) => ({ trait_type: d.names[i], value: mt ? mt[i] : d.kind === 'stamp' && d.names[i] === 'Subject' ? d.pick[1][4][o[4]] : o[1] }));
   if (ref) {
     attrs.unshift({ trait_type: 'Series', value: { ayah: 'Ayah', page: 'Mushaf Page', juz: 'Juz', mushaf: 'Complete Mushaf' }[ref.series] });
     if (ref.series === 'ayah') attrs.push({ trait_type: 'Surah', value: `${ref.surah}. ${ref.surahLt}` }, { display_type: 'number', trait_type: 'Ayah', value: ref.ayah }, { display_type: 'number', trait_type: 'Page', value: ref.page });

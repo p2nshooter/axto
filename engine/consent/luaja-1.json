@@ -1,0 +1,11 @@
+{
+  "model": "luaja-1",
+  "granted": true,
+  "scope": ["derivative-art", "animation", "nft-commercial"],
+  "adult": false,
+  "guardian": true,
+  "guardianRole": "ayah kandung (kepala keluarga)",
+  "signedAt": "2026-11-22",
+  "form": "pernyataan tertulis wali kepada pemilik sistem axto.io (perintah #33); identitas wali diperlihatkan, dokumen identitas tidak disimpan di mana pun",
+  "revoke": "ubah granted menjadi false → produksi & tampilan wajah berhenti"
+}

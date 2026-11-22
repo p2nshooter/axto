@@ -19,14 +19,15 @@ export const EX_FINISH = [
 const TRAIT_NAMES = {
   time: ['Form', 'Theme', 'Digits', 'Motion', 'Gems', 'Backdrop'],
   stamp: ['Realm', 'Series', 'Subject', 'Frame', 'Palette', 'Mode', 'Year', 'Denomination'],
-  model: ['Pose', 'Series', 'Outfit', 'Prop', 'Scene', 'Animation', 'Hue'],
+  model: ['Pose', 'Series', 'Outfit', 'Prop', 'Setting', 'Light', 'Motion', 'Accessory', 'Palette'],
   quran: ['Composition', 'Illumination', 'Material', 'Background', 'Animation', 'Frame'],
 };
 const TRAIT_NAMES_ID = {
   Form: 'Bentuk', Theme: 'Tema', Digits: 'Angka', Motion: 'Gerak', Gems: 'Permata', Backdrop: 'Latar', Realm: 'Penerbit',
   Series: 'Seri', Subject: 'Subjek', Frame: 'Bingkai', Palette: 'Palet', Mode: 'Mode', Year: 'Tahun', Denomination: 'Nominal',
   Pose: 'Pose', Outfit: 'Busana', Prop: 'Properti', Scene: 'Latar', Animation: 'Animasi', Hue: 'Rona', Composition: 'Komposisi',
-  Illumination: 'Iluminasi', Material: 'Bahan', Background: 'Latar', Finish: 'Edisi',
+  Illumination: 'Iluminasi', Material: 'Bahan', Background: 'Latar', Finish: 'Edisi', Setting: 'Latar', Light: 'Cahaya',
+  Motion: 'Gerak', Accessory: 'Aksesori',
 };
 export const traitNameId = (n) => TRAIT_NAMES_ID[n] ?? n;
 
