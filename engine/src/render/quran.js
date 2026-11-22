@@ -5,6 +5,8 @@
 import { esc, rng, collection } from '../core.js';
 import { svgOpen, linear, radial, starPath, polyPath, girihPattern, roundRect, r1, text, exclusiveBadge, hallmark, starfield, lum } from './common.js';
 import { AMIRI_WOFF2_B64 } from './font-amiri.js';
+import { arabicWidth } from './arabic-metrics.js';
+import { stageCss, FIT_JS } from './stage.js';
 import { applyMotion } from './motion.js';
 
 export const FONT_FACE = `<style>@font-face{font-family:'AXTO Amiri';src:url(data:font/woff2;base64,${AMIRI_WOFF2_B64}) format('woff2')}</style>`;
@@ -48,38 +50,56 @@ export function illumination(id, kind, gold, seed) {
 }
 
 function compositionPath(kind) {
+  // box = kotak aman teks DI DALAM bentuk, sudah diberi jarak ≥ 26 px dari garis (perintah pemilik #52)
   switch (kind) {
-    case 'circle': case 'tughra': return { clip: '<circle cx="500" cy="470" r="330"/>', box: [230, 230, 540, 480] };
-    case 'mihrab': case 'lantern': return { clip: '<path d="M210 860V420Q210 170 500 110Q790 170 790 420V860Z"/>', box: [250, 260, 500, 560] };
-    case 'dome': return { clip: '<path d="M170 820V520Q170 210 500 160Q830 210 830 520V820Z"/>', box: [220, 300, 560, 480] };
-    case 'ship': return { clip: '<path d="M120 560H880L780 820H220Z"/><path d="M500 140V560H180Z"/><path d="M520 180V560H820Z"/>', box: [200, 200, 600, 560] };
-    case 'star8': return { clip: `<path d="${starPath(500, 480, 410, 330, 8)}"/>`, box: [240, 240, 520, 480] };
-    case 'kufi-square': return { clip: '<rect x="170" y="150" width="660" height="660"/>', box: [200, 190, 600, 580] };
-    default: return { clip: '<rect x="130" y="150" width="740" height="660" rx="30"/>', box: [170, 190, 660, 580] };
+    case 'circle': case 'tughra': return { clip: '<circle cx="500" cy="470" r="330"/>', box: [262, 288, 476, 364] }; // tali busur pada y±182 → lebar 2·√(330²−182²)=550, dikurangi jarak
+    case 'mihrab': case 'lantern': return { clip: '<path d="M210 860V420Q210 170 500 110Q790 170 790 420V860Z"/>', box: [266, 300, 468, 520] }; // tepi lengkung di y=300 ≈ x 238
+    case 'dome': return { clip: '<path d="M170 820V520Q170 210 500 160Q830 210 830 520V820Z"/>', box: [240, 350, 520, 440] };
+    case 'ship': return { clip: '<path d="M120 560H880L780 820H220Z"/><path d="M500 140V560H180Z"/><path d="M520 180V560H820Z"/>', box: [222, 228, 556, 504], panel: [196, 202, 608, 556] }; // panel menutup garis layar di belakang teks
+    case 'star8': return { clip: `<path d="${starPath(500, 480, 410, 330, 8)}"/>`, box: [282, 304, 436, 352] }; // lingkaran dalam bintang r≈305
+    case 'kufi-square': return { clip: '<rect x="170" y="150" width="660" height="660"/>', box: [200, 182, 600, 596] };
+    default: return { clip: '<rect x="130" y="150" width="740" height="660" rx="30"/>', box: [162, 182, 676, 596] };
   }
 }
 
-/** Ukuran font & pembungkusan teks Arab ke dalam kotak. */
-export function layoutArabic(ar, w, h) {
-  const words = ar.split(/\s+/).filter(Boolean);
-  const base = ar.replace(/[ً-ٰٟۖ-ۭ\s]/g, '').length || 1;
-  let fs = Math.sqrt((w * h) / (base * 0.62 * 1.9));
-  fs = Math.max(13, Math.min(78, fs));
-  for (let iter = 0; iter < 30; iter += 1) {
-    const perLine = Math.max(4, Math.floor(w / (fs * 0.5)));
+/** Ukuran font & pembungkusan teks Arab ke dalam kotak (lebar huruf terukur, cadangan 15%). */
+export function layoutArabic(ar, w, h, { maxFs = 78, minFs = 12, lhK = 1.9 } = {}) {
+  const words = String(ar).split(/\s+/).filter(Boolean);
+  const target = w / 1.15;
+  for (let fs = maxFs; fs >= minFs; fs *= 0.94) {
+    const sp = arabicWidth(' ', fs);
     const lines = [];
     let cur = [];
-    let len = 0;
+    let cw = 0;
     for (const wd of words) {
-      const L = wd.replace(/[ً-ٰٟۖ-ۭ]/g, '').length + 1;
-      if (cur.length && len + L > perLine) { lines.push(cur.join(' ')); cur = []; len = 0; }
-      cur.push(wd); len += L;
+      const ww = arabicWidth(wd, fs);
+      if (cur.length && cw + sp + ww > target) { lines.push({ t: cur.join(' '), w: cw }); cur = []; cw = 0; }
+      cw += (cur.length ? sp : 0) + ww;
+      cur.push(wd);
     }
-    if (cur.length) lines.push(cur.join(' '));
-    if (lines.length * fs * 1.9 <= h || fs <= 13) return { fs, lines, lh: fs * 1.9 };
-    fs *= 0.92;
+    if (cur.length) lines.push({ t: cur.join(' '), w: cw });
+    const lh = fs * lhK;
+    if ((lines.length - 1) * lh + 2.4 * fs <= h && lines.every((l) => l.w <= target)) return { fs, lines: lines.map((l) => l.t), widths: lines.map((l) => l.w), lh, w };
   }
-  return { fs: 13, lines: [ar], lh: 25 };
+  // sangat panjang: ukuran minimum, baris dipotong pada tinggi kotak oleh pemanggil
+  const fs = minFs;
+  const sp = arabicWidth(' ', fs);
+  const lines = [];
+  let cur = [];
+  let cw = 0;
+  for (const wd of words) { const ww = arabicWidth(wd, fs); if (cur.length && cw + sp + ww > target) { lines.push({ t: cur.join(' '), w: cw }); cur = []; cw = 0; } cw += (cur.length ? sp : 0) + ww; cur.push(wd); }
+  if (cur.length) lines.push({ t: cur.join(' '), w: cw });
+  return { fs, lines: lines.map((l) => l.t), widths: lines.map((l) => l.w), lh: fs * lhK, w };
+}
+
+/** Garis dasar baris pertama agar tinta (tanda tinggi s.d. ±1,6 em, turun ±0,8 em — terukur) tetap di dalam kotak [y, y+h]. */
+export function firstBaseline(y, h, n, lh, fs) {
+  return y + (h - ((n - 1) * lh + 2.4 * fs)) / 2 + 1.6 * fs;
+}
+
+/** Atribut pengunci panjang baris: baris panjang dikunci ke perkiraan lebarnya (≤ kotak) agar tak pernah keluar garis. */
+export function lockLen(estW, boxW) {
+  return estW * 1.6 > boxW ? ` textLength="${r1(Math.min(estW, boxW / 1.15))}" lengthAdjust="spacingAndGlyphs"` : '';
 }
 
 /**
@@ -98,32 +118,40 @@ export function quranSvg(d, ctx, opts = {}) {
   let body = '';
   const series = d.series.series;
   const font = `font-family="'AXTO Amiri','Amiri Quran','Amiri','Scheherazade New','Noto Naskh Arabic',serif"`;
-  const depth = (x, y, s, fs, anchor = 'middle') => {
+  const depth = (x, y, s, fs, anchor = 'middle', lock = '') => {
     let out = '';
-    for (let i = 5; i >= 1; i -= 1) out += `<text x="${r1(x + i * 0.9)}" y="${r1(y + i * 1.1)}" ${font} font-size="${r1(fs)}" text-anchor="${anchor}" direction="rtl" fill="${m2}" opacity="${r1(0.12 + i * 0.05)}">${esc(s)}</text>`;
-    return `${out}<text x="${r1(x)}" y="${r1(y)}" ${font} font-size="${r1(fs)}" text-anchor="${anchor}" direction="rtl" fill="${textFill}" stroke="${darkBg ? '#000' : '#fff'}" stroke-opacity=".25" stroke-width="${r1(fs * 0.02)}">${esc(s)}</text>`;
+    for (let i = 5; i >= 1; i -= 1) out += `<text x="${r1(x + i * 0.9)}" y="${r1(y + i * 1.1)}" ${font} font-size="${r1(fs)}" text-anchor="${anchor}" direction="rtl" fill="${m2}" opacity="${r1(0.12 + i * 0.05)}"${lock}>${esc(s)}</text>`;
+    return `${out}<text x="${r1(x)}" y="${r1(y)}" ${font} font-size="${r1(fs)}" text-anchor="${anchor}" direction="rtl" fill="${textFill}" stroke="${darkBg ? '#000' : '#fff'}" stroke-opacity=".25" stroke-width="${r1(fs * 0.02)}"${lock}>${esc(s)}</text>`;
   };
   if (series === 'ayah') {
-    const { clip, box } = compositionPath(comp[0]);
+    const { clip, box, panel } = compositionPath(comp[0]);
     const [x, y, w, h] = box;
-    const { fs, lines, lh } = layoutArabic(ctx.ar, w, h - 40);
-    const top = y + (h - 40 - lines.length * lh) / 2 + fs * 1.2;
+    const L = layoutArabic(ctx.ar, w, h);
+    const maxLines = Math.max(1, Math.floor((h - 2.4 * L.fs) / L.lh) + 1);
+    const lines = L.lines.slice(0, maxLines);
+    const top = firstBaseline(y, h, lines.length, L.lh, L.fs);
+    const cx = x + w / 2;
     body += `<g fill="${darkBg ? '#000' : '#fff'}" fill-opacity=".28" stroke="${gold}" stroke-width="3">${clip}</g>`;
-    body += lines.map((ln, i) => depth(500, top + i * lh, ln, fs)).join('');
+    if (panel) body += `<rect x="${panel[0]}" y="${panel[1]}" width="${panel[2]}" height="${panel[3]}" rx="22" fill="${b2}" fill-opacity=".82" stroke="${gold}" stroke-opacity=".7" stroke-width="2"/>`;
+    body += lines.map((ln, i) => depth(cx, top + i * L.lh, ln, L.fs, 'middle', lockLen(L.widths[i], w))).join('');
     body += text(500, 905, `${ctx.surahLt} · ${ctx.surah}:${ctx.ayah}`, `text-anchor="middle" font-family="Georgia,serif" font-size="24" fill="${gold}" letter-spacing="1"`);
     body += `<text x="500" y="955" text-anchor="middle" ${font} font-size="30" fill="${gold}">${esc(`سورة ${ctx.surahAr} ۝${arNum(ctx.ayah)}`)}</text>`;
   } else if (series === 'page') {
+    // halaman mushaf: tiap baris rata kanan-kiri selebar kotak (seperti mushaf cetak), jarak ≥ 28 px dari bingkai
     const lines = ctx.lines ?? [];
-    const lh = Math.min(760 / Math.max(8, lines.length), 70);
+    const BW = 724;
+    const lh = Math.min(740 / Math.max(8, lines.length), 70);
+    const est1 = Math.max(1, ...lines.map((ln) => arabicWidth(ln, 1)));
+    const pfs = Math.min(34, lh * 0.62, (BW / 1.05) / est1);
     const top0 = 500 - (lines.length * lh) / 2 + lh * 0.7;
     body += `<path d="${roundRect(110, 90, 780, 820, 18)}" fill="${darkBg ? '#000' : '#fff'}" fill-opacity=".3" stroke="${gold}" stroke-width="4"/>`;
-    lines.forEach((ln, i) => { body += depth(500, top0 + i * lh, ln, Math.min(34, lh * 0.62)); });
+    lines.forEach((ln, i) => { const ew = arabicWidth(ln, pfs); body += depth(500, top0 + i * lh, ln, pfs, 'middle', ew > BW * 0.6 ? ` textLength="${r1(Math.min(BW, ew * 1.15))}" lengthAdjust="spacingAndGlyphs"` : ''); });
     body += text(500, 950, `Mushaf Utsmani · Page ${ctx.page} · Juz ${ctx.juz}`, `text-anchor="middle" font-family="Georgia,serif" font-size="24" fill="${gold}"`);
   } else if (series === 'juz') {
     body += `<path d="${starPath(500, 450, 380, 300, 12)}" fill="${darkBg ? '#000' : '#fff'}" fill-opacity=".3" stroke="${gold}" stroke-width="4"/>`;
     body += `<text x="500" y="430" text-anchor="middle" ${font} font-size="120" fill="url(#mat)">${esc(`الجزء ${arNum(ctx.juz)}`)}</text>`;
-    const { fs, lines } = layoutArabic(ctx.ar ?? '', 480, 140);
-    lines.slice(0, 3).forEach((ln, i) => { body += depth(500, 520 + i * fs * 1.8, ln, Math.min(fs, 34)); });
+    const J = layoutArabic(ctx.ar ?? '', 430, 150, { maxFs: 34 });
+    J.lines.slice(0, 3).forEach((ln, i) => { body += depth(500, 540 + i * J.lh, ln, J.fs, 'middle', lockLen(J.widths[i], 430)); });
     body += text(500, 930, `Juz ${ctx.juz} · ${ctx.surahLt ?? ''}`, `text-anchor="middle" font-family="Georgia,serif" font-size="30" fill="${gold}"`);
   } else {
     body += `<path d="${roundRect(200, 120, 600, 760, 24)}" fill="${m2}" fill-opacity=".55" stroke="${gold}" stroke-width="10"/><path d="${starPath(500, 470, 210, 160, 16)}" fill="none" stroke="${gold}" stroke-width="4"/><path d="${polyPath(500, 470, 130, 8, Math.PI / 8)}" fill="${gold}" fill-opacity=".15" stroke="${gold}" stroke-width="3"/>`;
@@ -161,7 +189,7 @@ export function quranPlayer(d, meta, ctx, opts = {}) {
   const n = opts.nonce ? ` nonce="${opts.nonce}"` : '';
   const [, , , , m1, m2] = mat;
   const [, , , , b1, b2] = bg;
-  const mo = applyMotion(d, quranSvg(d, ctx, { embedFont: false }).replace(/<text[^>]*direction="rtl"[^>]*>.*?<\/text>/g, '')); // genom gerak (#43)
+  const mo = applyMotion(d, quranSvg(d, ctx, { embedFont: false }).replace(/<text[^>]*>.*?<\/text>/g, '')); // genom gerak (#43); tanpa tulisan latar (#52)
   const art = mo.svg;
   const series = d.series.series;
   const animCss = {
@@ -184,7 +212,10 @@ export function quranPlayer(d, meta, ctx, opts = {}) {
   }
   const loader = series === 'ayah' ? '' : `
 (async()=>{const box=document.getElementById('tx');const pages=JSON.parse(box.dataset.pages);let html='';for(const p of pages){const j=await (await fetch('/quran/h/'+p+'.json')).json();html+='<section class="pg"><header>'+p+'</header>';for(const b of j.baris){if(b.t==='surat'){html+='<div class="sr">سورة</div>';continue}if(b.t!=='b'){html+='<div class="ln bs">بِسۡمِ ٱللَّهِ ٱلرَّحۡمَٰنِ ٱلرَّحِيمِ</div>';continue}html+='<div class="ln">'+b.k.map(w=>'<span class="w" data-k="'+w[1]+'">'+w[0].replace(/[<>&]/g,'')+'</span>'+(w[2]?'<span class="no">۝'+an(w[2])+'</span>':'')).join(' ')+'</div>'}html+='</section>';if(pages.length>40&&p%20===0){box.innerHTML=html}}box.innerHTML=html})();
-let z=1;document.getElementById('zi').onclick=()=>{z=Math.min(6,z*1.25);document.getElementById('tx').style.fontSize=(z*1.5)+'rem'};document.getElementById('zo').onclick=()=>{z=Math.max(.5,z/1.25);document.getElementById('tx').style.fontSize=(z*1.5)+'rem'};`;
+let z=1;const sf=document.getElementById('safe');document.getElementById('zi').onclick=()=>{z=Math.min(4,z*1.2);sf.dataset.z=z;axFit()};document.getElementById('zo').onclick=()=>{z=Math.max(.5,z/1.2);sf.dataset.z=z;axFit()};`;
   const particles = anim[0] === 'particles' ? Array.from({ length: 30 }, (_, i) => `<i class="pt" style="left:${(i * 37) % 100}%;animation-duration:${6 + (i % 7)}s;animation-delay:${-(i % 9)}s"></i>`).join('') : '';
-  return `<!doctype html><html lang="ar"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(meta.name)}</title><style${n}>@font-face{font-family:'Amiri Quran';src:url(/fonts/amiri-quran-arabic.woff2) format('woff2');font-display:swap}:root{--m1:${m1};--m2:${m2}}html,body{margin:0;min-height:100%;background:radial-gradient(circle at 50% 40%,${b1},${b2});color:${m1};font-family:system-ui;overflow:${scroll ? 'auto' : 'hidden'}}#art{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;opacity:.9;pointer-events:none}#art svg{width:100vmin;height:100vmin}main{position:relative;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:8vmin 6vmin 80px;box-sizing:border-box}#tx{font-family:'Amiri Quran','Amiri',serif;font-size:1.5rem;line-height:2.4;text-align:center;max-width:70vmin;color:var(--m1);text-shadow:1px 1px 0 var(--m2),2px 2px 0 var(--m2),3px 3px 0 var(--m2),4px 5px 8px #0009}.ay{font-size:clamp(18px,${r1(Math.max(2.2, 6 - ctx.ar?.length / 120 || 3))}vmin,64px)!important}.mush{max-width:860px!important;text-shadow:1px 1px 0 var(--m2)!important}.pg{margin:0 0 40px;padding:20px;border:1px solid #e9c46a55;border-radius:12px;background:#0003}.pg header{font:12px system-ui;opacity:.6;text-align:center}.ln{text-align:justify;text-align-last:center}.sr,.bs{text-align:center;color:#e9c46a}.w{transition:color .15s,background .15s;border-radius:6px;padding:0 2px}.w.on{color:#fff;background:#e9c46a55}.no{color:#e9c46a;font-size:.8em}.ref{font:14px Georgia,serif;color:#e9c46a}.tr{font:14px system-ui;color:#fff;opacity:.8;max-width:60vmin;text-align:center}.bar{position:fixed;left:50%;bottom:10px;transform:translateX(-50%);display:flex;gap:6px;background:#000a;border:1px solid #fff3;border-radius:12px;padding:6px}.bar select,.bar button{background:transparent;color:#fff;border:1px solid #fff4;border-radius:8px;padding:5px 9px;font:13px system-ui}.bar option{color:#000}${animCss}${mo.css}@media(prefers-reduced-motion:reduce){*{animation:none!important}}</style></head><body><div id="art">${art}</div>${anim[0] === 'orbit' ? '<div id="orb"></div>' : ''}${particles}<main>${content}</main><div class="bar"><button id="pl" type="button" aria-label="Play">▶</button><select id="rc" aria-label="Qari"></select>${scroll ? '<button id="zo" type="button">−</button><button id="zi" type="button">+</button>' : ''}</div><script${n}>window.__Q=${JSON.stringify({ reciters: RECITERS, scroll })};${PLAYER_JS}${loader}</script></body></html>`;
+  // #52: teks hanya di dalam kotak aman bingkai, ukuran menyesuaikan, tidak tertutup tombol; tulisan latar dihapus
+  const safeBox = series === 'ayah' ? compositionPath(comp[0]).box : series === 'page' ? [136, 116, 728, 724] : [150, 150, 700, 690];
+  const k = series === 'ayah' ? 0.06 : 0.03;
+  return `<!doctype html><html lang="ar"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(meta.name)}</title><style${n}>@font-face{font-family:'Amiri Quran';src:url(/fonts/amiri-quran-arabic.woff2) format('woff2');font-display:swap}:root{--m1:${m1};--m2:${m2}}body{background:radial-gradient(circle at 50% 40%,${b1},${b2});color:${m1};font-family:system-ui}${stageCss(safeBox)}#tx{font-family:'Amiri Quran','Amiri',serif;font-size:1em;line-height:2.1;text-align:center;color:var(--m1);text-shadow:1px 1px 0 var(--m2),2px 2px 0 var(--m2),3px 4px 6px #0009;width:100%}.mush{text-shadow:1px 1px 0 var(--m2)!important}.pg{margin:0 0 1.2em;padding:.6em;border:1px solid #e9c46a55;border-radius:10px;background:#0003}.pg header{font:12px system-ui;opacity:.6;text-align:center}.ln{text-align:justify;text-align-last:center}.sr,.bs{text-align:center;color:#e9c46a}.w{transition:color .15s,background .15s;border-radius:6px;padding:0 1px}.w.on{color:#fff;background:#e9c46a55}.no{color:#e9c46a;font-size:.8em}.ref{font-family:Georgia,serif;font-size:.42em;color:#e9c46a;margin:.4em 0 .2em}.tr{font-family:system-ui;font-size:.36em;line-height:1.5;color:#fff;opacity:.85;text-align:center;margin:.2em 0}.bar{position:fixed;left:50%;bottom:8px;transform:translateX(-50%);display:flex;gap:6px;background:#000c;border:1px solid #fff3;border-radius:12px;padding:6px;z-index:5;max-width:96vw}.bar select,.bar button{background:transparent;color:#fff;border:1px solid #fff4;border-radius:8px;padding:5px 9px;font:13px system-ui;max-width:52vw}.bar option{color:#000}${animCss}${mo.css}@media(prefers-reduced-motion:reduce){*{animation:none!important}}</style></head><body><div id="stage"><div id="art">${art}</div><div id="safe" data-k="${k}" data-min="11"${scroll ? ' data-scroll="1"' : ''}>${content}</div></div>${anim[0] === 'orbit' ? '<div id="orb"></div>' : ''}${particles}<div class="bar"><button id="pl" type="button" aria-label="Play">▶</button><select id="rc" aria-label="Qari"></select>${scroll ? '<button id="zo" type="button">−</button><button id="zi" type="button">+</button>' : ''}</div><script${n}>window.__Q=${JSON.stringify({ reciters: RECITERS, scroll })};${PLAYER_JS}${loader}${FIT_JS}</script></body></html>`;
 }

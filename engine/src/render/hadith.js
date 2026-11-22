@@ -6,8 +6,10 @@
  */
 import { esc } from '../core.js';
 import { svgOpen, linear, radial, girihPattern, r1, text, exclusiveBadge, hallmark, starfield, lum } from './common.js';
-import { layoutArabic, arNum, illumination, FONT_FACE } from './quran.js';
+import { layoutArabic, arNum, illumination, FONT_FACE, lockLen, firstBaseline } from './quran.js';
+import { arabicWidth } from './arabic-metrics.js';
 import { applyMotion } from './motion.js';
+import { stageCss, FIT_JS } from './stage.js';
 import { HADITH_KITAB, hadithAt, bookOf } from '../catalog/hadith.js';
 import { collection } from '../core.js';
 
@@ -37,11 +39,14 @@ export function hadithSvg(d, ctx = {}, opts = {}) {
   const ar = (ctx.ar ?? '').replace(/\s+/g, ' ').trim();
   let body = '';
   if (ar) {
-    const L = layoutArabic(ar, 700, 560);
-    const maxLines = Math.floor(560 / L.lh);
-    const lines = L.lines.length > maxLines ? [...L.lines.slice(0, maxLines - 1), `${L.lines[maxLines - 1]} …`] : L.lines;
-    const top = 215 + (560 - lines.length * L.lh) / 2 + L.fs * 1.15;
-    body = lines.map((ln, i) => `<text x="500" y="${r1(top + i * L.lh)}" ${ARFONT} font-size="${r1(L.fs)}" text-anchor="middle" direction="rtl" fill="${textFill}" stroke="${darkBg ? '#000' : '#fff'}" stroke-opacity=".22" stroke-width="${r1(L.fs * 0.02)}">${esc(ln)}</text>`).join('');
+    // kotak aman di dalam panel (110..890 × 190..800) dengan jarak ≥ 30 px dari garis (#52)
+    const BX = 140; const BY = 222; const BW = 720; const BH = 548;
+    const L = layoutArabic(ar, BW, BH, { maxFs: 56, minFs: 13, lhK: 1.85 });
+    const maxLines = Math.max(1, Math.floor((BH - 2.4 * L.fs) / L.lh) + 1);
+    const cut = L.lines.length > maxLines;
+    const lines = cut ? [...L.lines.slice(0, maxLines - 1), `${L.lines[maxLines - 1]} …`] : L.lines;
+    const top = firstBaseline(BY, BH, lines.length, L.lh, L.fs);
+    body = lines.map((ln, i) => `<text x="${BX + BW / 2}" y="${r1(top + i * L.lh)}" ${ARFONT} font-size="${r1(L.fs)}" text-anchor="middle" direction="rtl" fill="${textFill}" stroke="${darkBg ? '#000' : '#fff'}" stroke-opacity=".22" stroke-width="${r1(L.fs * 0.02)}"${lockLen(arabicWidth(ln, L.fs), BW)}>${esc(ln)}</text>`).join('');
   }
   const head = `<text x="500" y="112" ${ARFONT} font-size="46" text-anchor="middle" direction="rtl" fill="${ink}">${esc(ref.nameAr)}</text>${text(500, 152, `${ref.nameEn} · Hadith ${ref.number}`, `text-anchor="middle" font-family="Georgia,serif" font-size="24" fill="${ink}" letter-spacing="1"`)}`;
   const bookLine = ref.book ? `Book ${ref.book.no}: ${ref.book.name}` : ref.nameEn;
@@ -110,7 +115,7 @@ async function loadTr(){const to=lg.value;try{localStorage.setItem('axto-hlang',
  if(r&&r.ui)L=Object.assign({},H.ui.en,r.ui);labels();
  if(r&&r.text){trText=r.text;tl.textContent=r.kind==='machine'?L.machine:L.human;tr.textContent=trText;refBlock(r.book||(to==='en'?H.ref.bookName:''))}
  else{trText=to==='id'?(H.id||''):(H.en||'');tl.textContent=trText?L.human:L.fallback;tr.textContent=trText;refBlock(to==='en'?H.ref.bookName:'')}}
-lg.onchange=()=>{stop();loadTr()};loadTr();
+lg.onchange=()=>{stop();loadTr().then(()=>window.axFit&&axFit())};loadTr().then(()=>window.axFit&&axFit());
 $('#pt').onclick=()=>{if(speaking){stop();return}$('#pt').textContent='❚❚';speak(trText,lg.value,null)};
 `;
 
@@ -126,5 +131,6 @@ export function hadithPlayer(d, meta, ctx = {}, opts = {}) {
   const grade = ctx.g ? String(ctx.g).replace(/^shahih$/i, 'Sahih') : '';
   const data = { key: ref.key, n: ref.number, ar: ctx.ar ?? '', id: ctx.id ?? '', en: ctx.en ?? '', ui: UI, ref: { nameId: ref.nameId, nameEn: ref.nameEn, n: ref.number, b: ctx.b ?? null, bh: ctx.bh ?? null, bookNo: ref.book?.no ?? null, bookName: ref.book?.name ?? '', grade } };
   const refHtml = `<div class="ref"><b class="kar" lang="ar" dir="rtl">${esc(ref.nameAr)}</b><span id="rk"></span><span id="rb"></span><span id="rn"></span><span id="rg"></span><small id="rt"></small></div>`;
-  return `<!doctype html><html lang="ar"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(meta.name)}</title><style${n}>@font-face{font-family:'Amiri Quran';src:url(/fonts/amiri-quran-arabic.woff2) format('woff2');font-display:swap}:root{--m1:${m1};--m2:${m2}}html,body{margin:0;min-height:100%;background:radial-gradient(circle at 50% 40%,${b1},${b2});color:${m1};font-family:system-ui}#art{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;opacity:.55;pointer-events:none}#art svg{width:100vmin;height:100vmin}main{position:relative;max-width:900px;margin:0 auto;padding:5vmin 5vmin 120px;box-sizing:border-box}.ref{display:flex;flex-direction:column;align-items:center;gap:2px;text-align:center;color:#e9c46a;margin-bottom:14px}.ref .kar{font-family:'Amiri Quran','Amiri',serif;font-size:2rem}.ref span{font:14px Georgia,serif}.ref small{font:11px system-ui;opacity:.7;max-width:560px}#tx{font-family:'Amiri Quran','Amiri',serif;font-size:clamp(18px,3.2vmin,30px);line-height:2.2;text-align:justify;text-align-last:center;color:var(--m1);text-shadow:1px 1px 0 var(--m2),2px 2px 0 var(--m2),3px 4px 8px #0009;background:#0004;border:1px solid #e9c46a55;border-radius:14px;padding:16px}.w{border-radius:6px;padding:0 2px;transition:background .15s,color .15s}.w.on{color:#fff;background:#e9c46a66}#tl{font:12px system-ui;color:#e9c46a;margin:16px 0 4px}#tr{font:16px/1.7 system-ui;color:#fff;background:#0005;border-radius:12px;padding:14px;white-space:pre-wrap}#st{font:12px system-ui;color:#ffd27a;min-height:1em}.bar{position:fixed;left:50%;bottom:10px;transform:translateX(-50%);display:flex;flex-wrap:wrap;justify-content:center;gap:6px;background:#000c;border:1px solid #fff3;border-radius:14px;padding:6px;max-width:96vw}.bar select,.bar button{background:transparent;color:#fff;border:1px solid #fff4;border-radius:8px;padding:6px 10px;font:13px system-ui}.bar option{color:#000}${mo.css}@media(prefers-reduced-motion:reduce){*{animation:none!important}}</style></head><body><div id="art">${mo.svg}</div><main>${refHtml}<div id="tx" dir="rtl" lang="ar"></div><p id="st" role="status"></p><p id="tl"></p><div id="tr"></div></main><div class="bar"><button id="pa" type="button" aria-label="Arabic voice">▶</button><select id="lg" aria-label="Language">${TR_LANGS.map(([c, nm]) => `<option value="${c}">${esc(nm)}</option>`).join('')}</select><button id="pt" type="button" aria-label="Translation voice">▶</button><select id="sp" aria-label="Speed"><option value=".8">0.8×</option><option value="1" selected>1×</option><option value="1.2">1.2×</option></select></div><script${n}>window.__H=${JSON.stringify(data).replace(/</g, '\\u003c')};${PLAYER_JS}</script></body></html>`;
+  // #52: semua isi di dalam panel bingkai (kotak aman), ukuran menyesuaikan, gulir di dalam panel bila sangat panjang
+  return `<!doctype html><html lang="ar"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(meta.name)}</title><style${n}>@font-face{font-family:'Amiri Quran';src:url(/fonts/amiri-quran-arabic.woff2) format('woff2');font-display:swap}:root{--m1:${m1};--m2:${m2}}body{background:radial-gradient(circle at 50% 40%,${b1},${b2});color:${m1};font-family:system-ui}${stageCss([136, 206, 728, 580])}#safe{justify-content:flex-start}.ref{display:flex;flex-direction:column;align-items:center;gap:1px;text-align:center;color:#e9c46a;margin:0 0 .3em}.ref .kar{font-family:'Amiri Quran','Amiri',serif;font-size:1.2em;line-height:1.5}.ref span{font-family:Georgia,serif;font-size:.5em}.ref small{font-size:.4em;opacity:.75}#tx{font-family:'Amiri Quran','Amiri',serif;font-size:1em;line-height:2.05;text-align:justify;text-align-last:center;color:var(--m1);text-shadow:1px 1px 0 var(--m2),2px 2px 0 var(--m2),3px 3px 6px #0009;width:100%}.w{border-radius:6px;padding:0 1px;transition:background .15s,color .15s}.w.on{color:#fff;background:#e9c46a66}#tl{font-size:.42em;color:#e9c46a;margin:.6em 0 .2em}#tr{font-size:.5em;line-height:1.6;color:#fff;white-space:pre-wrap;width:100%;text-align:justify}#st{font-size:.4em;color:#ffd27a;min-height:1em;margin:0}.bar{position:fixed;left:50%;bottom:8px;transform:translateX(-50%);display:flex;flex-wrap:wrap;justify-content:center;gap:6px;background:#000c;border:1px solid #fff3;border-radius:14px;padding:6px;max-width:96vw;z-index:5}.bar select,.bar button{background:transparent;color:#fff;border:1px solid #fff4;border-radius:8px;padding:6px 10px;font:13px system-ui;max-width:46vw}.bar option{color:#000}${mo.css}@media(prefers-reduced-motion:reduce){*{animation:none!important}}</style></head><body><div id="stage"><div id="art">${mo.svg}</div><div id="safe" data-k="0.045" data-min="10">${refHtml}<div id="tx" dir="rtl" lang="ar"></div><p id="st" role="status"></p><p id="tl"></p><div id="tr"></div></div></div><div class="bar"><button id="pa" type="button" aria-label="Arabic voice">▶</button><select id="lg" aria-label="Language">${TR_LANGS.map(([c, nm]) => `<option value="${c}">${esc(nm)}</option>`).join('')}</select><button id="pt" type="button" aria-label="Translation voice">▶</button><select id="sp" aria-label="Speed"><option value=".8">0.8×</option><option value="1" selected>1×</option><option value="1.2">1.2×</option></select></div><script${n}>window.__H=${JSON.stringify(data).replace(/</g, '\\u003c')};${PLAYER_JS}${FIT_JS}</script></body></html>`;
 }

@@ -77,7 +77,7 @@ function assetProvider(env, origin) {
 }
 
 /** Versi render: naikkan saat tampilan karya berubah → cache tepi lama otomatis tidak terpakai. */
-const RENDER_V = '9';
+const RENDER_V = '10';
 async function cached(request, ctx, make) {
   const cache = caches.default;
   const u = new URL(request.url);

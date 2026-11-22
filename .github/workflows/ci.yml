@@ -25,6 +25,12 @@ jobs:
         env:
           DRY_RUN: '1'
         run: node bin/produce.mjs
+      - name: QA visual teks di dalam bingkai (#52, 60 karya per koleksi, Chromium)
+        working-directory: engine
+        run: |
+          npm install --no-save --no-audit --no-fund playwright@1.63.0
+          npx playwright install --with-deps chromium
+          node bin/qa-visual.mjs 60
       - name: Checkout vault (repo coinaxto)
         uses: actions/checkout@v4
         with:

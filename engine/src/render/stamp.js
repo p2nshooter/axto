@@ -7,10 +7,23 @@ import { applyMotion } from './motion.js';
 import { svgOpen, linear, radial, starPath, polyPath, perforatedRect, starfield, r1, text, exclusiveBadge, hallmark } from './common.js';
 import { motif } from './motifs.js';
 
+/** Lebar bagian dalam bentuk prangko pada ketinggian y (untuk menempatkan teks tanpa keluar/menempel garis, #52). */
+function shapeWidth(frame, y) {
+  switch (frame) {
+    case 'triangle': return Math.max(0, ((y - 150) / 650) * 740);
+    case 'diamond': return Math.max(0, 2 * (380 - Math.abs(y - 500)));
+    case 'round': return Math.abs(y - 500) >= 350 ? 0 : 2 * Math.sqrt(350 * 350 - (y - 500) ** 2);
+    case 'hex': return Math.abs(y - 500) > 329 ? 0 : 760 - 2 * ((Math.abs(y - 500) / 329) * 190);
+    default: return 1000;
+  }
+}
+/** Ukuran huruf terbesar (≤ fs0) agar teks Latin (Georgia/Helvetica) muat di lebar w. */
+const fitFs = (str, w, fs0, ls = 0, k = 0.72) => Math.max(9, Math.min(fs0, (w / Math.max(1, String(str).length) - ls) / k));
+
 function outline(frame) {
   // kotak badan prangko di kanvas 1000×1000 → {kind, path, art box, perforation points}
   switch (frame) {
-    case 'triangle': return { tri: true, path: 'M500 150L870 800L130 800Z', art: [320, 420, 360, 300] };
+    case 'triangle': return { tri: true, path: 'M500 150L870 800L130 800Z', art: [345, 405, 310, 250] }; // #52: ruang teks di dalam segitiga
     case 'diamond': return { path: 'M500 120L880 500L500 880L120 500Z', art: [340, 340, 320, 320] };
     case 'round': return { path: 'M500 150A350 350 0 1 1 499.9 150Z', art: [330, 300, 340, 340] };
     case 'hex': return { path: `${polyPath(500, 500, 380, 6, 0)}`, art: [320, 310, 360, 360] };
@@ -86,10 +99,10 @@ export function stampSvg(d) {
   const serial = `${pad(d.tokenId, 7)}`;
   let body = '';
   const label = (x, y, w, h) => {
-    const t = `${text(x + w / 2, y + 62, realm[1].toUpperCase(), `text-anchor="middle" font-family="Georgia,serif" font-size="${realm[1].length > 22 ? 24 : 30}" font-weight="700" letter-spacing="3" fill="${ink}"`)}`;
-    const dn = text(x + w - 26, y + h - 30, denom[4], `text-anchor="end" font-family="Georgia,serif" font-size="72" font-weight="700" fill="${ink}"`);
+    const t = `${text(x + w / 2, y + 62, realm[1].toUpperCase(), `text-anchor="middle" font-family="Georgia,serif" font-size="${r1(fitFs(realm[1], w - 40, 30, 3))}" font-weight="700" letter-spacing="3" fill="${ink}"`)}`;
+    const dn = text(x + w - 26, y + h - 30, denom[4], `text-anchor="end" font-family="Georgia,serif" font-size="${Math.min(72, fitFs(denom[4], (w - 52) / 2, 72, 0, 0.62)) | 0}" font-weight="700" fill="${ink}"`);
     const yr = text(x + 26, y + h - 30, year[4], `font-family="Georgia,serif" font-size="26" fill="${ink}" opacity=".85"`);
-    const se = text(x + w / 2, y + h - 92, series[1], `text-anchor="middle" font-family="Helvetica,Arial,sans-serif" font-size="20" letter-spacing="2" fill="${ink}"`);
+    const se = text(x + w / 2, y + h - 92, series[1], `text-anchor="middle" font-family="Helvetica,Arial,sans-serif" font-size="${r1(fitFs(series[1], w - 40, 20, 2, 0.62))}" letter-spacing="2" fill="${ink}"`);
     const micro = `<text x="${x + 20}" y="${y + h - 10}" font-family="monospace" font-size="4.2" fill="${ink}" opacity=".7">${esc(`AXTO·${realm[1]}·${series[1]}·No.${serial}·`.repeat(8))}</text>`;
     return t + dn + yr + se + micro;
   };
@@ -112,9 +125,17 @@ export function stampSvg(d) {
     body += `<path d="${o.path}" fill="none" stroke="${ink}" stroke-width="2" opacity=".5" transform="translate(500 500) scale(.92) translate(-500 -500)"/>`;
     body += artPanel(o.art, subject, c, d.seed, 0, series[0], night);
     const [ax, ay, aw, ah] = o.art;
-    body += text(500, ay - 24, realm[1].toUpperCase(), `text-anchor="middle" font-family="Georgia,serif" font-size="22" font-weight="700" letter-spacing="2" fill="${ink}"`);
-    body += text(500, ay + ah + 46, `${series[1]} · ${year[4]}`, `text-anchor="middle" font-family="Helvetica,Arial,sans-serif" font-size="18" fill="${ink}"`);
-    body += text(500, ay + ah + 100, denom[4], `text-anchor="middle" font-family="Georgia,serif" font-size="56" font-weight="700" fill="${ink}"`);
+    // teks di dalam bentuk: ukuran mengikuti lebar bentuk pada ketinggian tiap baris, jarak ≥ 18 px dari garis (#52)
+    const wAt = (yTop, yBot) => Math.min(shapeWidth(frame[0], yTop), shapeWidth(frame[0], yBot)) - 44;
+    const rY = ay - 24;
+    const rFs = fitFs(realm[1], wAt(rY - 22, rY + 4), 22, 2);
+    body += text(500, rY, realm[1].toUpperCase(), `text-anchor="middle" font-family="Georgia,serif" font-size="${r1(rFs)}" font-weight="700" letter-spacing="2" fill="${ink}"`);
+    const sY = ay + ah + 40;
+    const sTxt = `${series[1]} · ${year[4]}`;
+    body += text(500, sY, sTxt, `text-anchor="middle" font-family="Helvetica,Arial,sans-serif" font-size="${r1(fitFs(sTxt, wAt(sY - 18, sY + 4), 18, 0, 0.58))}" fill="${ink}"`);
+    const dY = o.tri ? ay + ah + 92 : ay + ah + 100;
+    const dFs = Math.min(o.tri ? 40 : 56, fitFs(denom[4], wAt(dY - 44, dY + 4), 56, 0, 0.62));
+    body += text(500, dY, denom[4], `text-anchor="middle" font-family="Georgia,serif" font-size="${r1(dFs)}" font-weight="700" fill="${ink}"`);
   }
   let margin = '';
   if (frame[0] === 'souvenir' || frame[0] === 'booklet' || frame[0] === 'miniature') {
