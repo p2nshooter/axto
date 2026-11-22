@@ -84,6 +84,15 @@ test('presale ETH via Chainlink ($2000/ETH → 1 ETH = 200 AXTO), harga basi dit
   await revert(as(sale, bob).buyWithETH(0, { value: E(1) }));
 });
 
+test('beli manual: kirim ETH langsung ke alamat AxtoSale → AXTO masuk ke wallet pengirim, ETH ke treasury', async () => {
+  await (await feed.set(2000n * 10n ** 8n, await now())).wait(); // harga segar (tes sebelumnya membuatnya basi)
+  const dave = ethers.HDNodeWallet.fromPhrase('test test test test test test test test test test test junk', undefined, "m/44'/60'/0'/0/6").connect(provider);
+  const t0 = await provider.getBalance(treasury.address);
+  await (await dave.sendTransaction({ to: await sale.getAddress(), value: E('0.05') })).wait(); // $100 pada $2000/ETH
+  assert.equal(await token.balanceOf(dave.address), E(10));
+  assert.equal((await provider.getBalance(treasury.address)) - t0, E('0.05'));
+});
+
 test('sebelum listing DEX: transfer antar-pengguna dikunci', async () => {
   await revert(as(token, alice).transfer(bob.address, E(1)));
   await revert(token.enableTrading()); // presale belum habis & < 365 hari

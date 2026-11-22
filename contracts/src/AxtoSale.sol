@@ -92,6 +92,16 @@ contract AxtoSale is Ownable2Step, Pausable, ReentrancyGuard, EIP712 {
     }
 
     function buyWithETH(uint256 minAmount) external payable nonReentrant whenNotPaused {
+        _buyETH(minAmount);
+    }
+
+    /// @notice Beli manual dari wallet mana pun: kirim ETH (jaringan Base) ke alamat kontrak ini → AXTO otomatis masuk
+    ///  ke wallet pengirim di harga $10 (harga ETH dari Chainlink). Dari wallet pribadi (MetaMask/Trust), bukan dari bursa.
+    receive() external payable nonReentrant whenNotPaused {
+        _buyETH(0);
+    }
+
+    function _buyETH(uint256 minAmount) private {
         uint256 amount = (msg.value * ethPrice()) / (PRICE_USD * 1e18);
         if (amount < 1e15) revert TooSmall();
         if (amount < minAmount) revert Slippage();
