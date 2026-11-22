@@ -11,6 +11,7 @@ export async function vault(env, method, payload) {
   const body = JSON.stringify(payload ?? {});
   const k = await crypto.subtle.importKey('raw', enc.encode(env.VAULT_HMAC_KEY), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
   const mac = hex(await crypto.subtle.sign('HMAC', k, enc.encode(`${method}.${ts}.${body}`)));
+  if (!env.VAULT) throw new Error('vault_unavailable');
   const r = await env.VAULT.call(method, body, ts, mac);
   if (r?.error) throw new Error(`vault ${method}: ${r.error}`);
   return r;

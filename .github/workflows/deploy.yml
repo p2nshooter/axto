@@ -50,6 +50,21 @@ jobs:
           DATA_KEY: ${{ secrets.DATA_KEY }}
           ENGINE_HMAC_KEY: ${{ secrets.ENGINE_HMAC_KEY }}
           VAULT_HMAC_KEY: ${{ secrets.VAULT_HMAC_KEY }}
+      - name: Binding vault (lewati sementara bila axto-vault belum ada)
+        working-directory: worker
+        run: |
+          if npx wrangler deployments list --name axto-vault >/dev/null 2>&1; then
+            echo "axto-vault ada — binding VAULT aktif"
+          else
+            echo "::warning::axto-vault belum ter-deploy (repo coinaxto) — situs publik tetap jalan, fitur koin/klaim menunggu vault"
+            python3 - <<'PY'
+          import re
+          p = 'wrangler.toml'
+          s = open(p, encoding='utf8').read()
+          s = re.sub(r'\n\[\[services\]\]\nbinding = "VAULT"\nservice = "axto-vault"\nentrypoint = "Vault"\n', '\n', s)
+          open(p, 'w', encoding='utf8').write(s)
+          PY
+          fi
       - name: Deploy
         working-directory: worker
         run: npx wrangler deploy
