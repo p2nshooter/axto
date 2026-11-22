@@ -147,6 +147,60 @@ if (mem) {
       out.textContent = r.error ? `${L.err}: ${r.error}` : L.save;
     });
     mem.append(f);
+    // menang & klaim (pemenang membayar gas)
+    const wins = h('section');
+    wins.append(h('h2', lang === 'id' ? 'Menang — menunggu klaim' : 'Won — awaiting claim'));
+    const ul = document.createElement('ul');
+    wins.append(ul);
+    get('/api/me/wins').then(({ items = [] }) => {
+      if (!items.length) ul.append(h('li', '—'));
+      for (const w of items) {
+        const li = h('li', `${w.c} #${w.tokenId} · ${(w.amount / (w.currency === 'USDC' ? 100 : 1000)).toFixed(w.currency === 'USDC' ? 2 : 3)} ${w.currency} · `);
+        const t = document.createElement('time');
+        t.dataset.countdown = String(w.until);
+        li.append(t, ' ');
+        const b = h('button', L.claim);
+        b.className = 'btn gold';
+        b.disabled = !w.ready;
+        b.addEventListener('click', async () => {
+          try {
+            await ensureChain();
+            const d = await get(`/api/claim/${w.c}/${w.tokenId}`);
+            if (d.error) throw new Error(d.error);
+            const c = await config();
+            const token = w.currency === 'USDC' ? c.usdc : c.axto;
+            await approveIfNeeded(token, me.wallet, c.auctionHouse, BigInt(d.result.price));
+            const hash = await eth().request({ method: 'eth_sendTransaction', params: [{ from: me.wallet, to: d.tx.to, data: d.tx.data }] });
+            b.textContent = `${L.claimed} · ${hash.slice(0, 10)}…`;
+            setTimeout(() => post(`/api/claim/${w.c}/${w.tokenId}`), 15000);
+          } catch (e) { b.textContent = `${L.err}: ${e.message ?? e}`; }
+        });
+        li.append(b);
+        ul.append(li);
+      }
+    });
+    mem.append(wins);
+    // kustodi eksklusif & WD (member membayar gas mint)
+    const cus = h('section');
+    cus.append(h('h2', lang === 'id' ? 'Kustodi eksklusif axto.io' : 'axto.io exclusive custody'));
+    const cl = document.createElement('ul');
+    cus.append(cl);
+    get('/api/me/custody').then(({ items = [] }) => {
+      if (!items.length) cl.append(h('li', '—'));
+      for (const it of items) {
+        const li = h('li', `${it.c} #${it.tokenId} · ${it.status} `);
+        const b = h('button', lang === 'id' ? 'Tarik ke wallet' : 'Withdraw to wallet');
+        b.className = 'btn';
+        b.addEventListener('click', async () => {
+          const r = await post('/api/wd', { c: it.c, tokenId: it.tokenId });
+          b.textContent = r.ok ? (lang === 'id' ? 'Voucher siap — kirim mintWithVoucher dari wallet' : 'Voucher ready — send mintWithVoucher from your wallet') : `${L.err}: ${r.error}`;
+        });
+        li.append(b);
+        cl.append(li);
+      }
+    });
+    mem.append(cus);
+    tickCountdowns();
     const lo = h('button', L.logout);
     lo.className = 'btn ghost';
     lo.addEventListener('click', async () => { await post('/api/auth/logout'); location.reload(); });

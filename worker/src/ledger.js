@@ -479,6 +479,18 @@ export class Ledger extends DurableObject {
     return { until: lot.claim.until, ...lot.claim.att };
   }
 
+  /** Lot yang dimenangkan wallet ini dan menunggu klaim (lelang primer + marketplace). */
+  winsOf(wallet) {
+    const w = String(wallet).toLowerCase();
+    const out = [];
+    for (const c of KEYS) {
+      for (const lot of [...this.s[c].lots.values(), ...this.s[c].market.values()]) {
+        if (lot.status === 'awaiting_claim' && lot.winner.bidder.toLowerCase() === w) out.push({ c, tokenId: lot.tokenId, amount: lot.winner.amount, currency: currencyOf(c), until: lot.claim.until, ready: Boolean(lot.claim.att) });
+      }
+    }
+    return out;
+  }
+
   /** Publik: sudah di-mint ke pemenang? Eksklusif: AuctionHouse mencatat kustodi → vault memastikan event. */
   async checkClaimed(c, lot) {
     const env = this.env;

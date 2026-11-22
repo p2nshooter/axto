@@ -29,3 +29,12 @@ test('checksum EIP-55', () => {
   const a = ethers.Wallet.createRandom().address;
   assert.equal(checksum(a.toLowerCase()), a);
 });
+
+test('calldata claim identik dengan ethers Interface', async () => {
+  const { encodeClaim } = await import('../src/eth.js');
+  const iface = new ethers.Interface(['function claim((bytes32 lotId,address collection,uint256 tokenId,address currency,uint256 maxAmount,uint256 nonce,uint256 deadline) bid, bytes bidSig, (bytes32 lotId,address collection,uint256 tokenId,address winner,address currency,uint256 price,address seller,uint8 mode,uint256 deadline) res, bytes resSig)']);
+  const bid = { lotId: ethers.id('a'), collection: ethers.Wallet.createRandom().address, tokenId: '42', currency: ethers.Wallet.createRandom().address, maxAmount: '1000000', nonce: '17', deadline: '1900000000' };
+  const res = { lotId: bid.lotId, collection: bid.collection, tokenId: '42', winner: ethers.Wallet.createRandom().address, currency: bid.currency, price: '990000', seller: ethers.ZeroAddress, mode: 0, deadline: '1900000500' };
+  const s1 = `0x${'ab'.repeat(65)}`; const s2 = `0x${'cd'.repeat(65)}`;
+  assert.equal(encodeClaim(bid, s1, res, s2), iface.encodeFunctionData('claim', [bid, s1, res, s2]));
+});

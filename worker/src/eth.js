@@ -115,3 +115,22 @@ export async function ownerOf(rpc, collection, tokenId) {
     return null; // belum di-mint (lazy mint)
   }
 }
+
+// ---------- calldata AxtoAuctionHouse.claim(Bid, bytes, Result, bytes) ----------
+const CLAIM_SIG = 'claim((bytes32,address,uint256,address,uint256,uint256,uint256),bytes,(bytes32,address,uint256,address,address,uint256,address,uint8,uint256),bytes)';
+const hexWord = (n) => word(n).reduce((s, x) => s + x.toString(16).padStart(2, '0'), '');
+const hexAddr = (a) => a.toLowerCase().replace(/^0x/, '').padStart(64, '0');
+const hexB32 = (h) => { const s = h.replace(/^0x/, ''); if (s.length !== 64) throw new Error('bytes32'); return s.toLowerCase(); };
+function hexBytes(h) {
+  const s = h.replace(/^0x/, '').toLowerCase();
+  const len = s.length / 2;
+  return hexWord(len) + s.padEnd(Math.ceil(len / 32) * 64, '0');
+}
+export function encodeClaim(bid, bidSig, res, resSig) {
+  const sel = bytesToHex(keccak(CLAIM_SIG).slice(0, 4)).slice(2);
+  const bidHead = hexB32(bid.lotId) + hexAddr(bid.collection) + hexWord(bid.tokenId) + hexAddr(bid.currency) + hexWord(bid.maxAmount) + hexWord(bid.nonce) + hexWord(bid.deadline);
+  const resHead = hexB32(res.lotId) + hexAddr(res.collection) + hexWord(res.tokenId) + hexAddr(res.winner) + hexAddr(res.currency) + hexWord(res.price) + hexAddr(res.seller) + hexWord(res.mode) + hexWord(res.deadline);
+  const head = 18 * 32;
+  const a = hexBytes(bidSig);
+  return `0x${sel}${bidHead}${hexWord(head)}${resHead}${hexWord(head + a.length / 2)}${a}${hexBytes(resSig)}`;
+}

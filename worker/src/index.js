@@ -15,7 +15,7 @@ import { ADS_TXT } from './adsense.js';
 import { session, siweStart, siweFinish, logout, saveProfile, publicProfile, loadMember, rateLimit, hmac } from './auth.js';
 import { createOrder, captureOrder, webhook } from './paypal.js';
 import { dailyBackup, appendLog, readJSON, listKeys } from './r2.js';
-import { ownerOf, isAddress } from './eth.js';
+import { ownerOf, isAddress, encodeClaim } from './eth.js';
 import { Ledger, KEYS } from './ledger.js';
 
 export { Ledger };
@@ -168,6 +168,10 @@ async function api(request, env, ctx, url) {
     const r = await ledger(env).marketBid({ c: b.c, tokenId: Number(b.tokenId), bidder: s.wallet, kind: b.kind, units: Number(b.units), nonce: String(b.nonce), deadline: String(b.deadline), sig: String(b.sig) });
     return json(r, r.ok ? 200 : 400);
   }
+  if (p === '/api/me/wins') {
+    if (!s) return json({ error: 'auth' }, 401);
+    return json({ items: await ledger(env).winsOf(s.wallet) });
+  }
   if (p === '/api/me/custody') {
     if (!s) return json({ error: 'auth' }, 401);
     const items = [];
@@ -189,7 +193,9 @@ async function api(request, env, ctx, url) {
     if (!s) return json({ error: 'auth' }, 401);
     if (method === 'POST') return json(await ledger(env).claimed(m[1], Number(m[2])));
     const d = await ledger(env).claimData(m[1], Number(m[2]), s.wallet);
-    return d ? json(d) : json({ error: 'not_winner' }, 404);
+    if (!d) return json({ error: 'not_winner' }, 404);
+    // calldata siap kirim: member menandatangani & membayar gas sendiri (eth_sendTransaction)
+    return json({ ...d, tx: { to: env.AUCTION_HOUSE, data: encodeClaim(d.bid, d.bidSig, d.result, d.sig) } });
   }
 
   // ---- koin (PayPal) ----
