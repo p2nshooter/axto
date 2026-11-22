@@ -7,6 +7,7 @@ import { ethers } from 'ethers';
 const art = (n) => JSON.parse(readFileSync(new URL(`../out/${n}.json`, import.meta.url), 'utf8'));
 const E = (n) => ethers.parseEther(String(n));
 const U = (n) => ethers.parseUnits(String(n), 6);
+const BANK = '0x6918A3C9a58E71B3bca993e8cDD2630D2DDB6469'; // bank koin AXTO (komisi marketplace)
 
 let provider, owner, treasury, signerW, alice, bob, carol, chainId;
 let usdc, feed, token, sale, house, col, colEx, vest, lock, premintRcpt;
@@ -40,9 +41,9 @@ before(async () => {
   chainId = (await provider.getNetwork()).chainId;
   usdc = await deploy('MockUSDC');
   feed = await deploy('MockFeed', 2000n * 10n ** 8n);
-  token = await deploy('AxtoToken', owner.address, owner.address); // di tes: owner = wallet koin (holder)
+  token = await deploy('AxtoToken', owner.address, [owner.address], [E(10_000_000)]); // di tes: semua ke owner
   sale = await deploy('AxtoSale', owner.address, await token.getAddress(), await usdc.getAddress(), await feed.getAddress(), treasury.address, signerW.address, owner.address);
-  house = await deploy('AxtoAuctionHouse', owner.address, treasury.address, signerW.address, [await usdc.getAddress(), await token.getAddress()]);
+  house = await deploy('AxtoAuctionHouse', owner.address, treasury.address, signerW.address, [await usdc.getAddress(), await token.getAddress()], await token.getAddress(), BANK);
   col = await deploy('AxtoCollection', { name: 'AXTO Time', symbol: 'AXTIME', maxSupply: 2_000_000, owner: owner.address, royaltyReceiver: treasury.address, baseURI: 'https://axto.io/api/meta/time/', contractURI: 'https://axto.io/api/contract/time', custody: owner.address, premint: 2_000_000, operator: await house.getAddress(), signer: ethers.ZeroAddress });
   premintRcpt = await provider.getTransactionReceipt(col.deploymentTransaction().hash);
   colEx = await deploy('AxtoCollection', { name: 'AXTO Exclusive Time', symbol: 'AXXTIME', maxSupply: 50_000, owner: owner.address, royaltyReceiver: treasury.address, baseURI: 'https://axto.io/api/meta/ex-time/', contractURI: 'https://axto.io/api/contract/ex-time', custody: ethers.ZeroAddress, premint: 0, operator: ethers.ZeroAddress, signer: signerW.address });
@@ -56,9 +57,8 @@ before(async () => {
   for (const w of [alice, bob, carol]) await (await usdc.mint(w.address, U(10_000))).wait();
 });
 
-test('koin: supply 10 jt tetap, seluruhnya di wallet koin pemilik; presale menjual lewat allowance 2 jt (perintah #39)', async () => {
+test('koin: supply 10 jt tetap; presale menjual lewat allowance 2 jt dari wallet presale', async () => {
   assert.equal(await token.totalSupply(), E(10_000_000));
-  assert.equal(await token.holder(), owner.address);
   // di tes ini pemilik memindahkan sendiri 3 jt (vesting) & 2 jt (kunci) dari walletnya
   assert.equal(await token.balanceOf(owner.address), E(5_000_000));
   assert.equal(await token.balanceOf(await sale.getAddress()), 0n);
@@ -195,12 +195,14 @@ test('eksklusif: lelang berbayar AXTO (mode kustodi) + resale 90/10 sebelum list
   await (await as(house, alice).claim(L.bid, L.bidSig, L.res, L.resSig)).wait();
   assert.equal((await token.balanceOf(treasury.address)) - t0, E('0.1'));
   assert.equal(await colEx.exists(7), false); // tetap di kustodi axto.io, belum on-chain
-  // resale: bob membeli dari alice seharga 1 AXTO → 0,9 ke alice, 0,1 ke treasury
+  // resale: bob membeli dari alice seharga 1 AXTO → 0,9 ke alice, 0,1 ke bank koin
   await (await as(token, bob).approve(await house.getAddress(), E(1))).wait();
   const R = await lot(c, 7, bob, E(1), E(1), { currency: ax, mode: 2, seller: alice.address, lotId: 'resale-ex-7' });
   const a0 = await token.balanceOf(alice.address);
+  const k0 = await token.balanceOf(BANK);
   await (await as(house, bob).claim(R.bid, R.bidSig, R.res, R.resSig)).wait();
   assert.equal((await token.balanceOf(alice.address)) - a0, E('0.9'));
+  assert.equal((await token.balanceOf(BANK)) - k0, E('0.1')); // komisi 10% AXTO → bank koin pemilik (#41)
 });
 
 test('WD eksklusif: voucher signer → member mint sendiri; voucher sekali pakai', async () => {

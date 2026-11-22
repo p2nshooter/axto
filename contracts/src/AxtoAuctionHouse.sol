@@ -30,7 +30,8 @@ interface IAxtoCustody {
  *   0 = mint langsung ke pemenang (cadangan)
  *   1 = transfer dari kustodi koleksi (wallet admin; kontrak ini operatornya) — koleksi publik, premint saat deploy (#30)
  *   2 = kustodi axto.io (edisi eksklusif; hanya pembayaran + event, NFT dicatat off-chain sampai WD)
- *  Pembagian: seller == 0 → 100% treasury; seller != 0 (resale marketplace eksklusif) → 90% seller, 10% treasury.
+ *  Pembagian: seller == 0 → 100% treasury; seller != 0 (resale marketplace) → 90% seller, 10% komisi ke `feeWallet`
+ *  mata uang itu (AXTO → bank koin pemilik) atau treasury bila belum diatur.
  */
 contract AxtoAuctionHouse is Ownable2Step, Pausable, ReentrancyGuard, EIP712, IERC721Receiver {
     using SafeERC20 for IERC20;
@@ -68,6 +69,8 @@ contract AxtoAuctionHouse is Ownable2Step, Pausable, ReentrancyGuard, EIP712, IE
     address public treasury;
     mapping(address => bool) public currencies;
     mapping(bytes32 => bool) public settled;
+    /// @notice Penerima komisi 10% marketplace per mata uang (AXTO → bank koin pemilik, perintah #41); 0 = treasury.
+    mapping(address => address) public feeWallet;
     mapping(address => mapping(uint256 => bool)) public nonceUsed;
 
     event Claimed(
@@ -84,6 +87,7 @@ contract AxtoAuctionHouse is Ownable2Step, Pausable, ReentrancyGuard, EIP712, IE
     event TreasuryUpdated(address treasury);
     event CurrencyUpdated(address currency, bool allowed);
     event NonceCancelled(address bidder, uint256 nonce);
+    event FeeWalletUpdated(address currency, address wallet);
 
     error Expired();
     error AlreadySettled();
@@ -96,7 +100,7 @@ contract AxtoAuctionHouse is Ownable2Step, Pausable, ReentrancyGuard, EIP712, IE
     error BadMode();
 
     /// @notice Mata uang (USDC, AXTO) langsung di konstruktor → owner tidak perlu transaksi tambahan.
-    constructor(address owner_, address treasury_, address signer_, address[] memory currencies_)
+    constructor(address owner_, address treasury_, address signer_, address[] memory currencies_, address feeCurrency_, address feeWallet_)
         Ownable(owner_)
         EIP712("AXTO Auction House", "1")
     {
@@ -106,6 +110,10 @@ contract AxtoAuctionHouse is Ownable2Step, Pausable, ReentrancyGuard, EIP712, IE
         for (uint256 i; i < currencies_.length; ++i) {
             currencies[currencies_[i]] = true;
             emit CurrencyUpdated(currencies_[i], true);
+        }
+        if (feeCurrency_ != address(0)) {
+            feeWallet[feeCurrency_] = feeWallet_;
+            emit FeeWalletUpdated(feeCurrency_, feeWallet_);
         }
     }
 
@@ -153,7 +161,8 @@ contract AxtoAuctionHouse is Ownable2Step, Pausable, ReentrancyGuard, EIP712, IE
             cur.safeTransferFrom(res.winner, treasury, res.price);
         } else {
             uint256 fee = (res.price + 9) / 10; // 10% dibulatkan ke atas
-            cur.safeTransferFrom(res.winner, treasury, fee);
+            address feeTo = feeWallet[res.currency] == address(0) ? treasury : feeWallet[res.currency];
+            cur.safeTransferFrom(res.winner, feeTo, fee);
             cur.safeTransferFrom(res.winner, res.seller, res.price - fee);
         }
 
@@ -184,6 +193,11 @@ contract AxtoAuctionHouse is Ownable2Step, Pausable, ReentrancyGuard, EIP712, IE
         require(t != address(0), "treasury");
         treasury = t;
         emit TreasuryUpdated(t);
+    }
+
+    function setFeeWallet(address currency, address wallet) external onlyOwner {
+        feeWallet[currency] = wallet;
+        emit FeeWalletUpdated(currency, wallet);
     }
 
     function setCurrency(address c, bool allowed) external onlyOwner {

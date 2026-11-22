@@ -65,23 +65,24 @@ test('koleksi publik tercetak penuh ke wallet admin (profil OpenSea pemilik), Au
   assert.equal(await house.currencies(process.env.LOCAL_USDC), true);
 });
 
-test('koin 10 jt seluruhnya di wallet koin pemilik; presale menjual lewat allowance 2 jt; deployer 0 & tidak tepercaya (perintah #39)', async () => {
+test('koin 10 jt dibagi langsung: presale 2 jt, vesting/DEX 3 jt, hold 3 jt, bank 2 jt; presale menjual lewat allowance; komisi AXTO → bank (#41)', async () => {
   const c = result.contracts;
   const t = new ethers.Contract(c.token, art('AxtoToken').abi, provider);
   const E = (n) => ethers.parseEther(String(n));
   assert.equal(await t.totalSupply(), E(10_000_000));
-  assert.equal(await t.balanceOf(COIN), E(10_000_000));
-  assert.equal(await t.holder(), COIN);
-  assert.equal(await t.allowance(PRESALE_W, c.sale), E(2_000_000)); // presale menjual dari wallet presale pemilik
-  assert.equal(await t.balanceOf(c.sale), 0n);
+  assert.equal(await t.balanceOf(PRESALE_W), E(2_000_000));
+  assert.equal(await t.balanceOf(VESTING_W), E(3_000_000));
+  assert.equal(await t.balanceOf(HOLD_W), E(3_000_000));
+  assert.equal(await t.balanceOf(COIN), E(2_000_000));
+  assert.equal(await t.allowance(PRESALE_W, c.sale), E(2_000_000));
   assert.equal(await t.balanceOf(result.deployer), 0n);
   assert.equal(await t.trusted(result.deployer), false);
   assert.equal(await t.sale(), c.sale);
   for (const a of [c.auctionHouse, TREASURY, COIN, PRESALE_W, VESTING_W, HOLD_W]) assert.equal(await t.trusted(a), true);
-  assert.equal(c.vesting, undefined);
-  assert.equal(c.lock, undefined);
   const sale = new ethers.Contract(c.sale, art('AxtoSale').abi, provider);
   assert.equal(await sale.holder(), PRESALE_W);
+  const house = new ethers.Contract(c.auctionHouse, art('AxtoAuctionHouse').abi, provider);
+  assert.equal(await house.feeWallet(c.token), COIN);
 });
 
 test('aman diulang: run kedua tidak mendeploy apa pun lagi', async () => {

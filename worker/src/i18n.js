@@ -64,7 +64,7 @@ export const T = {
     exclusive: { title: 'Marketplace eksklusif', lead: 'Hanya di axto.io. Pembayaran hanya koin AXTO. Fee situs 10%.', buyNow: 'Beli sekarang', offer: 'Ajukan penawaran', withdraw: 'Tarik ke wallet', custody: 'Kustodi axto.io' },
     coin: {
       title: 'Koin AXTO', supply: 'Total suplai', price: 'Harga presale', sold: 'Terjual', buyPaypal: 'Beli dengan PayPal', buyUsdc: 'Beli dengan USDC', buyEth: 'Beli dengan ETH',
-      split: [['Seluruh suplai tercetak ke wallet koin pemilik', '10.000.000'], ['Presale axto.io ($10, dijual langsung dari wallet koin pemilik)', '20% · 2.000.000'], ['Tim (rilis 10%/tahun setelah listing DEX, dikelola pemilik)', '30% · 3.000.000'], ['Cadangan DEX (dikelola pemilik)', '30% · 3.000.000'], ['Dikunci 5 tahun (dikelola pemilik)', '20% · 2.000.000']],
+      split: [['Presale axto.io ($10, wallet presale)', '20% · 2.000.000'], ['Vesting = listing DEX (setelah presale habis)', '30% · 3.000.000'], ['Hold 5 tahun', '30% · 3.000.000'], ['Bank owner (+ komisi 10% marketplace AXTO)', '20% · 2.000.000']],
       disclaimer: 'AXTO adalah token utilitas untuk transaksi NFT di axto.io, bukan produk investasi dan tidak dijamin nilainya. Koin yang dibeli tidak dapat diuangkan di axto.io. Pastikan Anda memahami risikonya dan aturan di negara Anda.',
       paypalOff: 'Pembelian lewat PayPal belum dibuka.',
     },
@@ -134,7 +134,7 @@ export const T = {
     exclusive: { title: 'Exclusive marketplace', lead: 'Only on axto.io. Paid in AXTO coin only. 10% site fee.', buyNow: 'Buy now', offer: 'Make an offer', withdraw: 'Withdraw to wallet', custody: 'axto.io custody' },
     coin: {
       title: 'AXTO Coin', supply: 'Total supply', price: 'Presale price', sold: 'Sold', buyPaypal: 'Buy with PayPal', buyUsdc: 'Buy with USDC', buyEth: 'Buy with ETH',
-      split: [['Whole supply minted to the owner coin wallet', '10,000,000'], ['axto.io presale ($10, sold straight from the owner coin wallet)', '20% · 2,000,000'], ['Team (10% a year after DEX listing, managed by the owner)', '30% · 3,000,000'], ['DEX reserve (managed by the owner)', '30% · 3,000,000'], ['Locked for 5 years (managed by the owner)', '20% · 2,000,000']],
+      split: [['axto.io presale ($10, presale wallet)', '20% · 2,000,000'], ['Vesting = DEX listing (after the presale)', '30% · 3,000,000'], ['5-year hold', '30% · 3,000,000'], ['Owner bank (+ 10% AXTO marketplace commission)', '20% · 2,000,000']],
       disclaimer: 'AXTO is a utility token for NFT transactions on axto.io. It is not an investment product and its value is not guaranteed. Coins you buy cannot be cashed out on axto.io. Make sure you understand the risks and the rules in your country.',
       paypalOff: 'PayPal purchases are not open yet.',
     },

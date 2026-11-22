@@ -185,9 +185,11 @@ async function main() {
   };
 
   // 10.000.000 AXTO seluruhnya ke wallet koin pemilik (perintah #39); pemilik membagi sendiri ke alamat-alamatnya
-  const token = await deploy('token', 'AxtoToken', me, COIN);
+  // pembagian langsung (perintah #41): presale 2 jt · vesting/listing DEX 3 jt · hold 5 thn 3 jt · bank (jatah owner) 2 jt
+  const E = (n) => ethers.parseEther(String(n));
+  const token = await deploy('token', 'AxtoToken', me, [PRESALE_W, VESTING_W, HOLD_W, COIN], [E(2_000_000), E(3_000_000), E(3_000_000), E(2_000_000)]);
   const sale = await deploy('sale', 'AxtoSale', COIN, token, net.usdc, net.feed, TREASURY, signer, PRESALE_W); // koin dijual dari wallet presale pemilik
-  const house = await deploy('auctionHouse', 'AxtoAuctionHouse', ADMIN, TREASURY, signer, [net.usdc, token]);
+  const house = await deploy('auctionHouse', 'AxtoAuctionHouse', ADMIN, TREASURY, signer, [net.usdc, token], token, COIN); // komisi 10% AXTO → bank
   st.collections = st.collections ?? {};
   for (const [k, name, sym, max] of COLS) {
     if (st.collections[k]) continue;
@@ -199,7 +201,7 @@ async function main() {
   }
   const T = new ethers.Contract(token, art('AxtoToken').abi, wallet);
   await step('setSale', (o) => T.setSale(sale, PRESALE_W, o));
-  for (const [k, a] of [['trust:house', house], ['trust:treasury', TREASURY], ['trust:presale', PRESALE_W], ['trust:vesting', VESTING_W], ['trust:hold', HOLD_W]]) await step(k, (o) => T.setTrusted(a, true, o));
+  for (const [k, a] of [['trust:house', house], ['trust:treasury', TREASURY]]) await step(k, (o) => T.setTrusted(a, true, o));
   await step('untrust deployer', (o) => T.setTrusted(me, false, o));
   await step('owner token → wallet koin', (o) => T.transferOwnership(COIN, o));
   st.done = true;

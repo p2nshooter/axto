@@ -218,10 +218,10 @@ function coinTransparency(lang, a) {
   const rows = [
     ['token', id ? 'Kontrak token AXTO (impor ke MetaMask)' : 'AXTO token contract (import into MetaMask)', a.token, false],
     ['sale', id ? 'Kontrak beli otomatis (kirim ETH ke sini = beli AXTO $10)' : 'Automatic purchase contract (send ETH here = buy AXTO at $10)', a.sale, false],
-    ['bank', id ? 'Bank Koin AXTO (pemegang 10.000.000 saat deploy)' : 'AXTO coin bank (holds 10,000,000 at deploy)', a.bank, true],
+    ['bank', id ? 'Bank Koin AXTO (jatah owner 2.000.000 + komisi 10% marketplace AXTO)' : 'AXTO coin bank (owner share 2,000,000 + 10% AXTO marketplace commission)', a.bank, true],
     ['presale', id ? 'Wallet presale (sumber koin yang dijual, 2.000.000)' : 'Presale wallet (source of coins sold, 2,000,000)', a.presale, true],
-    ['vesting', id ? 'Wallet vesting tim (3.000.000)' : 'Team vesting wallet (3,000,000)', a.vesting, true],
-    ['hold', id ? 'Wallet hold 5 tahun (2.000.000)' : '5-year hold wallet (2,000,000)', a.hold, true],
+    ['vesting', id ? 'Wallet vesting = listing DEX (3.000.000, dibuka setelah presale habis)' : 'Vesting wallet = DEX listing (3,000,000, released after the presale)', a.vesting, true],
+    ['hold', id ? 'Wallet hold 5 tahun (3.000.000)' : '5-year hold wallet (3,000,000)', a.hold, true],
     ['treasury', id ? 'Treasury (penerima uang penjualan)' : 'Treasury (receives sale proceeds)', a.treasury, true],
   ];
   const link = (x) => (x ? `<a class="link" href="${esc(a.explorer)}/${x === a.token ? 'token' : 'address'}/${esc(x)}" target="_blank" rel="noopener"><code>${esc(x)}</code></a>` : `<span class="muted">${id ? 'aktif setelah deploy' : 'live after deploy'}</span>`);

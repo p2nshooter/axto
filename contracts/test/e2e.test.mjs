@@ -25,6 +25,7 @@ const art = (n) => JSON.parse(readFileSync(new URL(`../out/${n}.json`, import.me
 const E = (n) => ethers.parseEther(String(n));
 const U = (n) => ethers.parseUnits(String(n), 6);
 const ZERO = ethers.ZeroAddress;
+const BANK = '0x6918A3C9a58E71B3bca993e8cDD2630D2DDB6469';
 
 /** R2 tiruan (get/put + onlyIf etagDoesNotMatch) untuk VAULT_STORE. */
 function memR2() {
@@ -96,9 +97,9 @@ before(async () => {
   chainId = (await provider.getNetwork()).chainId;
   usdc = await deploy('MockUSDC');
   const feed = await deploy('MockFeed', 2000n * 10n ** 8n);
-  token = await deploy('AxtoToken', owner.address, owner.address);
+  token = await deploy('AxtoToken', owner.address, [owner.address], [E(10_000_000)]);
   sale = await deploy('AxtoSale', owner.address, await token.getAddress(), await usdc.getAddress(), await feed.getAddress(), treasury.address, signerW.address, owner.address);
-  house = await deploy('AxtoAuctionHouse', owner.address, treasury.address, signerW.address, [await usdc.getAddress(), await token.getAddress()]);
+  house = await deploy('AxtoAuctionHouse', owner.address, treasury.address, signerW.address, [await usdc.getAddress(), await token.getAddress()], await token.getAddress(), BANK);
   col = await deploy('AxtoCollection', { name: 'AXTO Time', symbol: 'AXTIME', maxSupply: 2_000_000, owner: owner.address, royaltyReceiver: treasury.address, baseURI: 'https://axto.io/api/meta/time/', contractURI: 'https://axto.io/api/contract/time', custody: owner.address, premint: 2_000_000, operator: await house.getAddress(), signer: ZERO });
   colEx = await deploy('AxtoCollection', { name: 'AXTO Exclusive Time', symbol: 'AXXTIME', maxSupply: 50_000, owner: owner.address, royaltyReceiver: treasury.address, baseURI: 'https://axto.io/api/meta/ex-time/', contractURI: 'https://axto.io/api/contract/ex-time', custody: ZERO, premint: 0, operator: ZERO, signer: signerW.address });
   await (await token.setSale(await sale.getAddress(), owner.address)).wait();
@@ -171,10 +172,10 @@ test('4. lelang eksklusif dibayar AXTO (kustodi axto.io, mode 2), lalu resale ma
   const rl = runLot('axto:ex-time:3:r1', 'AXTO', [{ who: carol.address, kind: 'fixed', bid: r }], 1000);
   const q = await attestAndClaim({ lot: rl, winnerWallet: carol, winBid: r, colAddr: cx, tokenId: 3, currency: ax, cur: 'AXTO', seller: bob.address, mode: 2 });
   await (await token.connect(carol).approve(await house.getAddress(), BigInt(q.result.price))).wait();
-  const [bob0, tr0] = [await token.balanceOf(bob.address), await token.balanceOf(treasury.address)];
+  const [bob0, tr0] = [await token.balanceOf(bob.address), await token.balanceOf(BANK)];
   await (await carol.sendTransaction({ ...q.tx, gasLimit: 600_000 })).wait();
   assert.equal((await token.balanceOf(bob.address)) - bob0, E(0.9));
-  assert.equal((await token.balanceOf(treasury.address)) - tr0, E(0.1));
+  assert.equal((await token.balanceOf(BANK)) - tr0, E(0.1)); // komisi 10% AXTO → bank koin pemilik (#41)
   // WD: vault menerbitkan voucher mint untuk pemilik kustodi (carol); carol mint sendiri (bayar gas)
   const v = await methods.mintVoucher(env, { collection: cx, collectionName: 'AXTO Exclusive Time', tokenId: '3', owner: carol.address, custodyRef: 'ex-time:3:r1' });
   await (await colEx.connect(carol).mintWithVoucher(v.to, v.tokenId, v.ref, v.deadline, v.sig, { gasLimit: 400_000 })).wait();
