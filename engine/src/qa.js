@@ -62,7 +62,7 @@ export async function qaToken(key, tokenId, provider) {
     }
   }
   const hash = await sha256Hex(canonical(d));
-  return { ok: errors.length === 0, hash, errors, tier: d.tier.usd };
+  return { ok: errors.length === 0, hash, errors, tier: d.tier.name };
 }
 
 /** Akar batch = sha256 dari gabungan hash berurutan. */

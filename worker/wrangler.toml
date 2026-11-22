@@ -1,0 +1,63 @@
+# axto.io — Worker publik. Penyimpanan: R2 saja (aturan pemilik: jangan pernah D1). KV hanya cache pendek & rate limit.
+name = "axto-web"
+main = "src/index.js"
+compatibility_date = "2026-10-01"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = false
+routes = [
+  { pattern = "axto.io", custom_domain = true },
+  { pattern = "www.axto.io", custom_domain = true },
+]
+
+[assets]
+directory = "public"
+binding = "ASSETS"
+run_worker_first = true
+
+[[r2_buckets]]
+binding = "STORE"
+bucket_name = "axto-data"
+
+[[kv_namespaces]]
+binding = "CACHE"
+id = "REPLACE_WITH_KV_ID" # dibuat oleh workflow deploy (wrangler kv namespace create axto-cache)
+
+[[durable_objects.bindings]]
+name = "LEDGER"
+class_name = "Ledger"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Ledger"]
+
+# Vault tersembunyi (repo privat coinaxto): tanpa route, workers_dev=false. Hanya bisa dipanggil lewat binding ini.
+[[services]]
+binding = "VAULT"
+service = "axto-vault"
+entrypoint = "Vault"
+
+[triggers]
+crons = ["*/5 * * * *", "17 2 * * *"] # tick lelang tiap 5 menit; cadangan harian R2 (simpan 35 hari)
+
+[vars]
+BASE_URL = "https://axto.io"
+CHAIN_ID = "8453"
+ADMIN_WALLET = "0x38Cd3F76a132f70b12C9E4ea6aDAFaCF62483166"
+TREASURY = "0xDC39C04E704b1fec2BE648c49c842B2B17AfEBDA"
+GENESIS_MS = "0"   # 0 = lelang belum dibuka; diisi saat peluncuran (ms epoch, Senin 00:00 UTC)
+PAYPAL_COIN_SALE = "off" # on hanya setelah PayPal menyetujui penjualan aset kripto untuk akun ini
+MODEL_CONSENT = "" # isi "luaja-1" hanya setelah izin tertulis model tersimpan (engine/consent/luaja-1.json)
+# Rahasia (wrangler secret put): SESSION_KEY, DATA_KEY, ENGINE_HMAC_KEY, VAULT_HMAC_KEY, OPENSEA_API_KEY
+BASE_RPC = "https://mainnet.base.org"
+USDC = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" # USDC native di Base
+# Alamat kontrak diisi workflow deploy setelah contracts/scripts/deploy.mjs berjalan (kosong = fitur on-chain nonaktif)
+AUCTION_HOUSE = ""
+AXTO_TOKEN = ""
+AXTO_SALE = ""
+COLLECTION_TIME = ""
+COLLECTION_STAMP = ""
+COLLECTION_QURAN = ""
+COLLECTION_MODEL = ""
+COLLECTION_EX_TIME = ""
+COLLECTION_EX_STAMP = ""
+COLLECTION_EX_QURAN = ""

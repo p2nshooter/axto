@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Engine (DNA, renderer, QA, lelang)
+        working-directory: engine
+        run: npm test
+      - name: Engine QA dry-run (200 karya per koleksi)
+        working-directory: engine
+        env:
+          DRY_RUN: '1'
+        run: node bin/produce.mjs
+      - name: Kontrak (solc-js + ganache)
+        working-directory: contracts
+        run: |
+          npm ci
+          node scripts/compile.mjs
+          node --test test/*.test.mjs
+      - name: Worker (kripto, bundel)
+        working-directory: worker
+        run: |
+          npm ci
+          npm test
+          npx wrangler deploy --dry-run --outdir dist
+      - name: AdSense axto.io (3 akun, 1 loader)
+        working-directory: worker
+        run: |
+          node -e "
+          import('./src/adsense.js').then(({ ADS_TXT, adsenseHead, ADSENSE_ACCOUNTS }) => {
+            const fs = require('fs');
+            const want = ['6560360898389273', '4906992051458194', '5928074389292014'];
+            if (ADSENSE_ACCOUNTS.length !== 3 || !want.every((p) => ADSENSE_ACCOUNTS.includes('ca-pub-' + p))) throw new Error('akun AdSense harus tepat 3');
+            if (fs.readFileSync('public/ads.txt', 'utf8') !== ADS_TXT) throw new Error('public/ads.txt berbeda dari adsense.js');
+            if ((adsenseHead().match(/adsbygoogle.js/g) || []).length !== 1) throw new Error('harus tepat satu loader');
+            console.log('AdSense OK');
+          });"

@@ -47,12 +47,15 @@ test('deterministik: tokenId sama → DNA & metadata sama', () => {
   assert.deepEqual(metadata('stamp', 9), metadata('stamp', 9));
 });
 
-test('tier harga hanya $5/$10/$20/$50/$100 dan distribusi wajar', () => {
-  const cnt = { 5: 0, 10: 0, 20: 0, 50: 0, 100: 0 };
-  for (let i = 1; i <= 20000; i += 1) cnt[dna('stamp', i).tier.usd] += 1;
-  assert.deepEqual(Object.keys(cnt).map(Number), [5, 10, 20, 50, 100]);
-  assert.ok(cnt[5] > cnt[100] * 5, JSON.stringify(cnt));
-  assert.ok(cnt[100] > 0);
+test('tier = label kelangkaan (5 tingkat, distribusi wajar); harga mulai $1 untuk semua', () => {
+  const cnt = [0, 0, 0, 0, 0];
+  for (let i = 1; i <= 20000; i += 1) cnt[dna('stamp', i).tier.rank] += 1;
+  assert.ok(cnt[0] > cnt[4] * 5, JSON.stringify(cnt));
+  assert.ok(cnt.every((n) => n > 0), JSON.stringify(cnt));
+  for (const [c, id] of [['time', 7], ['stamp', 1_999_999], ['quran', 2_000_000], ['model', 3], ['ex-time', 50_000], ['ex-quran', 1]]) {
+    const price = metadata(c, id).attributes.find((a) => a.trait_type === 'Starting Price (USD)');
+    assert.equal(price.value, '1', c);
+  }
 });
 
 test('tokenId di luar rentang ditolak', () => {

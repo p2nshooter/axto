@@ -1,0 +1,41 @@
+name: Engine produksi (24 jam)
+
+# Tiap jam: lanjut dari checkpoint ledger axto.io → generate + QA → commit ber-HMAC. Gagal → tidak ada commit;
+# run berikutnya melanjutkan dari titik yang sama. Tanpa R2 untuk koleksi publik (generatif).
+on:
+  schedule:
+    - cron: '7 * * * *'
+  workflow_dispatch:
+    inputs:
+      collections:
+        description: 'Koleksi (koma), kosong = semua'
+        required: false
+      batch:
+        description: 'Ukuran batch per koleksi'
+        required: false
+        default: '20000'
+
+concurrency:
+  group: engine
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  produce:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Produksi + QA + commit
+        working-directory: engine
+        env:
+          AXTO_API: https://axto.io
+          ENGINE_HMAC_KEY: ${{ secrets.ENGINE_HMAC_KEY }}
+          COLLECTIONS: ${{ inputs.collections }}
+          BATCH: ${{ inputs.batch || '20000' }}
+        run: node bin/produce.mjs

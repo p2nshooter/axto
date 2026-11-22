@@ -135,13 +135,16 @@ export function assertTokenId(c, tokenId) {
   }
 }
 
-/** Tier harga mulai lelang (USD). Persentil skor keunikan → tier. */
+/** Pemilik: „Auction star $1 semuanya tanpa kecuali" — setiap lot (publik & eksklusif) mulai $1. */
+export const START_USD = 1;
+
+/** Tier kelangkaan (bukan harga). Persentil skor keunikan → tier; rank menentukan fitur player. */
 export const TIERS = [
-  { usd: 5, upTo: 0.5, name: 'Classic' },
-  { usd: 10, upTo: 0.75, name: 'Rare' },
-  { usd: 20, upTo: 0.9, name: 'Epic' },
-  { usd: 50, upTo: 0.98, name: 'Legendary' },
-  { usd: 100, upTo: 1.0000001, name: 'Masterpiece' },
+  { rank: 0, upTo: 0.5, name: 'Classic' },
+  { rank: 1, upTo: 0.75, name: 'Rare' },
+  { rank: 2, upTo: 0.9, name: 'Epic' },
+  { rank: 3, upTo: 0.98, name: 'Legendary' },
+  { rank: 4, upTo: 1.0000001, name: 'Masterpiece' },
 ];
 
 /**

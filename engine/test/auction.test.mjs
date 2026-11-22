@@ -26,13 +26,17 @@ test('pemilihan lot: penawaran tertinggi dulu, lalu urutan produksi', () => {
   assert.deepEqual(ids, [9, 50, 1, 2]);
 });
 
-test('harga mulai: tier USD → unit USDC & AXTO ($10/AXTO)', () => {
-  assert.equal(A.startUnits(5, 'USDC'), 500);
-  assert.equal(A.startUnits(100, 'USDC'), 10000);
-  assert.equal(A.startUnits(5, 'AXTO'), 500); // 0,5 AXTO
-  assert.equal(A.startUnits(100, 'AXTO'), 10000); // 10 AXTO
-  assert.equal(A.toBase(500, 'USDC'), '5000000');
-  assert.equal(A.toBase(500, 'AXTO'), '500000000000000000');
+test('harga mulai $1 untuk semua lot tanpa kecuali (USDC & AXTO, $10/AXTO)', () => {
+  assert.equal(A.START_USD, 1);
+  assert.equal(A.startUnits(), 100); // 1 USDC
+  assert.equal(A.startUnits(A.START_USD, 'USDC'), 100);
+  assert.equal(A.startUnits(A.START_USD, 'AXTO'), 100); // 0,1 AXTO = $1
+  for (const c of ['time', 'stamp', 'quran', 'model', 'ex-time', 'ex-stamp', 'ex-quran']) {
+    const cur = c.startsWith('ex-') ? 'AXTO' : 'USDC';
+    assert.equal(A.newLot({ lotId: c, collection: c, tokenId: 1, currency: cur }).start, 100, c);
+  }
+  assert.equal(A.toBase(100, 'USDC'), '1000000');
+  assert.equal(A.toBase(100, 'AXTO'), '100000000000000000');
 });
 
 test('contoh pemilik: A $1, B $3 (lepas A), C $5 (lepas B), D $10 saldo kurang → ditolak', () => {

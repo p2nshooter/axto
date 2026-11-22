@@ -157,7 +157,7 @@ export function timePlayer(d, meta, opts = {}) {
   const [form, theme, digit, motion] = d.pick;
   const [, , , , , on, off] = theme;
   const svg = timeSvg(d, '00:00', '00');
-  const world = d.tier.usd >= 100;
+  const world = d.tier.rank >= 4;
   const n = opts.nonce ? ` nonce="${opts.nonce}"` : '';
   const anim = `.spin{transform-origin:500px 500px;animation:sp 24s linear infinite}.drift{animation:dr 9s ease-in-out infinite alternate}.pulse{transform-origin:500px 500px;animation:pu 2.4s ease-in-out infinite}.blink{animation:bl 1s steps(1) infinite}@keyframes sp{to{transform:rotate(360deg)}}@keyframes dr{to{transform:translateY(40px)}}@keyframes pu{50%{transform:scale(1.04);opacity:.4}}@keyframes bl{50%{opacity:.25}}@media(prefers-reduced-motion:reduce){*{animation:none!important}}`;
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(meta.name)}</title><style${n}>html,body{margin:0;height:100%;background:#000;overflow:hidden}#s{width:100vmin;height:100vmin;margin:auto;display:block;touch-action:none}#s svg{width:100%;height:100%}#w{position:fixed;inset:0;display:none}#tz{position:fixed;right:8px;bottom:8px;font:12px system-ui;color:#fff;background:#0008;border:1px solid #fff3;border-radius:8px;padding:4px}${anim}</style></head><body><div id="s">${svg}</div><svg id="w" viewBox="0 0 1600 1000"></svg><select id="tz" aria-label="Time zone"></select><script${n}>

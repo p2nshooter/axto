@@ -5,6 +5,8 @@
  *   USDC → 1 unit = $0,01 (= 10^4 base unit USDC 6 desimal)
  *   AXTO → 1 unit = 0,001 AXTO (= 10^15 base unit AXTO 18 desimal)
  */
+import { START_USD } from './core.js';
+export { START_USD };
 export const HOUR = 3_600_000;
 export const ROUND_MS = 72 * HOUR;
 export const SEAL_BEFORE_MS = HOUR;
@@ -19,8 +21,11 @@ export const CURRENCY = {
   AXTO: { unitBase: 10n ** 15n, decimals: 18, unitLabel: 0.001 },
 };
 
-/** Harga mulai dalam unit. refUsdPerAxto = harga acuan AXTO (presale $10). */
-export function startUnits(usd, currency, refUsdPerAxto = 10) {
+/**
+ * Harga mulai dalam unit. Pemilik: „Auction star $1 semuanya tanpa kecuali" → default START_USD ($1) untuk setiap lot:
+ * 1 USDC = 100 unit, 0,1 AXTO = 100 unit (acuan presale $10/AXTO).
+ */
+export function startUnits(usd = START_USD, currency = 'USDC', refUsdPerAxto = 10) {
   if (currency === 'USDC') return Math.round(usd * 100);
   if (currency === 'AXTO') return Math.round((usd / refUsdPerAxto) * 1000);
   throw new Error(`mata uang ${currency}?`);
@@ -65,7 +70,7 @@ export function selectLots(offered, fifo, n) {
 }
 
 /** Lot baru (atau buku penawaran stok menunggu: endAt = null). */
-export function newLot({ lotId, collection, tokenId, currency, start, endAt = null }) {
+export function newLot({ lotId, collection, tokenId, currency, start = startUnits(START_USD, currency), endAt = null }) {
   return { lotId, collection, tokenId, currency, start, endAt, origEnd: endAt, price: 0, leader: null, leaderMax: 0, leaderKind: null, bids: [], status: endAt ? 'live' : 'offer', winner: null, claim: null, cascade: 0 };
 }
 

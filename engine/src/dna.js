@@ -50,7 +50,7 @@ export function spaceSize(key) {
 /**
  * Hitung DNA. Hasil murni dari (koleksi, tokenId).
  * @returns {{key:string, kind:string, tokenId:number, exclusive:boolean, digits:number[], pick:any[], series?:any,
- *   score:number, percentile:number, tier:{usd:number,name:string}, seed:number, names:string[]}}
+ *   score:number, percentile:number, tier:{rank:number,name:string}, seed:number, names:string[]}}
  */
 export function dna(key, tokenId) {
   const c = collection(key);
@@ -84,7 +84,7 @@ export function dna(key, tokenId) {
 }
 
 /** Indeks tier 0..4 (untuk filter). */
-export const tierIndex = (t) => TIERS.findIndex((x) => x.usd === t.usd);
+export const tierIndex = (t) => TIERS.findIndex((x) => x.rank === t.rank);
 
 /** Representasi kanonik untuk hash keunikan. */
 export function canonical(d) {

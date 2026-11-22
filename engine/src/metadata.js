@@ -1,7 +1,7 @@
 /**
  * Metadata token (standar OpenSea) + konteks render. Semua deterministik dari dna().
  */
-import { collection } from './core.js';
+import { collection, START_USD } from './core.js';
 import { dna, traitNameId } from './dna.js';
 import { SURAH, juzStart, pageStart, globalFromAyah, ayahFromGlobal } from './catalog/quran.js';
 import { timeSvg, timePlayer } from './render/time.js';
@@ -83,7 +83,8 @@ export async function renderCtx(d, provider = {}) {
   }
   if (d.kind === 'model' && provider.head) {
     const p = d.pick[0][5];
-    return { head: { href: await provider.head(d.pick[0][4], p[1]), ar: p[2], cx: p[3], chin: p[4] } };
+    const href = await provider.head(d.pick[0][4], p[1]);
+    return href ? { head: { href, ar: p[2], cx: p[3], chin: p[4] } } : {};
   }
   return {};
 }
@@ -124,7 +125,7 @@ function description(d, ref, base) {
     model: 'Karya figur beranimasi dari seri model AXTO, dibuat dengan izin tertulis model.',
   }[d.kind];
   const only = c.exclusive ? '\n\nExclusive edition — sold only on axto.io. / Edisi eksklusif — hanya dijual di axto.io.' : '';
-  return `${en}\n\n${id}${only}\n\nEdition ${edition} · Starting tier: ${d.tier.name} ($${d.tier.usd}) · Certificate: ${cert}\n\n© AXTO (axto.io). The owner may display the artwork for personal and promotional use; copyright of the artwork remains with AXTO. Resale royalty 10%.`;
+  return `${en}\n\n${id}${only}\n\nEdition ${edition} · Rarity: ${d.tier.name} · Auction starts at $${START_USD} / Lelang mulai $${START_USD} · Certificate: ${cert}\n\n© AXTO (axto.io). The owner may display the artwork for personal and promotional use; copyright of the artwork remains with AXTO. Resale royalty 10%.`;
 }
 
 /** Metadata ERC-721 untuk tokenURI. */
@@ -141,7 +142,7 @@ export function metadata(key, tokenId, base = 'https://axto.io') {
   }
   attrs.push(
     { trait_type: 'Tier', value: d.tier.name },
-    { trait_type: 'Starting Price (USD)', value: String(d.tier.usd) },
+    { trait_type: 'Starting Price (USD)', value: String(START_USD) },
     { trait_type: 'Edition', value: '1/1' },
     { trait_type: 'Collection', value: c.exclusive ? 'Exclusive' : 'Public' },
     { display_type: 'number', trait_type: 'Uniqueness Score', value: d.score },

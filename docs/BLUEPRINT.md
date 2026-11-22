@@ -21,7 +21,7 @@ Tanda status di §18: `[x]` selesai dan teruji di repo · `[~]` kode ada, belum 
 | Supply per karya | **1** (ERC-721, 1/1). Satu desain = satu token = satu pemilik, tidak pernah dicetak ulang |
 | Penjualan | **Semua lewat lelang 72 jam** (English auction) di axto.io. OpenSea sudah menghapus English auction (OS2), jadi lelang berjalan di axto.io dan diselesaikan on-chain; NFT yang sudah diklaim tampil & diperdagangkan di OpenSea |
 | Ukuran ronde | **10% dari stok siap** per koleksi, ronde 72 jam bersambung tanpa jeda; jumlah lot **dikunci 1 jam sebelum live** |
-| Harga mulai | **$5 / $10 / $20 / $50 / $100** sesuai skor keunikan (tier) |
+| Harga mulai | **$1 untuk semua lelang, tanpa kecuali** (publik, eksklusif, AXTO); tier = label kelangkaan saja (#26) |
 | Kenaikan | Otomatis **+10%** (tombol & proxy-bid); manual bebas asal > tawaran tertinggi |
 | Dana tawaran | **Tetap di wallet member** (allowance ERC-20). Hold dihitung sistem; outbid → hold dilepas; saldo kurang → ditolak |
 | Gas | **Ditanggung pemenang/pembeli** (pemenang mengirim transaksi klaim). Produksi & listing: **$0** (lazy mint) |
@@ -63,9 +63,11 @@ Perintah yang lebih baru **menggantikan** yang lama bila bertentangan.
 | 19 | Repo axto; coinaxto privat, worker tanpa domain | **Berlaku** (§3, §12) |
 | 20 | Pakai kunci OpenSea akun `axto-io` (rate limit 120/60/60 per menit) | **Berlaku** (§13); kunci lama di chat **wajib diputar ulang** |
 | 21 | Semua penjualan lelang 72 jam | **Berlaku** |
-| 22 | Ronde 2000 NFT start $1 | **Diganti** oleh #24 |
+| 22 | Ronde 2000 NFT start $1 | **Diganti**: ukuran ronde oleh #24 (10% stok siap); start $1 kembali berlaku lewat #26 |
 | 23 | Harga koin berjenjang rahasia 10/15/20/25/30 | **Dibatalkan pemilik** → stabil $10 sampai 2 jt terjual, DEX mulai $10 |
-| 24 | Start $5–$100 sesuai keunikan, +10% otomatis, manual bebas, ronde 10% stok siap, kunci jumlah 1 jam sebelum live, 2 jt per koleksi (jam, prangko, Qur'an, model) | **Berlaku (final)** |
+| 24 | Start $5–$100 sesuai keunikan, +10% otomatis, manual bebas, ronde 10% stok siap, kunci jumlah 1 jam sebelum live, 2 jt per koleksi (jam, prangko, Qur'an, model) | **Berlaku, kecuali harga start** → diganti #26 |
+| 26 | „Auction star $1 semuanya tanpa kecuali" | **Berlaku (final)**: semua lot mulai $1 (USDC) / setara $1 dalam AXTO; tier tetap sebagai label kelangkaan & penentu fitur player |
+| 27 | AdSense: hanya 3 akun, juga di axto.io (6560360898389273, 4906992051458194, 5928074389292014) | **Berlaku** (§10.5) |
 | 25 | Gas ditanggung pemenang | **Berlaku** |
 
 ---
@@ -169,7 +171,7 @@ Semua temuan di atas sudah tercermin di bagian-bagian berikut.
                                                          • PayPal: buat order, capture, verifikasi webhook
                                                          • voucher koin, attestasi lelang, voucher WD
  Chain (Base) ◄── member (MetaMask/Trust Wallet) mengirim sendiri: approve, claim, buy, withdraw
-   AxtoCollection ×4 publik + ×1 eksklusif · AxtoAuctionHouse · AxtoToken · AxtoSale · AxtoVesting · AxtoLock
+   AxtoCollection ×4 publik + ×3 eksklusif · AxtoAuctionHouse · AxtoToken · AxtoSale · AxtoVesting · AxtoLock
  OpenSea ◄── membaca kontrak (tokenURI → axto.io/api/meta) · refresh metadata via API (≤ 50/menit)
 ```
 
@@ -188,7 +190,8 @@ masuk adalah Service Binding dari `axto-web` (RPC `WorkerEntrypoint`), ditambah 
 - `combo` diuraikan *mixed-radix* menjadi sifat (bentuk, tema, gaya, palet, gerak, …).
 - `seed = sha256(kunciKoleksi ‖ tokenId)` untuk variasi mikro (letak permata, partikel) — tidak memengaruhi keunikan.
 - `dnaHash = sha256(json sifat)`; batch QA menolak bila ada hash kembar (sabuk pengaman ganda).
-- Tier harga dari skor kelangkaan sifat: kuantil 50% → $5, 25% → $10, 15% → $20, 8% → $50, 2% → $100
+- Tier kelangkaan dari skor sifat: kuantil 50% Classic, 25% Rare, 15% Epic, 8% Legendary, 2% Masterpiece. Tier **bukan**
+  harga: semua lelang mulai $1 (#26); tier hanya menentukan label dan fitur player
   (ambang dihitung tes dan dikunci di kode).
 
 ### 4.1 TIME — jam digital hidup (2.000.000)
@@ -201,7 +204,7 @@ Tema bahan: 5 tema awal (Emerald Royale, Sapphire Frost, Amethyst Nebula, Ruby E
 keramik, kayu, kaca, neon, holografik, cyberpunk, minimal, mewah emas, void hitam-putih, bloodline merah, aureum, quantum.
 Gaya angka: tujuh segmen, dot-matrix, nixie, flip, orbit, cair, biner, hibrida analog. Gerak: detak, nadi, parallax,
 partikel, putar, gelombang. Jam selalu menampilkan waktu nyata; pemilik bisa memilih zona waktu (`?tz=`).
-Tier $100: **"World Clock Canvas"** — satu kanvas berisi ratusan jam kota dunia (zona waktu nyata), bisa di-zoom/pan
+Tier Masterpiece: **"World Clock Canvas"** — satu kanvas berisi ratusan jam kota dunia (zona waktu nyata), bisa di-zoom/pan
 tanpa pecah (vektor).
 
 ### 4.2 STAMP — prangko (2.000.000)
@@ -211,7 +214,7 @@ memakai nama/lambang negara nyata atau logo pos resmi. Seri: antariksa, flora, f
 arsitektur & masjid, teknologi, kecerdasan buatan, laut, transportasi, olahraga, musik tradisional, sains, kota dunia
 (generik), peristiwa alam, dunia esok. Bingkai: perforasi klasik, souvenir sheet, segitiga, wajik, bulat, heksagon,
 airmail, se-tenant, miniatur, booklet. Mode: **statis**, **bergerak** (hewan berjalan, planet berputar, pilot
-melambai), **premium zoom** (tier $50/$100: peta galaksi/peta dunia prosedural — tiap titik di-zoom memperlihatkan
+melambai), **premium zoom** (tier Legendary/Masterpiece: peta galaksi/peta dunia prosedural — tiap titik di-zoom memperlihatkan
 planet, bintang, komet dengan nama; vektor, tidak pecah). Setiap prangko punya nomor seri, tahun terbit, nilai nominal,
 seri koleksi, album.
 
@@ -271,6 +274,7 @@ Setiap koleksi punya rantai ronde sendiri (7 rantai: 4 publik + 3 eksklusif). Ro
 urut produksi. Daftar lot ditandatangani vault (`roundSeal`) dan ditulis ke R2 `r/<koleksi>/<k>.json`.
 
 ### 6.3 Menawar
+- Harga start: **$1 untuk setiap lot tanpa kecuali** (#26) — publik 1 USDC, eksklusif 0,1 AXTO (= $1 pada $10/AXTO).
 - Mata uang: **USDC** (publik, harga $), **AXTO** (eksklusif; $ dikonversi dengan harga acuan $10/AXTO selama presale).
 - Syarat: member terdaftar, lot live, `jumlah ≥ start` dan `> tertinggi`. Tombol "+10%" dan **proxy-bid** (isi
   maksimum, sistem menaikkan +10% otomatis saat disalip sampai maksimum).
@@ -384,6 +388,17 @@ Logo AXTO (koin logam biru) dari pemilik di `worker/public/logo.png`; favicon SV
 PNG 192/512. Gaya "museum digital premium": gelap, emas/biru logam, tipografi tegas; tanpa logo Ethereum/kata "NFT"
 berlebihan di karya.
 
+
+### 10.5 AdSense (perintah #27)
+Hanya 3 akun. Setiap halaman HTML: tiga tag meta `google-adsense-account` + **satu** loader (akun utama axto.io
+`ca-pub-5928074389292014`), dari `worker/src/adsense.js`. `worker/public/ads.txt`:
+```
+google.com, pub-6560360898389273, DIRECT, f08c47fec0942fa0
+google.com, pub-4906992051458194, DIRECT, f08c47fec0942fa0
+google.com, pub-5928074389292014, DIRECT, f08c47fec0942fa0
+```
+Sumber yang sama dengan `adsense-stack.json` di repo ulyah.com (primary `axto.io`). Iklan tidak dipasang di halaman
+player `/play/...` (di-frame OpenSea) maupun portal admin.
 ---
 
 ## 11. Portal
@@ -499,9 +514,9 @@ Status diperbarui setiap commit. (Lihat juga README.)
 
 ### Tahap A — Fondasi kode (repo)
 - [x] Blueprint ini (3 putaran review)
-- [x] Engine: Feistel bijektif, DNA, katalog 4 koleksi + eksklusif, tier harga, metadata ID/EN — teruji
+- [x] Engine: Feistel bijektif, DNA, katalog 4 koleksi + eksklusif, tier kelangkaan, metadata ID/EN — teruji
 - [x] Renderer SVG + player HTML (jam, prangko + zoom galaksi, kaligrafi 3D + qari + penunjuk kata, model) — teruji QA
-- [x] Logika lelang murni (segel 10%, start tier, +10%/proxy, hold, cascade, penawaran menunggu) — teruji
+- [x] Logika lelang murni (segel 10%, start $1 semua lot, +10%/proxy, hold, cascade, penawaran menunggu) — teruji
 - [x] Kontrak Solidity — dikompilasi & teruji (ganache)
 - [~] Worker axto-web (router, i18n, SEO, banner, portal, API, DO Ledger/Round, PayPal relay)
 - [~] Vault axto-vault (RPC, signer EIP-712, PayPal)

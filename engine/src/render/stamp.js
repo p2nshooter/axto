@@ -139,8 +139,8 @@ export const VECTOR_ZOOM_JS = `function vzoom(svg){let vb=svg.viewBox.baseVal;le
 export function stampPlayer(d, meta, opts = {}) {
   const [, series, , , pal, mode] = d.pick;
   const n = opts.nonce ? ` nonce="${opts.nonce}"` : '';
-  const animated = mode[0] !== 'static' || d.exclusive || d.tier.usd >= 20;
-  const galaxy = d.tier.usd >= 50 && (series[0] === 'space' || d.tier.usd >= 100);
+  const animated = mode[0] !== 'static' || d.exclusive || d.tier.rank >= 2;
+  const galaxy = d.tier.rank >= 3 && (series[0] === 'space' || d.tier.rank >= 4);
   const svg = stampSvg(d).replace('<svg ', '<svg id="st" ');
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(meta.name)}</title><style${n}>html,body{margin:0;height:100%;background:#0a0806;overflow:hidden;font-family:system-ui}#st{width:100vmin;height:100vmin;display:block;margin:auto;touch-action:none;cursor:grab}#g{position:fixed;inset:0;width:100%;height:100%;display:none;touch-action:none}.b{position:fixed;right:8px;bottom:8px;display:flex;gap:6px}.b button{background:#000a;color:#fff;border:1px solid #fff4;border-radius:8px;padding:6px 10px;font:12px system-ui}${animated ? ANIM_CSS : ''}</style></head><body>${svg}<canvas id="g"></canvas><div class="b"><button id="zr" type="button">1:1</button>${galaxy ? '<button id="gx" type="button">Galaxy</button>' : ''}</div><script${n}>${VECTOR_ZOOM_JS};${galaxy ? GALAXY_JS : ''}
 const s=document.getElementById('st');vzoom(s);document.getElementById('zr').onclick=()=>s.setAttribute('viewBox','0 0 1000 1000');

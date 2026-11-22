@@ -205,6 +205,7 @@ test('listing DEX setelah 365 hari; vesting tim 10%/tahun; lock 5 tahun', async 
   await (await vest.release()).wait();
   await revert(lock.release());
   await warp(4 * 365 * 86400);
-  await (await lock.release()).wait();
+  // ganache 7: eth_estimateGas dengan field nonce gagal setelah evm_increaseTime besar (tanpa nonce lolos) → gas eksplisit
+  await (await lock.release({ gasLimit: 120_000 })).wait();
   assert.equal(await token.balanceOf(await lock.getAddress()), 0n);
 });
