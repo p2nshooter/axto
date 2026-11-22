@@ -16,6 +16,7 @@ import * as A from '../../engine/src/auction.js';
 import { COLLECTIONS } from '../../engine/src/core.js';
 import { readJSON, putJSON, appendLog, listKeys, createOnce, update } from './r2.js';
 import { vault } from './vault.js';
+import { withCfg } from './config.js';
 import { recover, domainSeparator, bidStructHash, typedHash, lotIdHex, spendable, ownerOf, isAddress } from './eth.js';
 
 export const KEYS = Object.keys(COLLECTIONS);
@@ -31,12 +32,16 @@ const lotKey = (c, id) => `axto:${c}:${id}`;
 export class Ledger extends DurableObject {
   constructor(ctx, env) {
     super(ctx, env);
+    this.rawEnv = env;
     this.env = env;
     this.s = {}; // per koleksi: {state, sold:Uint8Array, soldDirty, rounds: Map k→seal, inRound: Map id→k, lots: Map id→lot}
     ctx.blockConcurrencyWhile(() => this.load());
   }
 
   get genesis() { return Number(this.env.GENESIS_MS || 0); }
+
+  /** Alamat kontrak aktif (R2 cfg/active.json) menimpa variabel wrangler. */
+  async refreshEnv() { this.env = await withCfg(this.rawEnv); }
 
   async load() {
     const B = this.env.STORE;
@@ -195,6 +200,7 @@ export class Ledger extends DurableObject {
    * units = jumlah tetap atau batas proxy (unit 0,01 USDC / 0,001 AXTO).
    */
   async bid(b) {
+    await this.refreshEnv();
     const { c, tokenId, bidder, kind } = b;
     const x = this.s[c];
     if (!x) return { ok: false, error: 'collection' };
@@ -243,6 +249,7 @@ export class Ledger extends DurableObject {
   // ---------------- marketplace eksklusif (hanya axto.io, hanya AXTO, fee 10%) ----------------
   /** Pasang listing dari kustodi: kind 'auction' (72 jam, start ≥ $1) atau 'buynow' (harga tetap). */
   async marketList({ c, tokenId, seller, kind, units }) {
+    await this.refreshEnv();
     if (!COLLECTIONS[c]?.exclusive) return { ok: false, error: 'exclusive_only' };
     const B = this.env.STORE;
     const own = await readJSON(B, `c/ex-own/${c}/${tokenId}.json`);
@@ -273,6 +280,7 @@ export class Ledger extends DurableObject {
 
   /** Tawar/beli di marketplace. Buy Now: tawaran tetap ≥ harga → lot langsung ditutup untuk pembeli. */
   async marketBid(b) {
+    await this.refreshEnv();
     const x = this.s[b.c];
     const lot = x?.market.get(b.tokenId);
     if (!lot) return { ok: false, error: 'not_listed' };
@@ -332,6 +340,7 @@ export class Ledger extends DurableObject {
 
   /** WD: voucher mint dari vault untuk pemilik kustodi (member membayar gas mint). */
   async withdraw({ c, tokenId, owner, collectionName }) {
+    await this.refreshEnv();
     const B = this.env.STORE;
     if (this.s[c]?.market.has(tokenId)) return { ok: false, error: 'listed' };
     const own = await readJSON(B, `c/ex-own/${c}/${tokenId}.json`);
@@ -344,6 +353,7 @@ export class Ledger extends DurableObject {
 
   // ---------------- jadwal (cron tiap 5 menit) ----------------
   async tick(now = Date.now()) {
+    await this.refreshEnv();
     if (!this.genesis) return { skipped: 'genesis' };
     const report = {};
     for (const c of KEYS) {
@@ -556,6 +566,7 @@ export class Ledger extends DurableObject {
 
   /** Pemenang memberi tahu tx klaim → periksa segera (tidak perlu menunggu tick). */
   async claimed(c, tokenId) {
+    await this.refreshEnv();
     const lot = this.s[c].lots.get(tokenId);
     if (!lot || lot.status !== 'awaiting_claim') return { ok: false };
     const ok = await this.checkClaimed(c, lot);

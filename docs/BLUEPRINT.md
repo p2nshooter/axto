@@ -69,6 +69,7 @@ Perintah yang lebih baru **menggantikan** yang lama bila bertentangan.
 | 26 | „Auction star $1 semuanya tanpa kecuali" | **Berlaku (final)**: semua lot mulai $1 (USDC) / setara $1 dalam AXTO; tier tetap sebagai label kelangkaan & penentu fitur player |
 | 27 | AdSense: hanya 3 akun, juga di axto.io (6560360898389273, 4906992051458194, 5928074389292014) | **Berlaku** (§10.5) |
 | 28 | (22 Nov 2026) axto.io sebelumnya dipakai dashboard AXTO (repo guardian-ai, Pages `axto-dashboard`); pemilik memilih **„Ganti axto.io“** | **Berlaku**: worker `axto-web` memegang axto.io & www.axto.io; dashboard tetap di `axto-dashboard.pages.dev`. Bucket NFT dipisah: `axto-nft-data` (bucket `axto-data` milik dashboard tidak disentuh). Deploy lewat jembatan `deploy-axto-io.yml` di repo ulyah.com (memakai secret Cloudflare yang sudah ada) sampai repo axto punya secret sendiri |
+| 29 | (22 Nov 2026) Wallet admin `0x38Cd3F76a132f70b12C9E4ea6aDAFaCF62483166`: „seluruh NFT hanya di produksi dr alamat itu“; koin AXTO di wallet `0x6918A3C9a58E71B3bca993e8cDD2630D2DDB6469` | **Berlaku**: owner AuctionHouse + 7 koleksi = admin (satu-satunya yang menunjuk minter/signer); owner AxtoToken + AxtoSale = wallet koin (10 jt dicetak ke sana, vesting tim ke sana). Deploy lewat tombol 3 fase di portal admin (`/id/admin`), hasil diverifikasi on-chain sebelum dipakai |
 | 25 | Gas ditanggung pemenang | **Berlaku** |
 
 ---

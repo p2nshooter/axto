@@ -17,6 +17,8 @@ import { createOrder, captureOrder, webhook } from './paypal.js';
 import { dailyBackup, appendLog, readJSON, listKeys } from './r2.js';
 import { ownerOf, isAddress, encodeClaim } from './eth.js';
 import { Ledger, KEYS } from './ledger.js';
+import { withCfg, saveContracts, NETWORKS } from './config.js';
+import { vault } from './vault.js';
 
 export { Ledger };
 
@@ -136,6 +138,23 @@ async function api(request, env, ctx, url) {
   if (p === '/api/me/profile' && method === 'POST') {
     if (!s) return json({ error: 'auth' }, 401);
     try { return json(await saveProfile(env, s.wallet, await readBody(request))); } catch (e) { return json({ error: String(e.message) }, 400); }
+  }
+
+  // ---- portal admin: deploy kontrak dari MetaMask admin ----
+  if (p === '/api/admin/setup') {
+    if (!s?.admin) return json({ error: 'admin_only' }, 403);
+    let signer = null;
+    try { signer = (await vault(env, 'signerAddress', {})).address; } catch { signer = null; }
+    return json({ admin: env.ADMIN_WALLET, coinWallet: env.COIN_WALLET, treasury: env.TREASURY, signer, networks: NETWORKS, active: await readJSON(env.STORE, 'cfg/active.json') });
+  }
+  if (p === '/api/admin/contracts' && method === 'POST') {
+    if (!s?.admin) return json({ error: 'admin_only' }, 403);
+    const b = await readBody(request, 8192);
+    const r = await saveContracts(env, s.wallet, b);
+    if (r.ok) {
+      try { await vault(env, 'setConfig', { chainId: r.cfg.chainId, auctionHouse: r.cfg.auctionHouse, sale: r.cfg.sale, usdc: r.cfg.usdc, rpc: NETWORKS[r.cfg.chainId].rpc }); } catch (e) { r.vault = String(e.message); }
+    }
+    return json(r, r.ok ? 200 : 400);
   }
 
   // ---- lelang ----
@@ -309,7 +328,8 @@ async function html(request, env, ctx, url) {
   if (key === 'member') return out({ page: key, title: T[lang].member.title, body: P.memberPage(lang), noindex: true, private: true });
   if (key === 'admin') {
     const s = await session(request, env);
-    return out({ page: key, title: T[lang].admin.title, body: P.adminPage(lang, s?.admin, stats), noindex: true, ads: false, private: true });
+    const loader = s?.admin ? "const x=document.createElement('script');x.type='module';x.src='/admin-deploy.js';document.head.append(x);" : '';
+    return out({ page: key, title: T[lang].admin.title, body: P.adminPage(lang, s?.admin, stats), noindex: true, ads: false, private: true, script: loader });
   }
   if (key === 'verify' && validToken(parts[2], Number(parts[3]))) {
     const [c, id] = [parts[2], Number(parts[3])];
@@ -323,7 +343,8 @@ async function html(request, env, ctx, url) {
 }
 
 export default {
-  async fetch(request, env, ctx) {
+  async fetch(request, env0, ctx) {
+    const env = await withCfg(env0); // alamat kontrak aktif dari R2 (hasil deploy dari portal admin)
     const url = new URL(request.url);
     if (url.hostname === 'www.axto.io') return Response.redirect(`https://axto.io${url.pathname}${url.search}`, 301);
     const p = url.pathname;

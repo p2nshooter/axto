@@ -3,3 +3,4 @@ contracts/out/
 .dev.vars
 .wrangler/
 dist/
+worker/public/contracts/

@@ -176,7 +176,10 @@ export function adminPage(lang, ok, stats) {
   if (!ok) return `<section class="page"><h1>${esc(t.title)}</h1><p>${esc(t.denied)}</p></section>`;
   const rows = Object.entries(stats.collections).map(([c, s]) => `<tr><th>${esc(c)}</th><td>${fmt(s.produced, lang)}</td><td>${fmt(s.ready, lang)}</td><td>${fmt(s.live, lang)}</td><td>${fmt(s.sold, lang)}</td></tr>`).join('');
   return `<section class="page"><h1>${esc(t.title)}</h1><table class="split"><thead><tr><th></th><th>produced</th><th>ready</th><th>live</th><th>sold</th></tr></thead><tbody>${rows}</tbody></table>
-  <p class="meta">genesis: ${stats.genesis ? new Date(stats.genesis).toISOString() : '—'}</p><div id="admin" data-lang="${lang}"></div></section>`;
+  <p class="meta">genesis: ${stats.genesis ? new Date(stats.genesis).toISOString() : '—'}</p>
+  <h2>${lang === 'id' ? 'Deploy kontrak (sekali)' : 'Deploy contracts (once)'}</h2>
+  <p>${lang === 'id' ? 'Buka halaman ini di browser yang memakai MetaMask admin. Pilih jaringan, tekan tombol, lalu setujui setiap langkah di MetaMask (±26 konfirmasi). Mulailah dengan Base Sepolia (uji, gratis dari faucet), lalu Base.' : 'Open this page in the browser with the admin MetaMask. Pick a network, press the button and approve each step in MetaMask (±26 confirmations). Start with Base Sepolia (test), then Base.'}</p>
+  <div id="deploy" data-lang="${lang}"><p class="muted">…</p></div></section>`;
 }
 
 export function verifyPage(lang, c, id, meta, hash, owner) {

@@ -42,7 +42,8 @@ crons = ["*/5 * * * *", "17 2 * * *"] # tick lelang tiap 5 menit; cadangan haria
 [vars]
 BASE_URL = "https://axto.io"
 CHAIN_ID = "8453"
-ADMIN_WALLET = "0x38Cd3F76a132f70b12C9E4ea6aDAFaCF62483166"
+ADMIN_WALLET = "0x38Cd3F76a132f70b12C9E4ea6aDAFaCF62483166" # owner kontrak NFT (AuctionHouse + 7 koleksi) — hanya wallet ini yang menunjuk minter
+COIN_WALLET = "0x6918A3C9a58E71B3bca993e8cDD2630D2DDB6469" # owner koin AXTO (Token, Sale); 10 jt dicetak ke wallet ini, vesting tim ke wallet ini
 TREASURY = "0xDC39C04E704b1fec2BE648c49c842B2B17AfEBDA"
 GENESIS_MS = "0"   # 0 = lelang belum dibuka; diisi saat peluncuran (ms epoch, Senin 00:00 UTC)
 PAYPAL_COIN_SALE = "off" # on hanya setelah PayPal menyetujui penjualan aset kripto untuk akun ini
