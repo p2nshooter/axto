@@ -1,7 +1,7 @@
 name: Deploy axto.io
 
 # Worker publik axto-web (axto.io). Rahasia hanya di GitHub Secrets / Cloudflare secrets, tidak pernah di repo.
-# Penyimpanan: R2 axto-data (aturan pemilik: jangan pernah D1). KV axto-cache hanya cache pendek & rate limit.
+# Penyimpanan: R2 axto-nft-data (aturan pemilik: jangan pernah D1). KV axto-nft-cache hanya cache pendek & rate limit.
 # Vault (axto-vault) dideploy dari repo privat coinaxto lebih dulu — binding VAULT membutuhkannya.
 on:
   push:
@@ -35,9 +35,9 @@ jobs:
       - name: R2 bucket & KV (idempoten)
         working-directory: worker
         run: |
-          npx wrangler r2 bucket create axto-data 2>/dev/null || true
-          id=$(npx wrangler kv namespace list | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const n=JSON.parse(s).find(x=>x.title==='axto-cache');console.log(n?n.id:'')})")
-          if [ -z "$id" ]; then npx wrangler kv namespace create axto-cache >/dev/null; id=$(npx wrangler kv namespace list | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>console.log(JSON.parse(s).find(x=>x.title==='axto-cache').id))"); fi
+          npx wrangler r2 bucket create axto-nft-data 2>/dev/null || true
+          id=$(npx wrangler kv namespace list | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const n=JSON.parse(s).find(x=>x.title==='axto-nft-cache');console.log(n?n.id:'')})")
+          if [ -z "$id" ]; then npx wrangler kv namespace create axto-nft-cache >/dev/null; id=$(npx wrangler kv namespace list | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>console.log(JSON.parse(s).find(x=>x.title==='axto-nft-cache').id))"); fi
           sed -i "s/REPLACE_WITH_KV_ID/$id/" wrangler.toml
       - name: Rahasia worker
         working-directory: worker

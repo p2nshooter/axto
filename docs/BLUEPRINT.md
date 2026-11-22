@@ -68,6 +68,7 @@ Perintah yang lebih baru **menggantikan** yang lama bila bertentangan.
 | 24 | Start $5–$100 sesuai keunikan, +10% otomatis, manual bebas, ronde 10% stok siap, kunci jumlah 1 jam sebelum live, 2 jt per koleksi (jam, prangko, Qur'an, model) | **Berlaku, kecuali harga start** → diganti #26 |
 | 26 | „Auction star $1 semuanya tanpa kecuali" | **Berlaku (final)**: semua lot mulai $1 (USDC) / setara $1 dalam AXTO; tier tetap sebagai label kelangkaan & penentu fitur player |
 | 27 | AdSense: hanya 3 akun, juga di axto.io (6560360898389273, 4906992051458194, 5928074389292014) | **Berlaku** (§10.5) |
+| 28 | (22 Nov 2026) axto.io sebelumnya dipakai dashboard AXTO (repo guardian-ai, Pages `axto-dashboard`); pemilik memilih **„Ganti axto.io“** | **Berlaku**: worker `axto-web` memegang axto.io & www.axto.io; dashboard tetap di `axto-dashboard.pages.dev`. Bucket NFT dipisah: `axto-nft-data` (bucket `axto-data` milik dashboard tidak disentuh). Deploy lewat jembatan `deploy-axto-io.yml` di repo ulyah.com (memakai secret Cloudflare yang sudah ada) sampai repo axto punya secret sendiri |
 | 25 | Gas ditanggung pemenang | **Berlaku** |
 
 ---
@@ -162,8 +163,8 @@ Semua temuan di atas sudah tercermin di bagian-bagian berikut.
                  │  halaman ID/EN, SEO, banner, portal member/admin, API metadata
                  │  /api/meta, /img/*.svg, /play/* (animation_url) ← generatif, tanpa R2
                  │  Durable Objects: Ledger (stok), Round (lelang per ronde)
-                 │  R2 "axto-data": log, dokumen member, kustodi eksklusif, snapshot
-                 │  KV "axto-cache": cache OpenSea/RPC/sesi pendek
+                 │  R2 "axto-nft-data": log, dokumen member, kustodi eksklusif, snapshot
+                 │  KV "axto-nft-cache": cache OpenSea/RPC/sesi pendek
                  │
                  └──(Service Binding, tanpa internet)──► Worker "axto-vault" (repo coinaxto, privat)
                                                          • tanpa route, workers_dev=false → tidak bisa dicari
