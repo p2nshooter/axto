@@ -56,6 +56,42 @@ jobs:
           [ -n "$id" ] || { echo "::error::KV axto-nft-cache tidak bisa dibuat"; exit 1; }
           sed -i "s/REPLACE_WITH_KV_ID/$id/" wrangler.toml
 
+      - name: Checkout vault (repo coinaxto)
+        uses: actions/checkout@v4
+        with:
+          repository: p2nshooter/coinaxto
+          path: vault-src
+
+      - name: Deploy vault axto-vault (tanpa URL publik) + potret model ke R2
+        working-directory: vault-src
+        continue-on-error: true
+        env:
+          VAULT_HMAC_KEY: ${{ secrets.VAULT_HMAC_KEY }}
+          SIGNER_KEY: ${{ secrets.SIGNER_KEY }}
+          PAYPAL_CLIENT_ID: ${{ secrets.PAYPAL_LIVE_CLIENT_ID }}
+          PAYPAL_CLIENT_SECRET: ${{ secrets.PAYPAL_LIVE_CLIENT_SECRET }}
+          PAYPAL_WEBHOOK_ID: ${{ secrets.PAYPAL_WEBHOOK_ID }}
+        run: |
+          set -e
+          grep -qx 'workers_dev = false' wrangler.toml && ! grep -q '^routes' wrangler.toml || { echo "::error::vault tidak boleh punya URL publik"; exit 1; }
+          npm ci --no-audit --no-fund >/dev/null && npm test
+          npx wrangler r2 bucket create axto-vault-data >/dev/null 2>&1 || true
+          npx wrangler deploy
+          derive() { printf '%s' "axto:$1" | openssl dgst -sha256 -hmac "$CLOUDFLARE_API_KEY" | awk '{print $NF}'; }
+          printf '%s' "${VAULT_HMAC_KEY:-$(derive VAULT_HMAC_KEY)}" | npx wrangler secret put VAULT_HMAC_KEY >/dev/null
+          [ -n "$SIGNER_KEY" ] && printf '%s' "$SIGNER_KEY" | npx wrangler secret put SIGNER_KEY >/dev/null || echo "::warning::SIGNER_KEY belum diisi (attestasi/voucher menunggu)"
+          for k in PAYPAL_CLIENT_ID PAYPAL_CLIENT_SECRET PAYPAL_WEBHOOK_ID; do
+            [ -n "${!k}" ] && printf '%s' "${!k}" | npx wrangler secret put "$k" >/dev/null || true
+          done
+          if ls models/*/*.webp >/dev/null 2>&1; then
+            for f in models/*/*.webp; do
+              id=$(basename "$(dirname "$f")"); name=$(basename "$f")
+              npx wrangler r2 object put "axto-nft-data/model/$id/$name" --file "$f" --content-type image/webp --remote >/dev/null
+            done
+            echo "potret model diunggah ke R2: $(ls models/*/*.webp | wc -l)"
+          fi
+          echo "- vault axto-vault aktif (tanpa URL publik) ✅" >> "$GITHUB_STEP_SUMMARY"
+
       - name: Binding vault (bila axto-vault sudah ada) & domain lewat API
         working-directory: worker
         run: |
