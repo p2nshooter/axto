@@ -1,11 +1,13 @@
 name: Deploy axto.io
 
-# Worker publik axto-web (axto.io). Rahasia hanya di GitHub Secrets / Cloudflare secrets, tidak pernah di repo.
-# Penyimpanan: R2 axto-nft-data (aturan pemilik: jangan pernah D1). KV axto-nft-cache hanya cache pendek & rate limit.
-# Vault (axto-vault) dideploy dari repo privat coinaxto lebih dulu — binding VAULT membutuhkannya.
+# Worker publik axto-web memegang axto.io & www.axto.io (pemilik, 22 Nov 2026: „Ganti axto.io“ — dashboard guardian-ai
+# tetap di axto-dashboard.pages.dev). Autentikasi Cloudflare: Global API Key (pemilik: „Pake CLOUDFLARE_API_KEY aja jgn
+# token biar lebih luas“) = secret CLOUDFLARE_API_KEY + CLOUDFLARE_EMAIL + CLOUDFLARE_ACCOUNT_ID.
+# Penyimpanan: R2 axto-nft-data saja (aturan pemilik: jangan pernah D1; bucket axto-data milik dashboard tidak disentuh).
+# KV axto-nft-cache hanya cache pendek & rate limit. Vault axto-vault (repo privat coinaxto) di-bind bila sudah ada.
 on:
   push:
-    branches: [main]
+    branches: [main, ccr-9ef9a045-gmv4m2]
     paths: ['worker/**', 'engine/src/**', '.github/workflows/deploy.yml']
   workflow_dispatch: {}
 
@@ -19,68 +21,122 @@ permissions:
 jobs:
   deploy:
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 25
     env:
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_API_KEY: ${{ secrets.CLOUDFLARE_API_KEY }}
+      CLOUDFLARE_EMAIL: ${{ secrets.CLOUDFLARE_EMAIL }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+
       - name: Uji engine & worker
         run: |
           (cd engine && npm test)
-          (cd worker && npm ci && npm test)
-      - name: R2 bucket & KV (idempoten)
-        working-directory: worker
+          (cd worker && npm ci --no-audit --no-fund && npm test)
+
+      - name: Cek kredensial Cloudflare
         run: |
-          npx wrangler r2 bucket create axto-nft-data 2>/dev/null || true
-          id=$(npx wrangler kv namespace list | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const n=JSON.parse(s).find(x=>x.title==='axto-nft-cache');console.log(n?n.id:'')})")
-          if [ -z "$id" ]; then npx wrangler kv namespace create axto-nft-cache >/dev/null; id=$(npx wrangler kv namespace list | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>console.log(JSON.parse(s).find(x=>x.title==='axto-nft-cache').id))"); fi
-          sed -i "s/REPLACE_WITH_KV_ID/$id/" wrangler.toml
-      - name: Rahasia worker
-        working-directory: worker
-        run: |
-          for k in SESSION_KEY DATA_KEY ENGINE_HMAC_KEY VAULT_HMAC_KEY; do
-            v="${!k}"; [ -n "$v" ] && printf '%s' "$v" | npx wrangler secret put "$k" >/dev/null || echo "::warning::secret $k belum diisi"
+          for k in CLOUDFLARE_API_KEY CLOUDFLARE_EMAIL CLOUDFLARE_ACCOUNT_ID; do
+            [ -n "${!k}" ] || { echo "::error::secret $k kosong"; exit 1; }
           done
-        env:
-          SESSION_KEY: ${{ secrets.SESSION_KEY }}
-          DATA_KEY: ${{ secrets.DATA_KEY }}
-          ENGINE_HMAC_KEY: ${{ secrets.ENGINE_HMAC_KEY }}
-          VAULT_HMAC_KEY: ${{ secrets.VAULT_HMAC_KEY }}
-      - name: Binding vault (lewati sementara bila axto-vault belum ada)
+          curl -sf -H "X-Auth-Email: $CLOUDFLARE_EMAIL" -H "X-Auth-Key: $CLOUDFLARE_API_KEY" \
+            "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID" >/dev/null \
+            || { echo "::error::Cloudflare menolak CLOUDFLARE_API_KEY/CLOUDFLARE_EMAIL untuk akun ini"; exit 1; }
+
+      - name: R2 & KV (idempoten)
         working-directory: worker
         run: |
-          if npx wrangler deployments list --name axto-vault >/dev/null 2>&1; then
-            echo "axto-vault ada — binding VAULT aktif"
-          else
-            echo "::warning::axto-vault belum ter-deploy (repo coinaxto) — situs publik tetap jalan, fitur koin/klaim menunggu vault"
-            python3 - <<'PY'
-          import re
+          npx wrangler r2 bucket create axto-nft-data >/dev/null 2>&1 || echo "bucket axto-nft-data sudah ada"
+          list() { npx wrangler kv namespace list 2>/dev/null | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{try{const n=JSON.parse(s).find(x=>x.title==='axto-nft-cache');console.log(n?n.id:'')}catch{console.log('')}})"; }
+          id=$(list)
+          if [ -z "$id" ]; then npx wrangler kv namespace create axto-nft-cache >/dev/null; id=$(list); fi
+          [ -n "$id" ] || { echo "::error::KV axto-nft-cache tidak bisa dibuat"; exit 1; }
+          sed -i "s/REPLACE_WITH_KV_ID/$id/" wrangler.toml
+
+      - name: Binding vault (bila axto-vault sudah ada) & domain lewat API
+        working-directory: worker
+        run: |
+          python3 - <<'PY'
+          import re, subprocess
           p = 'wrangler.toml'
           s = open(p, encoding='utf8').read()
-          s = re.sub(r'\n\[\[services\]\]\nbinding = "VAULT"\nservice = "axto-vault"\nentrypoint = "Vault"\n', '\n', s)
+          if subprocess.run(['npx', 'wrangler', 'deployments', 'list', '--name', 'axto-vault'], capture_output=True).returncode != 0:
+              s = re.sub(r'\n\[\[services\]\]\nbinding = "VAULT"\nservice = "axto-vault"\nentrypoint = "Vault"\n', '\n', s)
+              print('::warning::axto-vault belum ter-deploy (repo coinaxto) — situs publik tetap jalan, fitur koin/klaim menunggu vault')
+          s = re.sub(r'routes = \[[\s\S]*?\]\n', '', s, count=1)  # domain dipindah dari Pages lewat API (langkah berikut)
           open(p, 'w', encoding='utf8').write(s)
           PY
-          fi
-      - name: Deploy
+
+      - name: Deploy worker axto-web
         working-directory: worker
-        run: npx wrangler deploy
-      - name: Cek live (AdSense 3 akun, ads.txt, halaman)
+        run: |
+          set -o pipefail
+          for attempt in 1 2 3; do
+            if npx wrangler deploy 2>&1 | tee /tmp/deploy.log; then exit 0; fi
+            grep -qiE "Authentication error|code: ?10000|code: ?9103|code: ?9106" /tmp/deploy.log && { echo "::error::kredensial Cloudflare ditolak"; exit 1; }
+            sleep $((attempt * 30))
+          done
+          exit 1
+
+      - name: Rahasia worker
+        working-directory: worker
+        env:
+          ENGINE_HMAC_KEY: ${{ secrets.ENGINE_HMAC_KEY }}
+          VAULT_HMAC_KEY: ${{ secrets.VAULT_HMAC_KEY }}
+          OPENSEA_API_KEY: ${{ secrets.OPENSEA_API_KEY }}
+        run: |
+          have=$(npx wrangler secret list --name axto-web 2>/dev/null || echo '[]')
+          # kunci data dibuat SEKALI (email member terenkripsi dengannya) — tidak pernah ditimpa
+          for k in SESSION_KEY DATA_KEY; do
+            echo "$have" | grep -q "\"$k\"" || { openssl rand -hex 32 | npx wrangler secret put "$k" --name axto-web >/dev/null && echo "dibuat $k"; }
+          done
+          # kunci HMAC engine/vault: secret bila ada, kalau tidak diturunkan dari CLOUDFLARE_API_KEY (engine.yml & coinaxto sama)
+          derive() { printf '%s' "axto:$1" | openssl dgst -sha256 -hmac "$CLOUDFLARE_API_KEY" | awk '{print $NF}'; }
+          printf '%s' "${ENGINE_HMAC_KEY:-$(derive ENGINE_HMAC_KEY)}" | npx wrangler secret put ENGINE_HMAC_KEY --name axto-web >/dev/null
+          printf '%s' "${VAULT_HMAC_KEY:-$(derive VAULT_HMAC_KEY)}" | npx wrangler secret put VAULT_HMAC_KEY --name axto-web >/dev/null
+          [ -n "$OPENSEA_API_KEY" ] && printf '%s' "$OPENSEA_API_KEY" | npx wrangler secret put OPENSEA_API_KEY --name axto-web >/dev/null
+          echo "rahasia worker siap"
+
+      - name: Pindahkan axto.io & www.axto.io ke worker axto-web
         run: |
           set -e
-          sleep 10
-          ads=$(curl -sf https://axto.io/ads.txt)
-          for p in 6560360898389273 4906992051458194 5928074389292014; do
-            echo "$ads" | grep -qx "google.com, pub-$p, DIRECT, f08c47fec0942fa0" || { echo "::error::ads.txt pub-$p hilang"; exit 1; }
+          api() { curl -s -H "X-Auth-Email: $CLOUDFLARE_EMAIL" -H "X-Auth-Key: $CLOUDFLARE_API_KEY" -H "Content-Type: application/json" "$@"; }
+          A="https://api.cloudflare.com/client/v4"
+          zone=$(api "$A/zones?name=axto.io" | node -e "try{const d=JSON.parse(require('fs').readFileSync(0,'utf8'));process.stdout.write(d.result?.[0]?.id||'')}catch{}")
+          [ -n "$zone" ] || { echo "::error::zona axto.io tidak ada di akun Cloudflare ini"; exit 1; }
+          cur=$(api "$A/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/domains?hostname=axto.io" | node -e "try{const d=JSON.parse(require('fs').readFileSync(0,'utf8'));process.stdout.write(d.result?.[0]?.service||'')}catch{}")
+          if [ "$cur" = "axto-web" ]; then echo "axto.io sudah di axto-web"; exit 0; fi
+          for host in axto.io www.axto.io; do
+            api -X DELETE "$A/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects/axto-dashboard/domains/$host" >/dev/null || true
+            for type in A AAAA CNAME; do
+              for id in $(api "$A/zones/$zone/dns_records?type=$type&name=$host" | node -e "try{const d=JSON.parse(require('fs').readFileSync(0,'utf8'));(d.result||[]).forEach(r=>console.log(r.id))}catch{}"); do
+                api -X DELETE "$A/zones/$zone/dns_records/$id" >/dev/null && echo "hapus $type $host"
+              done
+            done
+            r=$(api -X PUT -d "{\"hostname\":\"$host\",\"zone_id\":\"$zone\",\"service\":\"axto-web\",\"environment\":\"production\"}" "$A/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/domains")
+            echo "$r" | node -e "const d=JSON.parse(require('fs').readFileSync(0,'utf8'));if(!d.success){console.log(JSON.stringify(d.errors));process.exit(1)};console.log('terpasang',d.result.hostname)"
           done
-          [ "$(echo "$ads" | grep -c '^google.com')" = "3" ] || { echo "::error::ads.txt harus tepat 3 baris"; exit 1; }
+
+      - name: Cek live (AdSense 3 akun, ads.txt, halaman, metadata)
+        run: |
+          for i in $(seq 1 24); do
+            ads=$(curl -sf https://axto.io/ads.txt || true)
+            [ "$(echo "$ads" | grep -c '^google.com, pub-')" = "3" ] && break
+            sleep 15
+          done
+          for p in 6560360898389273 4906992051458194 5928074389292014; do
+            echo "$ads" | grep -qx "google.com, pub-$p, DIRECT, f08c47fec0942fa0" || { echo "::error::ads.txt pub-$p hilang"; echo "$ads"; exit 1; }
+          done
           home=$(curl -sfL https://axto.io/en)
           for p in 6560360898389273 4906992051458194 5928074389292014; do
             echo "$home" | grep -q "name=\"google-adsense-account\" content=\"ca-pub-$p\"" || { echo "::error::meta ca-pub-$p hilang"; exit 1; }
           done
           [ "$(echo "$home" | grep -o 'adsbygoogle.js?client=' | wc -l)" = "1" ] || { echo "::error::harus tepat satu loader"; exit 1; }
           curl -sf https://axto.io/api/meta/time/1 | grep -q '"name"'
-          echo "## axto.io live ✅ (AdSense 3 akun, loader ca-pub-5928074389292014)" >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "## axto.io live ✅"
+            echo "- AdSense: loader ca-pub-5928074389292014 · 3 tag meta · ads.txt 3 baris"
+          } >> "$GITHUB_STEP_SUMMARY"

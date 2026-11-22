@@ -36,6 +36,12 @@ jobs:
         env:
           AXTO_API: https://axto.io
           ENGINE_HMAC_KEY: ${{ secrets.ENGINE_HMAC_KEY }}
+          CLOUDFLARE_API_KEY: ${{ secrets.CLOUDFLARE_API_KEY }}
           COLLECTIONS: ${{ inputs.collections }}
           BATCH: ${{ inputs.batch || '20000' }}
-        run: node bin/produce.mjs
+        run: |
+          # kunci HMAC sama dengan yang dipasang deploy.yml di worker (secret, atau turunan CLOUDFLARE_API_KEY)
+          if [ -z "$ENGINE_HMAC_KEY" ] && [ -n "$CLOUDFLARE_API_KEY" ]; then
+            export ENGINE_HMAC_KEY=$(printf '%s' "axto:ENGINE_HMAC_KEY" | openssl dgst -sha256 -hmac "$CLOUDFLARE_API_KEY" | awk '{print $NF}')
+          fi
+          node bin/produce.mjs
