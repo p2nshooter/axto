@@ -38,7 +38,7 @@ jobs:
           (cd worker && npm ci --no-audit --no-fund && npm test)
       - name: Kompilasi kontrak → /contracts/*.json (dipakai tombol Deploy di portal admin)
         run: |
-          cd contracts && npm ci --no-audit --no-fund >/dev/null && node scripts/compile.mjs
+          cd contracts && (npm ci --no-audit --no-fund >/dev/null || npm install --no-audit --no-fund --no-save >/dev/null) && node scripts/compile.mjs
           mkdir -p ../worker/public/contracts
           for n in AxtoToken AxtoSale AxtoAuctionHouse AxtoVesting AxtoLock AxtoCollection; do cp out/$n.json ../worker/public/contracts/; done
 

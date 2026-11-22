@@ -34,7 +34,7 @@ jobs:
         run: |
           (cd worker && npm ci --no-audit --no-fund)
           (cd vault-src && npm ci --no-audit --no-fund)
-          cd contracts && npm ci --no-audit --no-fund && node scripts/compile.mjs
+          cd contracts && (npm ci --no-audit --no-fund || npm install --no-audit --no-fund --no-save) && node scripts/compile.mjs
           VAULT_DIR="$GITHUB_WORKSPACE/vault-src" node --test test/*.test.mjs
       - name: Worker (kripto, bundel)
         working-directory: worker
