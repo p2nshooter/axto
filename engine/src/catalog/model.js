@@ -1,19 +1,30 @@
 /**
- * Katalog MODEL — figur ilustrasi dengan potret model terdaftar. Model hanya boleh dipakai bila ada berkas izin
- * (engine/consent/<id>.json, granted: true). Potret di-host di situs asal (luaja.com) dan disisipkan worker.
+ * Katalog MODEL — figur ilustrasi dengan potret model terdaftar (wajah + kerudung, latar dibuang).
+ * Potret disimpan PRIVAT (repo coinaxto → R2 axto-data `model/<id>/<berkas>.webp`), tidak di repo publik ini.
+ * Wajah hanya dirender bila izin tertulis model tercatat: engine/consent/<id>.json (granted: true) untuk produksi dan
+ * MODEL_CONSENT di worker untuk tampilan. Tanpa izin → siluet netral.
  */
 export const MODELS = [
   // id, nama tampilan, pose: [kunci, berkas, rasio w/h, pusat wajah x, dagu y]
   {
     id: 'luaja-1',
     name: 'Pemandu LUAJA',
-    base: 'https://luaja.com/assets/pemandu/',
     poses: [
-      ['depan', 'p1', 959 / 1816, 0.472, 0.394],
-      ['senyum', 'p2', 895 / 1715, 0.502, 0.409],
-      ['lembut', 'p3', 1245 / 1987, 0.541, 0.426],
-      ['ceria', 'p4', 1428 / 1923, 0.513, 0.535],
-      ['samping', 'p5', 1246 / 1804, 0.617, 0.45],
+      ['senyum', 'p1', 0.85, 0.5, 0.76],
+      ['tenang', 'p2', 0.7611, 0.541, 0.76],
+      ['berdiri', 'p3', 0.6125, 0.566, 0.76],
+      ['ceria', 'p4', 0.9375, 0.511, 0.731],
+      ['samping', 'p5', 0.5528, 0.551, 0.76],
+    ],
+  },
+  {
+    id: 'model-2',
+    name: 'Model AXTO 2',
+    poses: [
+      ['kerudung-cokelat', 'p1', 0.7667, 0.42, 0.692],
+      ['kerudung-putih', 'p2', 0.5278, 0.466, 0.76],
+      ['senyum', 'p3', 0.65, 0.516, 0.76],
+      ['miring', 'p4', 0.6625, 0.532, 0.747],
     ],
   },
 ];

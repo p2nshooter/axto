@@ -10,6 +10,7 @@
 import { readFile, appendFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { COLLECTIONS } from '../src/core.js';
+import { MODELS } from '../src/catalog/model.js';
 import { qaBatch } from '../src/qa.js';
 import { fsProvider } from '../src/provider-fs.js';
 
@@ -48,10 +49,14 @@ async function call(path, payload) {
 
 async function consentOk(key) {
   if (!COLLECTIONS[key].requiresConsent) return true;
-  const f = new URL('../consent/luaja-1.json', import.meta.url);
-  if (!existsSync(f)) return false;
-  const j = JSON.parse(await readFile(f, 'utf8'));
-  return j.granted === true && j.scope?.includes('nft-commercial');
+  // setiap model di katalog wajib punya izin tertulis (untuk model di bawah 18 tahun: izin orang tua/wali)
+  for (const m of MODELS) {
+    const f = new URL(`../consent/${m.id}.json`, import.meta.url);
+    if (!existsSync(f)) return false;
+    const j = JSON.parse(await readFile(f, 'utf8'));
+    if (!(j.granted === true && j.scope?.includes('nft-commercial') && (j.adult === true || j.guardian === true))) return false;
+  }
+  return true;
 }
 
 const summary = [];

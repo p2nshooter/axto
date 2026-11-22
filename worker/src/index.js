@@ -40,11 +40,10 @@ function assetProvider(env, origin) {
   const consent = String(env.MODEL_CONSENT ?? '').split(',').map((x) => x.trim()).filter(Boolean);
   if (consent.length) {
     prov.head = async (modelId, file) => {
-      const m = MODELS.find((x) => x.id === modelId);
-      if (!m || !consent.includes(modelId) || !/^p\d$/.test(file)) return null;
-      const r = await fetch(`${m.base}${file}-s.webp`, { cf: { cacheTtl: 604800, cacheEverything: true } });
-      if (!r.ok) return null;
-      const b = new Uint8Array(await r.arrayBuffer());
+      if (!MODELS.some((x) => x.id === modelId) || !consent.includes(modelId) || !/^p\d{1,2}$/.test(file)) return null;
+      const o = await env.STORE.get(`model/${modelId}/${file}-s.webp`); // potret privat di R2 (diunggah dari repo coinaxto)
+      if (!o) return null;
+      const b = new Uint8Array(await o.arrayBuffer());
       let bin = '';
       for (let i = 0; i < b.length; i += 0x8000) bin += String.fromCharCode(...b.subarray(i, i + 0x8000));
       return `data:image/webp;base64,${btoa(bin)}`;
