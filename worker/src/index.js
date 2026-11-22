@@ -128,6 +128,11 @@ async function api(request, env, ctx, url) {
   m = /^\/api\/contract\/([a-z-]+)$/.exec(p);
   if (m && COLLECTIONS[m[1]]) return json(contractMetadata(m[1], env.BASE_URL), 200, { 'cache-control': IMMUTABLE, 'access-control-allow-origin': '*' });
 
+  // #51: daftar token standar (tokenlists.org) dengan logo AXTO Coin
+  if (p === '/api/tokenlist' || p === '/tokenlist.json') {
+    const tokens = env.AXTO_TOKEN ? [{ chainId: Number(env.CHAIN_ID), address: env.AXTO_TOKEN, name: 'AXTO Coin', symbol: 'AXTO', decimals: 18, logoURI: `${env.BASE_URL}/brand/axto-coin-256.png` }] : [];
+    return json({ name: 'AXTO', logoURI: `${env.BASE_URL}/brand/axto-coin-256.png`, keywords: ['axto'], timestamp: new Date().toISOString(), version: { major: 1, minor: 0, patch: tokens.length }, tokens }, 200, { 'cache-control': 'public, max-age=3600', 'access-control-allow-origin': '*' });
+  }
   if (p === '/api/stats') return json(await ledger(env).stats(), 200, { 'cache-control': 'public, max-age=30' });
   // penjelajah koleksi cepat (perintah pemilik #37): karya berikutnya + saringan tier/seri, deterministik
   m = /^\/api\/browse\/([a-z-]+)$/.exec(p);
@@ -477,7 +482,7 @@ async function html(request, env, ctx, url) {
   if (key === 'coin') {
     // publik hanya kontrak token & kontrak beli; wallet internal hanya di Portal admin (perintah pemilik #43)
     const addrs = { token: env.AXTO_TOKEN || '', sale: env.AXTO_SALE || '' };
-    return out({ page: key, title: T[lang].coin.title, body: P.coinPage(lang, await readJSON(env.STORE, 'e/coin/sale.json'), env.PAYPAL_COIN_SALE === 'on', addrs) });
+    return out({ page: key, title: T[lang].coin.title, image: `${base}/brand/axto-coin-512.png`, jsonld: [P.coinGuideJsonLd(lang, base)], body: P.coinPage(lang, await readJSON(env.STORE, 'e/coin/sale.json'), env.PAYPAL_COIN_SALE === 'on', addrs) });
   }
   if (key === 'member') {
     // wallet admin selalu ke Portal admin (perintah pemilik #34)
@@ -510,7 +515,7 @@ export default {
       if (p === '/ads.txt') return new Response(ADS_TXT, { headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'public, max-age=3600' } });
       if (p === '/robots.txt') return new Response(`User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /internal/\nDisallow: /id/member\nDisallow: /en/member\nDisallow: /id/admin\nDisallow: /en/admin\nSitemap: ${env.BASE_URL}/sitemap.xml\n`, { headers: { 'content-type': 'text/plain; charset=utf-8' } });
       if (p.startsWith('/sitemap')) return (await sitemap(env, url)) ?? new Response('not found', { status: 404 });
-      if (p.startsWith('/api/') || p.startsWith('/internal/')) return await api(request, env, ctx, url);
+      if (p.startsWith('/api/') || p.startsWith('/internal/') || p === '/tokenlist.json') return await api(request, env, ctx, url);
       let m = /^\/img\/([a-z-]+)\/(\d+)\.svg$/.exec(p);
       if (m && validToken(m[1], Number(m[2]))) return await svg(request, env, ctx, m[1], Number(m[2]), url.origin);
       m = /^\/play\/([a-z-]+)\/(\d+)$/.exec(p);

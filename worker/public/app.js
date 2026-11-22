@@ -262,7 +262,7 @@ document.querySelectorAll('[data-watch-axto]').forEach((b) => b.addEventListener
   try {
     const c = await config();
     if (!c.axto) { b.textContent = lang === 'id' ? 'Kontrak koin belum aktif' : 'Coin contract not live yet'; return; }
-    await eth().request({ method: 'wallet_watchAsset', params: { type: 'ERC20', options: { address: c.axto, symbol: 'AXTO', decimals: 18, image: `${location.origin}/logo-192.png` } } });
+    await eth().request({ method: 'wallet_watchAsset', params: { type: 'ERC20', options: { address: c.axto, symbol: 'AXTO', decimals: 18, image: `${location.origin}/brand/axto-coin-256.png` } } }); // logo AXTO Coin (#51)
   } catch (e) { b.textContent = `${L.err}: ${e.message ?? e}`; }
 }));
 

@@ -88,12 +88,18 @@ function coinWallets(s) {
   tbl.append(tb);
   for (const [label, addr, bal] of rows) {
     const tr = el('tr'); const th = el('th', label); const td = el('td'); const tdb = el('td', '', 'bal');
+    const lg = /vesting/i.test(label) ? 'vesting' : /hold/i.test(label) ? 'hold' : /token|AxtoSale|beli|purchase|presale|bank/i.test(label) ? 'coin' : null;
+    if (lg) { const im = el('img'); Object.assign(im, { src: `/brand/axto-${lg}-64.png`, width: 28, height: 28, alt: '' }); im.style.cssText = 'border-radius:50%;vertical-align:middle;margin-right:6px'; th.prepend(im); }
     if (addr) { const a = el('a', addr, 'link'); a.href = `${net.explorer}/${addr === c.token ? 'token' : 'address'}/${addr}`; a.target = '_blank'; a.rel = 'noopener'; td.append(a); }
     else td.append(el('span', id ? 'aktif setelah deploy' : 'live after deploy', 'muted'));
     if (bal && addr && c.token) { tdb.textContent = '…'; balance(net.rpc, c.token, addr).then((v) => { tdb.textContent = v; }); }
     tr.append(th, td, tdb); tb.append(tr);
   }
   box.append(tbl);
+  // paket logo untuk explorer & wallet pihak ketiga (BaseScan „Update Token Info" diajukan pemilik kontrak token)
+  const kit = el('p', id ? 'Logo resmi: ' : 'Official logos: ', 'meta');
+  for (const [n, f] of [['AXTO Coin 256', 'axto-coin-256.png'], ['AXTO Coin 32', 'axto-coin-32.png'], ['AXTO Coin 512', 'axto-coin-512.png'], ['AXTO Vesting 512', 'axto-vesting-512.png'], ['AXTO Hold 512', 'axto-hold-512.png'], ['tokenlist.json', '../tokenlist.json']]) { const a2 = el('a', n, 'link'); a2.href = `/brand/${f}`; a2.download = ''; kit.append(a2, ' · '); }
+  box.append(kit);
 }
 
 async function balance(rpc, token, addr) {

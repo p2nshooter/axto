@@ -257,14 +257,73 @@ export function exclusivePage(lang, stats) {
 
 export function coinPage(lang, sale, paypalOn, a = {}) {
   const t = T[lang].coin;
-  return `<section class="page coin"><h1>${esc(t.title)}</h1>
+  const id = lang === 'id';
+  // logo per baris alokasi (#51): presale & perusahaan = AXTO Coin, listing DEX = AXTO Vesting, cadangan 5 tahun = AXTO Hold
+  const LOGO = ['coin', 'vesting', 'hold', 'coin'];
+  const logo = (k, sz = 64, cls = '') => `<img src="/brand/axto-${k}-${sz}.png" alt="AXTO ${k === 'coin' ? 'Coin' : k === 'vesting' ? 'Vesting' : 'Hold'}" width="${sz}" height="${sz}" loading="lazy" class="${cls}">`;
+  return `<section class="page coin"><div class="coinhead">${logo('coin', 256, 'coinlogo')}<div><h1>${esc(t.title)}</h1><p class="meta">${id ? 'Token AXTO di jaringan Base · simbol AXTO · 18 desimal' : 'AXTO token on the Base network · symbol AXTO · 18 decimals'}</p></div></div>
   <dl class="counters"><div><dt>${esc(t.supply)}</dt><dd>10.000.000</dd></div><div><dt>${esc(t.price)}</dt><dd>$10</dd></div><div><dt>${esc(t.sold)}</dt><dd>${fmt(sale?.sold, lang)} / 2.000.000</dd></div></dl>
-  <table class="split"><tbody>${t.split.map(([a, b]) => `<tr><th>${esc(a)}</th><td>${esc(b)}</td></tr>`).join('')}</tbody></table>
-  <div class="buy" id="coin-buy"><label>${lang === 'id' ? 'Jumlah koin' : 'Number of coins'} <input type="number" min="1" max="5000" step="1" value="10" id="coin-n"></label>
+  <table class="split alloc"><tbody>${t.split.map(([x, y], i) => `<tr><th>${logo(LOGO[i] ?? 'coin', 64)}<span>${esc(x)}</span></th><td>${esc(y)}</td></tr>`).join('')}</tbody></table>
+  <div class="buy" id="coin-buy"><label>${id ? 'Jumlah koin' : 'Number of coins'} <input type="number" min="1" max="5000" step="1" value="10" id="coin-n"></label>
   <p>${paypalOn ? `<button class="btn gold" type="button" data-buy="paypal">${esc(t.buyPaypal)}</button>` : `<span class="muted">${esc(t.paypalOff)}</span>`}
-  <button class="btn" type="button" data-buy="usdc">${esc(t.buyUsdc)}</button> <button class="btn" type="button" data-buy="eth">${esc(t.buyEth)}</button> <button class="btn ghost" type="button" data-watch-axto>${lang === 'id' ? 'Tambahkan AXTO ke MetaMask' : 'Add AXTO to MetaMask'}</button></p><p class="buymsg" role="status"></p></div>
+  <button class="btn" type="button" data-buy="usdc">${esc(t.buyUsdc)}</button> <button class="btn" type="button" data-buy="eth">${esc(t.buyEth)}</button> <button class="btn ghost" type="button" data-watch-axto>${id ? 'Tambahkan AXTO ke wallet' : 'Add AXTO to wallet'}</button></p><p class="buymsg" role="status"></p></div>
   ${coinWalletBox(lang, a)}
+  ${coinGuide(lang, a)}
   <p class="disclaimer">${esc(t.disclaimer)}</p></section>`;
+}
+
+/** Panduan manual menampilkan koin AXTO di wallet (perintah pemilik #51). Satu bahasa per halaman. */
+export const COIN_GUIDE = {
+  id: {
+    title: 'Cara menampilkan koin AXTO di wallet Anda',
+    lead: 'Koin AXTO hidup di jaringan Base. Wallet tidak menampilkannya otomatis — tambahkan sekali saja dengan data di bawah, saldo AXTO Anda langsung terlihat.',
+    data: 'Data yang diperlukan',
+    rows: [['Jaringan', 'Base'], ['Chain ID', '8453'], ['RPC', 'https://mainnet.base.org'], ['Penjelajah blok', 'https://basescan.org'], ['Simbol', 'AXTO'], ['Desimal', '18']],
+    contract: 'Alamat kontrak token',
+    pending: 'tampil di sini begitu kontrak aktif',
+    auto: 'Cara tercepat: tekan tombol „Tambahkan AXTO ke wallet" di atas dari browser wallet Anda — AXTO beserta logonya langsung masuk.',
+    wallets: [
+      ['MetaMask', ['Buka MetaMask, pilih jaringan Base (bila belum ada: Pengaturan → Jaringan → Tambah jaringan → Base).', 'Di tab Token, ketuk „Impor token" → „Token kustom".', 'Tempel alamat kontrak AXTO. Simbol AXTO dan desimal 18 terisi otomatis.', 'Ketuk „Berikutnya" → „Impor". AXTO tampil di daftar token.']],
+      ['Trust Wallet', ['Ketuk ikon pengaturan di halaman utama → „Tambah token kustom".', 'Pilih jaringan Base.', 'Tempel alamat kontrak AXTO; isi Nama „AXTO Coin", Simbol „AXTO", Desimal „18".', 'Ketuk „Simpan". AXTO tampil di halaman utama.']],
+      ['Coinbase Wallet', ['Buka tab Aset → „Kelola" → „Tambah token kustom".', 'Pilih jaringan Base.', 'Tempel alamat kontrak AXTO, lalu ketuk „Tambah".']],
+      ['OKX Wallet, Bitget Wallet & wallet lain', ['Cari menu „Tambah token" / „Impor token" / „Token kustom".', 'Pilih jaringan Base (Chain ID 8453).', 'Tempel alamat kontrak AXTO, pastikan simbol AXTO dan desimal 18, lalu simpan.']],
+    ],
+    warn: 'Waspada token palsu: siapa pun bisa membuat token bernama AXTO. Pakai HANYA alamat kontrak yang tertera di halaman resmi axto.io ini.',
+    copy: 'Salin',
+  },
+  en: {
+    title: 'How to show the AXTO coin in your wallet',
+    lead: 'The AXTO coin lives on the Base network. Wallets do not show it automatically — add it once with the details below and your AXTO balance appears.',
+    data: 'Details you need',
+    rows: [['Network', 'Base'], ['Chain ID', '8453'], ['RPC', 'https://mainnet.base.org'], ['Block explorer', 'https://basescan.org'], ['Symbol', 'AXTO'], ['Decimals', '18']],
+    contract: 'Token contract address',
+    pending: 'shown here once the contract is live',
+    auto: 'Fastest way: press "Add AXTO to wallet" above from your wallet browser — AXTO and its logo are added instantly.',
+    wallets: [
+      ['MetaMask', ['Open MetaMask and select the Base network (if missing: Settings → Networks → Add network → Base).', 'On the Tokens tab, tap "Import tokens" → "Custom token".', 'Paste the AXTO contract address. Symbol AXTO and 18 decimals fill in automatically.', 'Tap "Next" → "Import". AXTO appears in your token list.']],
+      ['Trust Wallet', ['Tap the settings icon on the home screen → "Add custom token".', 'Choose the Base network.', 'Paste the AXTO contract address; enter Name "AXTO Coin", Symbol "AXTO", Decimals "18".', 'Tap "Save". AXTO appears on your home screen.']],
+      ['Coinbase Wallet', ['Open the Assets tab → "Manage" → "Add custom token".', 'Choose the Base network.', 'Paste the AXTO contract address and tap "Add".']],
+      ['OKX Wallet, Bitget Wallet & other wallets', ['Look for "Add token" / "Import token" / "Custom token".', 'Choose the Base network (Chain ID 8453).', 'Paste the AXTO contract address, check symbol AXTO and 18 decimals, then save.']],
+    ],
+    warn: 'Beware of fake tokens: anyone can create a token called AXTO. Use ONLY the contract address shown on this official axto.io page.',
+    copy: 'Copy',
+  },
+};
+
+function coinGuide(lang, a) {
+  const g = COIN_GUIDE[lang] ?? COIN_GUIDE.en;
+  const val = (v) => `<code>${esc(v)}</code> <button class="btn ghost sm" type="button" data-copy="${esc(v)}">${esc(g.copy)}</button>`;
+  return `<section class="coin-guide" id="panduan-wallet"><h2>${esc(g.title)}</h2><p class="lead">${esc(g.lead)}</p>
+  <h3>${esc(g.data)}</h3><table class="split cw"><tbody>${g.rows.map(([k, v]) => `<tr><th>${esc(k)}</th><td>${val(v)}</td></tr>`).join('')}<tr><th>${esc(g.contract)}</th><td>${a.token ? val(a.token) : `<span class="muted">${esc(g.pending)}</span>`}</td></tr></tbody></table>
+  <p class="ok">${esc(g.auto)}</p>
+  <div class="wguide">${g.wallets.map(([w, steps]) => `<details><summary>${esc(w)}</summary><ol>${steps.map((x) => `<li>${esc(x)}</li>`).join('')}</ol></details>`).join('')}</div>
+  <p class="warn">${esc(g.warn)}</p></section>`;
+}
+
+/** JSON-LD HowTo untuk panduan wallet (SEO). */
+export function coinGuideJsonLd(lang, base) {
+  const g = COIN_GUIDE[lang] ?? COIN_GUIDE.en;
+  return { '@context': 'https://schema.org', '@type': 'HowTo', name: g.title, description: g.lead, image: `${base}/brand/axto-coin-512.png`, step: g.wallets[0][1].map((x, i) => ({ '@type': 'HowToStep', position: i + 1, text: x })) };
 }
 
 /** Kotak wallet publik (perintah pemilik #43 „jgn bongkar rahasia perusahaan"): HANYA dua alamat kontrak yang dibutuhkan
@@ -274,7 +333,7 @@ function coinWalletBox(lang, a) {
   const id = lang === 'id';
   if (!a.token) return `<p class="muted">${id ? 'Alamat kontrak koin tampil di sini begitu kontrak aktif.' : 'The coin contract address appears here once the contract is live.'}</p>`;
   const row = (label, x) => `<tr><th>${esc(label)}</th><td><code>${esc(x)}</code> <button class="btn ghost sm" type="button" data-copy="${esc(x)}">${id ? 'Salin' : 'Copy'}</button></td></tr>`;
-  return `<section class="coin-wallet"><h2>${id ? 'Tambahkan AXTO di wallet Anda' : 'Add AXTO to your wallet'}</h2>
+  return `<section class="coin-wallet"><h2><img src="/brand/axto-coin-64.png" alt="" width="32" height="32" class="inl"> ${id ? 'Alamat kontrak resmi AXTO' : 'Official AXTO contract addresses'}</h2>
   <p class="meta">${id ? 'Jaringan Base · simbol AXTO · 18 desimal' : 'Base network · symbol AXTO · 18 decimals'}</p>
   <table class="split cw"><tbody>${row(id ? 'Kontrak token (impor manual)' : 'Token contract (manual import)', a.token)}${a.sale ? row(id ? 'Kontrak beli (kirim ETH = beli AXTO $10)' : 'Purchase contract (send ETH = buy AXTO at $10)', a.sale) : ''}</tbody></table></section>`;
 }
