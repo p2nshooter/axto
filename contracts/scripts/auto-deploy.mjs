@@ -153,6 +153,13 @@ async function main() {
     return s;
   };
   log(`Deployer ${me} · saldo ${ethers.formatEther(bal)} ETH · perlu ±${ethers.formatEther(need)} ETH di ${net.name}`);
+  // Rem darurat: berkas contracts/DEPLOY_HOLD ada → tidak mendeploy apa pun (mis. desain kontrak sedang diubah sebelum deploy)
+  const hold = (() => { try { return readFileSync(new URL('../DEPLOY_HOLD', import.meta.url), 'utf8').trim(); } catch { return ''; } })();
+  if (hold && !LOCAL && !st.done && !st.token) {
+    status(`ditahan: ${hold}`);
+    log(`::notice::Deploy ditahan — ${hold}`);
+    return { held: hold, address: me };
+  }
   if (bal < need && !st.done) {
     status('menunggu dana');
     log(`::notice::Kirim ±${ethers.formatEther(need)} ETH (jaringan ${net.name}) ke ${me}. Workflow ini mencoba lagi tiap jam.`);
