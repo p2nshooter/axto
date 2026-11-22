@@ -27,7 +27,7 @@ export function digitsSvg(style, hhmm, ss, x, y, w, h, on, off, seed) {
       const P = [[X + g, Y, X + W - g, Y], [X, Y + g, X, Y + m - g], [X + W, Y + g, X + W, Y + m - g], [X + g, Y + m, X + W - g, Y + m], [X, Y + m + g, X, Y + H - g], [X + W, Y + m + g, X + W, Y + H - g], [X + g, Y + H, X + W - g, Y + H]];
       P.forEach((p, k) => { s += `<path d="${seg(...p)}" fill="${SEG[n][k] ? on : off}" ${SEG[n][k] ? glow : 'opacity=".22"'}/>`; });
     });
-    if (style === 'liquid') s = `<g filter="url(#soft)">${s}</g>`;
+    if (style === 'liquid') s = `<g filter="url(#liq)">${s}</g>`; // cair tapi tetap terbaca (dulu blur 18 → angka tak terbaca)
   } else if (style === 'dot') {
     const cs = Math.min(cw * 0.86 / 5, h / 7);
     digits.forEach((n, i) => {
@@ -144,7 +144,7 @@ export function timeSvg(d, at = '10:08', sec = '42') {
     }
   }
   const motionFx = { spin: `<circle cx="500" cy="500" r="440" fill="none" stroke="${on}" stroke-opacity=".25" stroke-width="2" stroke-dasharray="4 18" class="spin"/>`, aurora: `<path d="M0 260Q500 120 1000 300V0H0Z" fill="${on}" opacity=".12" class="drift"/>`, supernova: `<circle cx="500" cy="500" r="470" fill="none" stroke="${on}" stroke-opacity=".35" stroke-width="6" class="pulse"/>`, particles: starfield(d.seed ^ 0x55, 1000, 1000, 50, on), wave: `<path d="M0 880Q250 820 500 880T1000 880V1000H0Z" fill="${on}" opacity=".12" class="drift"/>` }[motion[0]] ?? '';
-  const defs = `<defs>${radial('bgG', bg[0], bg[1])}${linear('frameG', frameC)}${linear('strap', [frameC[3], frameC[1], frameC[3]], 0, 0, 1, 0)}${girihPattern('girih', on, 80, 0.18)}<filter id="glow" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter><filter id="soft"><feGaussianBlur stdDeviation="18"/></filter><g id="sil">${frame}</g></defs>`;
+  const defs = `<defs>${radial('bgG', bg[0], bg[1])}${linear('frameG', frameC)}${linear('strap', [frameC[3], frameC[1], frameC[3]], 0, 0, 1, 0)}${girihPattern('girih', on, 80, 0.18)}<filter id="glow" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter><filter id="soft"><feGaussianBlur stdDeviation="18"/></filter><filter id="liq" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="2.4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter><g id="sil">${frame}</g></defs>`;
   const ex = d.exclusive ? exclusiveBadge(1000, d.tokenId, 50000, finish[1]) + `<use href="#sil" fill="none" stroke="#f2cf6b" stroke-width="6" stroke-dasharray="2 10"/>` : '';
   return `${svgOpen(1000, 1000)}${defs}<rect width="1000" height="1000" fill="url(#bgG)"/>${backdropSvg(backdrop[0], d.seed, bg)}${motionFx}${extra}<g fill="url(#frameG)" stroke="${frameC[2]}" stroke-width="6">${frame}</g><g fill="none" stroke="#fff" stroke-opacity=".35" stroke-width="2" transform="translate(500 500) scale(.9) translate(-500 -500)">${frame}</g><path d="${roundRect(px, py, pw, ph, 28)}" fill="${lum(on) < 0.2 ? '#fff' : '#000'}" fill-opacity="${lum(on) < 0.2 ? '.78' : '.62'}"/><g id="digits">${digitsSvg(digit[0], at, sec, px + pw * 0.07, py + ph * 0.18, pw * 0.74, ph * 0.64, on, off, d.seed)}</g>${gemSvg}${ex}${hallmark(1000, 1000, on)}</svg>`;
 }
@@ -164,6 +164,7 @@ export function timePlayer(d, meta, opts = {}) {
   const n = opts.nonce ? ` nonce="${opts.nonce}"` : '';
   const anim = TIME_ANIM_CSS;
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(meta.name)}</title><style${n}>html,body{margin:0;height:100%;background:#000;overflow:hidden}#s{width:100vmin;height:100vmin;margin:auto;display:block;touch-action:none}#s svg{width:100%;height:100%}#w{position:fixed;inset:0;display:none}#tz{position:fixed;right:8px;bottom:8px;font:12px system-ui;color:#fff;background:#0008;border:1px solid #fff3;border-radius:8px;padding:4px}${anim}</style></head><body><div id="s">${svg}</div><svg id="w" viewBox="0 0 1600 1000"></svg><select id="tz" aria-label="Time zone"></select><script${n}>
+var __name=function(f){return f};// bundler Cloudflare menyisipkan __name(...) ke fungsi yang diserialisasi
 const DIG=${digitsSvg.toString()};
 const ST=${JSON.stringify(digit[0])},ON=${JSON.stringify(on)},OFF=${JSON.stringify(off)},SEED=${d.seed},WORLD=${world ? JSON.stringify(WORLD) : 'null'};
 const g=document.querySelector('#digits');
