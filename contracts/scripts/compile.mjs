@@ -42,3 +42,11 @@ for (const [file, contracts] of Object.entries(out.contracts)) {
   }
 }
 console.log(`${n} kontrak dikompilasi (solc ${solc.version()})`);
+
+// Masukan standar (semua sumber termasuk OpenZeppelin) untuk verifikasi kode di BaseScan/Sourcify setelah deploy.
+const verifySources = {};
+for (const path of Object.keys(out.sources ?? {})) {
+  verifySources[path] = { content: sources[path]?.content ?? findImports(path).contents };
+}
+writeFileSync(join(ROOT, 'out', '_verify-input.json'), JSON.stringify({ language: 'Solidity', sources: verifySources, settings: { optimizer: input.settings.optimizer, evmVersion: input.settings.evmVersion, outputSelection: { '*': { '*': ['abi', 'evm.bytecode.object', 'evm.deployedBytecode.object', 'metadata'] } } } }));
+writeFileSync(join(ROOT, 'out', '_solc.json'), JSON.stringify({ version: solc.version(), etherscan: `v${solc.version().replace(/\.Emscripten.*$/, '')}` }));

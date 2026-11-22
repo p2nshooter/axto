@@ -47,6 +47,7 @@ jobs:
           CLOUDFLARE_EMAIL: ${{ secrets.CLOUDFLARE_EMAIL }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           ENGINE_HMAC_KEY: ${{ secrets.ENGINE_HMAC_KEY }}
+          ETHERSCAN_API_KEY: ${{ secrets.ETHERSCAN_API_KEY }}
           CHAIN_ID: ${{ inputs.chain || '8453' }}
           AXTO_API: https://axto.io
         run: node scripts/auto-deploy.mjs

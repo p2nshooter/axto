@@ -73,6 +73,34 @@ function open(s) {
   return Buffer.concat([d.update(Buffer.from(j.ct, 'base64')), d.final()]).toString('utf8');
 }
 
+/**
+ * Verifikasi kode semua kontrak agar BaseScan menampilkan kode, nama & syarat pemasangan logo terpenuhi.
+ *  - Sourcify (tanpa kunci) selalu;  - BaseScan lewat Etherscan API v2 bila secret ETHERSCAN_API_KEY ada.
+ * Gagal satu kontrak tidak menggagalkan deploy; workflow berikutnya mencoba lagi sampai BaseScan terverifikasi.
+ */
+async function verifyAll(chainId, st) {
+  const input = JSON.parse(readFileSync(new URL('../out/_verify-input.json', import.meta.url), 'utf8'));
+  const solcv = JSON.parse(readFileSync(new URL('../out/_solc.json', import.meta.url), 'utf8'));
+  const res = { sourcify: 0, etherscan: 0 };
+  const key = process.env.ETHERSCAN_API_KEY;
+  for (const [address, v] of Object.entries(st.verify ?? {})) {
+    try {
+      const r = await fetch(`https://sourcify.dev/server/v2/verify/${chainId}/${address}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ stdJsonInput: input, compilerVersion: solcv.version, contractIdentifier: v.id }) });
+      if (r.ok || r.status === 409) res.sourcify += 1;
+      log(`sourcify ${v.id} ${address}: ${r.status}`);
+    } catch (e) { log(`sourcify ${address}: ${e.message}`); }
+    if (!key) continue;
+    try {
+      const body = new URLSearchParams({ module: 'contract', action: 'verifysourcecode', apikey: key, contractaddress: address, sourceCode: JSON.stringify(input), codeformat: 'solidity-standard-json-input', contractname: v.id, compilerversion: solcv.etherscan, constructorArguements: v.args });
+      const j = await (await fetch(`https://api.etherscan.io/v2/api?chainid=${chainId}`, { method: 'POST', body })).json();
+      if (j.status === '1' || /already verified/i.test(j.result ?? '')) res.etherscan += 1;
+      log(`basescan ${v.id} ${address}: ${j.result}`);
+    } catch (e) { log(`basescan ${address}: ${e.message}`); }
+  }
+  log(`Verifikasi: Sourcify ${res.sourcify}, BaseScan ${res.etherscan}${key ? '' : ' (secret ETHERSCAN_API_KEY belum ada)'}`);
+  return { sourcify: res.sourcify > 0, etherscan: key ? res.etherscan === Object.keys(st.verify ?? {}).length : false, at: new Date().toISOString() };
+}
+
 async function main() {
   const net = LOCAL ? { rpc: process.env.LOCAL_RPC, usdc: process.env.LOCAL_USDC, feed: process.env.LOCAL_FEED, name: 'lokal' } : NETS[CHAIN];
   if (!net) throw new Error(`CHAIN_ID ${CHAIN} tidak didukung`);
@@ -80,7 +108,15 @@ async function main() {
   const chainId = Number((await provider.getNetwork()).chainId);
 
   // kontrak sudah aktif di jaringan ini → tidak ada yang perlu dikerjakan
-  if (!LOCAL && r2get(`axto-nft-data/cfg/contracts-${chainId}.json`)) { log(`Kontrak ${net.name} sudah aktif — selesai.`); return { done: true }; }
+  if (!LOCAL && r2get(`axto-nft-data/cfg/contracts-${chainId}.json`)) {
+    const prev = JSON.parse(r2get(`axto-vault-data/deploy-${chainId}.json`) || '{}');
+    if (prev.done && !prev.verified?.etherscan) {
+      prev.verified = await verifyAll(chainId, prev);
+      r2put(`axto-vault-data/deploy-${chainId}.json`, JSON.stringify(prev));
+    }
+    log(`Kontrak ${net.name} sudah aktif — selesai.`);
+    return { done: true };
+  }
 
   let pk = LOCAL ? process.env.LOCAL_KEY : null;
   if (!pk) {
@@ -126,9 +162,11 @@ async function main() {
     if (st[key]) return st[key];
     status(`deploy ${key}`);
     const a = art(name);
-    const c = await new ethers.ContractFactory(a.abi, a.bytecode, wallet).deploy(...args, { nonce: nonce++ });
+    const f = new ethers.ContractFactory(a.abi, a.bytecode, wallet);
+    const c = await f.deploy(...args, { nonce: nonce++ });
     await track(Promise.resolve(c.deploymentTransaction()));
     st[key] = await c.getAddress();
+    st.verify = { ...(st.verify ?? {}), [st[key]]: { id: `${a.source}:${a.contractName}`, args: f.interface.encodeDeploy(args).slice(2) } };
     save();
     log(`✓ ${key} ${st[key]}`);
     return st[key];
@@ -168,6 +206,7 @@ async function main() {
   await step('owner token → wallet koin', (o) => T.transferOwnership(COIN, o));
   st.done = true;
   save();
+  if (!LOCAL) { st.verified = await verifyAll(chainId, st); save(); }
 
   const body = JSON.stringify({ chainId, token, sale, auctionHouse: house, vesting, lock, collections: st.collections });
   if (!LOCAL) {
