@@ -1,5 +1,5 @@
 /**
- * Katalog NFT Hadits — DIHASILKAN oleh engine/bin/build-hadith.mjs dari data ulyah.com (seed fawazahmed0/hadith-api
+ * Katalog NFT Hadits — DIHASILKAN oleh engine/bin/build-hadith.mjs (dataset fawazahmed0/hadith-api
  * Unlicense & gadingnst/hadith-api MIT). Jangan diedit tangan. Teks hadits ada di worker/public/hadith/<kitab>/<blok>.json.
  * sections: [nomor kitab/bab, nama (EN), nomor hadits pertama, terakhir]; nums: selisih nomor hadits (base36).
  */

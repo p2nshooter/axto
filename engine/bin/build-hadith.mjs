@@ -1,16 +1,16 @@
 #!/usr/bin/env node
 /**
- * Bangun data NFT Hadits (perintah pemilik #49 „ambil hadits2nya dari ulyah.com") dari seed ulyah.com + metadata kitab
- * fawazahmed0/hadith-api (sumber asli data ulyah.com, Unlicense). Teks TIDAK diubah: disalin apa adanya.
+ * Bangun data NFT Hadits (perintah pemilik #49) dari berkas seed sumber internal pemilik + metadata kitab
+ * fawazahmed0/hadith-api (Unlicense). Teks TIDAK diubah: disalin apa adanya.
  *
- *   node bin/build-hadith.mjs <ulyah.com/packages/db-schema/seed> <info.json fawazahmed0> <editions.json fawazahmed0>
+ *   node bin/build-hadith.mjs <direktori seed> <info.json fawazahmed0> <editions.json fawazahmed0>
  *
  * Keluaran:
  *   worker/public/hadith/<kitab>/<blok>.json   — 100 hadits per blok: {n, ar, id, en, b (nomor kitab/bab), bh (nomor dalam bab), g}
  *   engine/src/catalog/hadith-meta.js          — daftar kitab, nama bab, rentang, nomor hadits (dikompres), bahasa terjemahan
  *
  * Kitab yang dipakai: lisensinya jelas (fawazahmed0 Unlicense; gadingnst MIT). Riyadhus Shalihin (lisensi sumber tidak
- * tercantum) dan ringkasan kurasi ulyah.com (parafrase, bukan teks lengkap) TIDAK dipakai.
+ * tercantum) dan ringkasan kurasi (parafrase, bukan teks lengkap) TIDAK dipakai.
  */
 import { readFileSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
 import { join, dirname } from 'node:path';
@@ -96,7 +96,7 @@ for (const [key, file, nameId, nameAr, nameEn, author, source] of KITAB) {
   const inf = info[key];
   const ref = new Map((inf?.hadiths ?? []).map((h) => [h.hadithnumber, h]));
   const sections = inf ? Object.entries(inf.metadata.sections).filter(([k, v]) => Number(k) > 0 && v).map(([k, v]) => { const d = inf.metadata.section_details[k]; return [Number(k), v, d?.hadithnumber_first ?? 0, d?.hadithnumber_last ?? 0]; }) : [];
-  // terjemahan lain per bahasa (selain ind/eng yang ikut data ulyah.com): nama edisi pertama per bahasa
+  // terjemahan lain per bahasa (selain ind/eng yang ikut data seed): nama edisi pertama per bahasa
   const langs = {};
   for (const e of editions[key]?.collection ?? []) { const code = LANG[e.language]; if (code && !langs[code]) langs[code] = e.name; }
   mkdirSync(join(outDir, key), { recursive: true });
@@ -104,7 +104,7 @@ for (const [key, file, nameId, nameAr, nameEn, author, source] of KITAB) {
     const chunk = nums.slice(c * 100, c * 100 + 100).map((n) => {
       const r = byNum.get(n);
       const h = ref.get(n);
-      const native = key !== 'nawawi' && key !== 'qudsi' && key !== 'dehlawi'; // tiga kitab ini: text_id berisi Inggris (stopgap ulyah.com)
+      const native = key !== 'nawawi' && key !== 'qudsi' && key !== 'dehlawi'; // tiga kitab ini: text_id berisi Inggris
       const g = h?.grades?.[0] ? `${h.grades[0].grade} (${h.grades[0].name})` : (r.grade || null);
       return { n, ar: r.text_ar, id: native ? r.text_id : null, en: r.text_en ?? (native ? null : r.text_id) ?? null, b: h?.reference?.book ?? null, bh: h?.reference?.hadith ?? null, an: h?.arabicnumber ?? null, g };
     });
@@ -117,7 +117,7 @@ for (const [key, file, nameId, nameAr, nameEn, author, source] of KITAB) {
   console.log(`${key}: ${nums.length} hadits, ${sections.length} kitab/bab, bahasa ${Object.keys(langs).join(' ')}`);
 }
 const js = `/**
- * Katalog NFT Hadits — DIHASILKAN oleh engine/bin/build-hadith.mjs dari data ulyah.com (seed fawazahmed0/hadith-api
+ * Katalog NFT Hadits — DIHASILKAN oleh engine/bin/build-hadith.mjs (dataset fawazahmed0/hadith-api
  * Unlicense & gadingnst/hadith-api MIT). Jangan diedit tangan. Teks hadits ada di worker/public/hadith/<kitab>/<blok>.json.
  * sections: [nomor kitab/bab, nama (EN), nomor hadits pertama, terakhir]; nums: selisih nomor hadits (base36).
  */

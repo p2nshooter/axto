@@ -16,7 +16,7 @@ export const fsProvider = {
     return { ar: v.ar, tr: v.tr, lt: v.lt };
   },
   async page(p) { return json(`h/${p}.json`); },
-  // #49: hadits dari aset statis yang dibangun dari data ulyah.com (worker/public/hadith/<kitab>/<blok>.json)
+  // #49: hadits dari aset statis (worker/public/hadith/<kitab>/<blok>.json)
   async hadith(k, n) {
     const { indexOfNumber } = await import('./catalog/hadith.js');
     const i = indexOfNumber(k, n);

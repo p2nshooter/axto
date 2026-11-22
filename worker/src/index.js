@@ -4,8 +4,9 @@
  * Data member/lelang/kustodi: R2 (lewat DO Ledger). Kunci privat hanya di vault (Service Binding).
  */
 import { dna } from '../../engine/src/dna.js';
-import { metadata, contractMetadata, renderCtx, animatedSvg, renderPlayerLive, attributesId, browse, browseList, listFacets, seriesKey, seriesOptions, quranRef } from '../../engine/src/metadata.js';
+import { metadata, contractMetadata, renderCtx, animatedSvg, renderPlayerLive, attributesId, attributesFor, hadithBlurb, browse, browseList, listFacets, seriesKey, seriesOptions, quranRef } from '../../engine/src/metadata.js';
 import { showcaseIds, SHOWCASE_KEYS, priceUsd } from '../../engine/src/showcase.js';
+import { hadithRef } from '../../engine/src/render/hadith.js';
 import { collectionSeo, seriesSeo, surahSeo, hubSeo, breadcrumb, itemList, seriesLabel, surahInfo, BREAD } from './seo.js';
 import { COLLECTIONS, sha256Hex } from '../../engine/src/core.js';
 import { canonical } from '../../engine/src/dna.js';
@@ -56,7 +57,7 @@ function assetProvider(env, origin) {
   const prov = {
     async ayah(s, a) { const j = await get(`s/${s}.json`); const v = j.ayat[a - 1]; return { ar: v.ar, tr: v.tr, lt: v.lt }; },
     async page(p) { return get(`h/${p}.json`); },
-    async hadith(k, n) { return hadithItem(env, origin, k, n); }, // #49: teks hadits dari aset statis (data ulyah.com)
+    async hadith(k, n) { return hadithItem(env, origin, k, n); }, // #49: teks hadits dari aset statis
   };
   // Wajah model hanya disisipkan bila izin tertulis model tercatat (MODEL_CONSENT berisi id model, mis. "luaja-1").
   // Disisipkan sebagai data-URI: SVG yang ditampilkan lewat <img>/OpenSea tidak boleh memuat gambar eksternal.
@@ -450,12 +451,16 @@ async function html(request, env, ctx, url) {
       const related = browseList(c, sc.ids, ref && ref.series === 'ayah' ? { surah: ref.surah, n: 9 } : { series: sk, n: 9 }).items.filter((it) => it.id !== id).slice(0, 8);
       const os = openseaUrl(env, c, id);
       const inStock = sc.set.has(id);
+      if (d.kind === 'hadith') {
+        const hr = hadithRef(d);
+        meta.name = lang === 'id' ? `Hadits ${hr.nameId} Nomor ${hr.number} — ${d.pick[0][2]} #${id.toLocaleString('id-ID')}` : meta.name;
+      }
       const product = { '@context': 'https://schema.org', '@type': 'Product', name: meta.name, image: meta.image, description: meta.description.slice(0, 500), sku: `${c}-${id}`, category: gal[1], brand: { '@type': 'Brand', name: 'AXTO' }, offers: { '@type': 'Offer', priceCurrency: 'USD', price: usd, availability: 'https://schema.org/InStock', url: os || `${base}/${lang}/nft/${c}/${id}`, seller: { '@type': 'Organization', name: 'AXTO' } } };
-      return out({ page: 'home', rest: `/nft/${c}/${id}`, title: `${meta.name} — $${usd}`, desc: `${meta.name}: NFT 1/1 ${gal[1]} · ${meta.attributes.find((a) => a.trait_type === 'Tier')?.value} · $${usd} ${lang === 'id' ? 'di OpenSea (jaringan Base)' : 'on OpenSea (Base network)'}.`.slice(0, 160), image: meta.image, noindex: !inStock, jsonld: [product, breadcrumb(base, [...crumbs, [meta.name, `/${lang}/nft/${c}/${id}`]])], body: P.nftPage(lang, c, id, meta, null, attributesId(meta), os, { usd, crumbs, related, galleryHref: gal[0], galleryName: gal[1] }) });
+      return out({ page: 'home', rest: `/nft/${c}/${id}`, title: `${meta.name} — $${usd}`, desc: `${meta.name}: NFT 1/1 ${gal[1]} · ${meta.attributes.find((a) => a.trait_type === 'Tier')?.value} · $${usd} ${lang === 'id' ? 'di OpenSea (jaringan Base)' : 'on OpenSea (Base network)'}.`.slice(0, 160), image: meta.image, noindex: !inStock, jsonld: [product, breadcrumb(base, [...crumbs, [meta.name, `/${lang}/nft/${c}/${id}`]])], body: P.nftPage(lang, c, id, meta, null, attributesFor(c, id, lang), os, { usd, crumbs, related, galleryHref: gal[0], galleryName: gal[1], desc: c === 'hadith' ? hadithBlurb(c, id, lang) : null }) });
     }
     const lot = await L.lot(c, id);
     const product = { '@context': 'https://schema.org', '@type': 'Product', name: meta.name, image: meta.image, description: meta.description.slice(0, 300), brand: { '@type': 'Brand', name: 'AXTO' }, offers: { '@type': 'Offer', priceCurrency: 'USD', price: (lot.price || lot.start) / (lot.currency === 'USDC' ? 100 : 100), availability: lot.status === 'sold' ? 'https://schema.org/SoldOut' : 'https://schema.org/InStock', url: `${base}/${lang}/nft/${c}/${id}` } };
-    return out({ page: 'home', rest: `/nft/${c}/${id}`, title: meta.name, desc: meta.description.split('\n')[0].slice(0, 160), image: meta.image, body: P.nftPage(lang, c, id, meta, lot, attributesId(meta), openseaUrl(env, c, id)), jsonld: [product] });
+    return out({ page: 'home', rest: `/nft/${c}/${id}`, title: meta.name, desc: meta.description.split('\n')[0].slice(0, 160), image: meta.image, body: P.nftPage(lang, c, id, meta, lot, attributesFor(c, id, lang), openseaUrl(env, c, id)), jsonld: [product] });
   }
   const key = pageFromSlug(sub);
   if (key === 'auction') {

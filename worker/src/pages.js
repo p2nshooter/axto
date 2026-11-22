@@ -185,7 +185,7 @@ function buyBox(lang, c, id, meta, opensea, usd) {
 
 export function nftPage(lang, c, id, meta, lot, attrsId, opensea = '', pubInfo = null) {
   const t = T[lang];
-  const attrs = lang === 'id' ? attrsId : meta.attributes;
+  const attrs = pubInfo ? attrsId : lang === 'id' ? attrsId : meta.attributes; // publik: sudah sesuai bahasa halaman (#50)
   if (pubInfo) return nftPublicPage(lang, c, id, meta, attrs, opensea, pubInfo);
   const live = lot.status === 'live' || lot.status === 'waiting';
   const rarity = meta.attributes.find((a) => a.trait_type === 'Tier')?.value;
@@ -226,7 +226,7 @@ function nftPublicPage(lang, c, id, meta, attrs, opensea, info) {
     <h2>${esc(t.nft.traits)}</h2>
     <dl class="traits">${attrs.map((a) => `<div><dt>${esc(a.trait_type)}</dt><dd>${esc(a.value)}</dd></div>`).join('')}</dl>
     <p><a class="link" href="/play/${c}/${id}" target="_blank" rel="noopener">${esc(t.nft.play)} ↗</a> · <a class="link" href="${altPath('verify', lang, `/${c}/${id}`)}">${esc(t.nft.certificate)}</a>${opensea ? ` · <a class="link" href="${esc(opensea)}" target="_blank" rel="noopener">${esc(t.kind.opensea)} ↗</a>` : ''}</p>
-    <p class="desc">${esc(meta.description).replace(/\n/g, '<br>')}</p>
+    <p class="desc">${esc(info.desc ?? meta.description).replace(/\n/g, '<br>')}</p>
     ${rel}
   </div></section>`;
 }

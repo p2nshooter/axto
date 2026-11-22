@@ -122,7 +122,7 @@ test('#43 genom gerak: tidak ada dua NFT yang bergerak sama (20.000 berurutan pe
   }
 });
 
-test('#49 hadits: 10 jt publik & 10.000 eksklusif tanpa kembar, teks sama persis dengan sumber ulyah.com, rujukan lengkap', async () => {
+test('#49 hadits: 10 jt publik & 10.000 eksklusif tanpa kembar, teks sama persis dengan sumber, rujukan lengkap', async () => {
   const { TOTAL_HADITH } = await import('../src/catalog/hadith.js');
   assert.equal(TOTAL_HADITH, 38144);
   const seen = new Set();

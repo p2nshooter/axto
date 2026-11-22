@@ -119,7 +119,7 @@ export const COLLECTIONS = {
   stamp: { key: 'stamp', kind: 'stamp', max: 10_000_000, salt: 'axto/stamp/v1', exclusive: false, symbol: 'AXSTAMP' },
   quran: { key: 'quran', kind: 'quran', max: 10_000_000, salt: 'axto/quran/v1', exclusive: false, symbol: 'AXQURAN' },
   model: { key: 'model', kind: 'model', max: 10_000_000, salt: 'axto/model/v1', exclusive: false, symbol: 'AXMODEL', requiresConsent: true },
-  // #49: kaligrafi hadits dari data ulyah.com (12 kitab, 38.144 hadits)
+  // #49: kaligrafi hadits (12 kitab, 38.144 hadits)
   hadith: { key: 'hadith', kind: 'hadith', max: 10_000_000, salt: 'axto/hadith/v1', exclusive: false, symbol: 'AXHADITH' },
   // perintah pemilik #44: eksklusif (dibayar koin AXTO, dilelang & berputar di axto.io) cukup 10.000 per koleksi × 4 = 40.000
   'ex-time': { key: 'ex-time', kind: 'time', max: 10_000, salt: 'axto/ex-time/v1', exclusive: true, symbol: 'AXXTIME' },

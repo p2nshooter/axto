@@ -38,7 +38,7 @@ const COLS = [
   ['time', 'AXTO Time', 'AXTIME', 10_000_000], ['stamp', 'AXTO Stamp', 'AXSTAMP', 10_000_000], ['quran', "AXTO Qur'an", 'AXQURAN', 10_000_000], ['model', 'AXTO Model', 'AXMODEL', 10_000_000],
   // #44: eksklusif koin AXTO 4 × 10.000 (ex-model ditambahkan di akhir → alamat koleksi sebelumnya tidak bergeser)
   ['ex-time', 'AXTO Exclusive Time', 'AXXTIME', 10_000], ['ex-stamp', 'AXTO Exclusive Stamp', 'AXXSTAMP', 10_000], ['ex-quran', "AXTO Exclusive Qur'an", 'AXXQURAN', 10_000], ['ex-model', 'AXTO Exclusive Model', 'AXXMODEL', 10_000],
-  // #49: kaligrafi hadits (data ulyah.com) — selalu di AKHIR agar alamat koleksi lain tidak bergeser; bila kontrak lain sudah
+  // #49: kaligrafi hadits — selalu di AKHIR agar alamat koleksi lain tidak bergeser; bila kontrak lain sudah
   // aktif lebih dulu, skrip ini menambahkannya otomatis (deploy bertahap) begitu saldo deployer cukup
   ['hadith', 'AXTO Hadith', 'AXHADITH', 10_000_000], ['ex-hadith', 'AXTO Exclusive Hadith', 'AXXHADITH', 10_000],
 ];

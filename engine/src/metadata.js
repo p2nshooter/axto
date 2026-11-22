@@ -9,6 +9,7 @@ import { stampSvg, stampPlayer, ANIM_CSS as STAMP_ANIM_CSS } from './render/stam
 import { quranSvg, quranPlayer } from './render/quran.js';
 import { modelSvg, modelPlayer } from './render/model.js';
 import { modelTraits } from './catalog/model.js';
+import * as MODEL_PARTS from './catalog/model.js';
 import { hadithSvg, hadithPlayer, hadithRef } from './render/hadith.js';
 import { HADITH_KITAB } from './catalog/hadith.js';
 import { applyMotion } from './render/motion.js';
@@ -140,20 +141,21 @@ function description(d, ref, base) {
     stamp: 'A digital postage stamp from an imaginary realm, engraved in vector so every detail stays sharp at any zoom.',
     quran: 'Quranic calligraphy artwork in 3D motion with a recitation by the reciter of your choice and word-by-word highlighting. The text is reproduced unaltered from the Uthmani Hafs mushaf (KFGQPC, CC BY 4.0). This token represents the artwork and the collectible — not any right over the verses of the Qur\'an.',
     model: 'An animated figure artwork from the AXTO model series, created with the model\'s written permission.',
-    hadith: 'Hadith calligraphy artwork in motion. The Arabic text is reproduced unaltered from the hadith collection named below (data: ulyah.com, from public-domain/MIT datasets) and can be read aloud with an Arabic voice; the translation follows your language and country. References use international numbering — printed page numbers differ between editions. This token represents the artwork and the collectible — not any right over the hadith.',
+    hadith: 'Hadith calligraphy artwork in motion. The Arabic text is reproduced unaltered from the hadith collection named below and can be read aloud with an Arabic voice; the translation follows your language and country. References use international hadith numbering. This token represents the artwork and the collectible — not any right over the hadith.',
   }[d.kind];
   const id = {
     time: 'Jam digital hidup — menampilkan waktu nyata di mana pun ditampilkan. Pilih zona waktu di player.',
     stamp: 'Prangko digital dari negeri imajiner, diukir vektor sehingga setiap detail tetap tajam saat di-zoom.',
     quran: 'Karya kaligrafi Al-Qur\'an bergerak 3D dengan bacaan qari pilihan dan penunjuk tiap kata. Teks disalin tanpa perubahan dari mushaf Utsmani Hafs (KFGQPC, CC BY 4.0). Token ini mewakili karya seni dan koleksinya, bukan hak atas ayat Al-Qur\'an.',
     model: 'Karya figur beranimasi dari seri model AXTO, dibuat dengan izin tertulis model.',
-    hadith: 'Karya kaligrafi hadits bergerak. Teks Arab disalin tanpa perubahan dari kitab hadits di bawah (data: ulyah.com, dari dataset domain publik/MIT) dan bisa dibacakan dengan suara Arab; terjemahan mengikuti bahasa & negara Anda. Rujukan memakai penomoran internasional — nomor halaman cetak berbeda per penerbit. Token ini mewakili karya seni dan koleksinya, bukan hak atas hadits.',
+    hadith: 'Karya kaligrafi hadits bergerak. Teks Arab disalin tanpa perubahan dari kitab hadits di bawah dan bisa dibacakan dengan suara Arab; terjemahan mengikuti bahasa & negara Anda. Rujukan memakai penomoran hadits internasional. Token ini mewakili karya seni dan koleksinya, bukan hak atas hadits.',
   }[d.kind];
   const only = c.exclusive ? '\n\nExclusive edition — sold only on axto.io. / Edisi eksklusif — hanya dijual di axto.io.' : '';
   const hr = d.kind === 'hadith' ? hadithRef(d) : null;
-  const hadithLine = hr ? `\n\nReference / Rujukan: ${hr.nameEn} (${hr.nameAr}) — Hadith No. ${hr.number}${hr.book ? ` · Book ${hr.book.no}: ${hr.book.name}` : ''} · ${hr.author}` : '';
+  const hadithLine = hr ? `\n\nReference: ${hr.nameEn} (${hr.nameAr}) — Hadith No. ${hr.number}${hr.book ? ` · Book ${hr.book.no}: ${hr.book.name}` : ''} · ${hr.author}` : '';
   const sale = c.exclusive ? 'AXTO coin auction at axto.io / Lelang koin AXTO di axto.io' : `Price $${OPENSEA_PRICE_USD[d.tier.rank]} on OpenSea / Harga $${OPENSEA_PRICE_USD[d.tier.rank]} di OpenSea`;
-  return `${en}\n\n${id}${hadithLine}${only}\n\nGallery: ${GALLERY_KIND[d.kind]} · ${seriesName(d)} · Edition ${edition} · Rarity: ${d.tier.name} · ${sale} · Certificate: ${cert}\n\n© AXTO (axto.io). The owner may display the artwork for personal and promotional use; copyright of the artwork remains with AXTO. Resale royalty 10%.`;
+  if (d.kind === 'hadith') return `${en}${hadithLine}${c.exclusive ? '\n\nExclusive edition — sold only on axto.io.' : ''}\n\nGallery: ${GALLERY_KIND[d.kind]} · ${seriesName(d)} · Edition ${edition} · Rarity: ${d.tier.name} · ${c.exclusive ? 'AXTO coin auction at axto.io' : `Price $${OPENSEA_PRICE_USD[d.tier.rank]} on OpenSea`} · Certificate: ${cert}\n\n© AXTO (axto.io). The owner may display the artwork for personal and promotional use; copyright of the artwork remains with AXTO. Resale royalty 10%.`;
+  return `${en}\n\n${id}${only}\n\nGallery: ${GALLERY_KIND[d.kind]} · ${seriesName(d)} · Edition ${edition} · Rarity: ${d.tier.name} · ${sale} · Certificate: ${cert}\n\n© AXTO (axto.io). The owner may display the artwork for personal and promotional use; copyright of the artwork remains with AXTO. Resale royalty 10%.`;
 }
 
 /** Metadata ERC-721 untuk tokenURI. */
@@ -363,4 +365,47 @@ export function listFacets(key, ids) {
     if (d.kind === 'quran') { const r = quranRef(d); if (r.series === 'ayah') surah[r.surah] = (surah[r.surah] ?? 0) + 1; }
   }
   return { series, surah, tiers };
+}
+
+/** Deskripsi karya hadits dalam satu bahasa untuk halaman situs (#50: tidak campur bahasa). */
+export function hadithBlurb(key, tokenId, lang) {
+  const d = dna(key, tokenId);
+  const r = hadithRef(d);
+  if (lang === 'id') return `Karya kaligrafi hadits bergerak. Teks Arab disalin tanpa perubahan dari ${r.nameId} (${r.nameAr}), hadits nomor ${r.number}${r.book ? `, kitab ke-${r.book.no}` : ''}. Bisa dibacakan dengan suara Arab; terjemahan mengikuti bahasa Anda. Rujukan memakai penomoran hadits internasional. Token ini mewakili karya seni dan koleksinya, bukan hak atas hadits.`;
+  return `Hadith calligraphy artwork in motion. The Arabic text is reproduced unaltered from ${r.nameEn} (${r.nameAr}), hadith number ${r.number}${r.book ? `, book ${r.book.no}: ${r.book.name}` : ''}. It can be read aloud with an Arabic voice; the translation follows your language. References use international hadith numbering. This token represents the artwork and the collectible — not any right over the hadith.`;
+}
+
+/**
+ * Sifat karya dalam satu bahasa untuk halaman situs (#50 „ga konsisten, Inggris campur Indonesia"): di halaman Indonesia
+ * nama DAN nilai sifat berbahasa Indonesia bila padanannya ada di katalog (OpenSea tetap memakai metadata Inggris).
+ */
+export function attributesFor(key, tokenId, lang) {
+  const m = metadata(key, tokenId);
+  if (lang !== 'id') return m.attributes;
+  const d = dna(key, tokenId);
+  const c = collection(key);
+  const TIER_ID = ['Klasik', 'Langka', 'Epik', 'Legendaris', 'Mahakarya'];
+  const idName = {};
+  d.pick.forEach((o, i) => { if (Array.isArray(o) && typeof o[2] === 'string') idName[d.names[i]] = o[2]; });
+  if (d.kind === 'model') {
+    const { modelParts } = MODEL_PARTS;
+    const p = modelParts(d);
+    Object.assign(idName, { Pose: p.pose[2], Series: p.series[2], Outfit: p.look[2], Prop: p.prop[2], Setting: p.setting[2], Light: p.light[2], Motion: p.motion[2], Accessory: p.acc[2], Palette: p.pal[2] });
+  }
+  if (d.kind === 'stamp') delete idName.Subject;
+  const hr = d.kind === 'hadith' ? hadithRef(d) : null;
+  const seriesId = hr ? hr.nameId : d.kind === 'time' ? TIME_SERIES.find((x) => x[0] === d.pick[0][4])?.[2] : d.kind === 'quran' ? { ayah: 'Ayat', page: 'Halaman Mushaf', juz: 'Juz', mushaf: 'Mushaf Lengkap' }[d.series.series] : idName.Series;
+  const galleryId = `${c.exclusive ? 'Eksklusif ' : ''}${{ time: 'Jam', stamp: 'Prangko', quran: 'Al-Qur\'an', model: 'Model', hadith: 'Hadits' }[d.kind]} · ${seriesId}`;
+  return m.attributes.map((a) => {
+    const t = a.trait_type;
+    let v = a.value;
+    if (t === 'Gallery') v = galleryId;
+    else if (t === 'Series' && seriesId) v = seriesId;
+    else if (t === 'Tier') v = TIER_ID[d.tier.rank];
+    else if (t === 'Collection') v = c.exclusive ? 'Eksklusif' : 'Publik';
+    else if (t === 'Kitab' && hr) v = `${hr.nameId} · ${hr.nameAr}`;
+    else if (t === 'Book' && hr?.book) v = `Kitab ke-${hr.book.no}`;
+    else if (idName[t]) v = idName[t];
+    return { ...a, trait_type: traitNameId(t), value: v };
+  });
 }

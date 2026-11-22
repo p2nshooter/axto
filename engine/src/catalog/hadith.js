@@ -1,5 +1,5 @@
 /**
- * Katalog HADITS (perintah pemilik #49) — 12 kitab, 38.144 hadits dari data ulyah.com (lihat hadith-meta.js).
+ * Katalog HADITS (perintah pemilik #49) — 12 kitab, 38.144 hadits (lihat hadith-meta.js).
  * Peta slot → (kitab, hadits, varian) deterministik & bijektif; publik 10 jt (±262 gaya per hadits), eksklusif 10.000
  * (10.000 hadits berbeda, masing-masing satu karya). Gaya visual memakai ruang gaya kaligrafi Al-Qur'an.
  */
