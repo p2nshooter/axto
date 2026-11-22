@@ -11,8 +11,8 @@ interface IAxtoSaleSold {
 
 /**
  * @title AXTO
- * @notice Koin AXTO: 10.000.000 dicetak sekali ke owner saat deploy, lalu dibagi lewat skrip deploy
- *  (20% AxtoSale, 30% cadangan DEX, 30% AxtoVesting tim, 20% AxtoLock 5 tahun).
+ * @notice Koin AXTO: 10.000.000 dicetak sekali saat deploy SELURUHNYA ke wallet koin pemilik (`holder`); pemilik
+ *  membagi sendiri ke alamat-alamat miliknya (perintah pemilik #39). Presale menjual dari wallet itu lewat allowance.
  *  Tidak ada mint tambahan, burn, pajak transfer, maupun blacklist.
  *  Sebelum `enableTrading` transfer antar-pengguna dikunci; yang boleh hanya transfer yang melibatkan alamat
  *  tepercaya (Sale, AuctionHouse, Vesting, Lock, treasury, owner). `enableTrading` satu arah — tidak bisa dimatikan
@@ -36,10 +36,16 @@ contract AxtoToken is ERC20, ERC20Permit, Ownable {
     error TradingNotEnabled();
     error TradingConditionsNotMet();
 
-    constructor(address owner_) ERC20("AXTO", "AXTO") ERC20Permit("AXTO") Ownable(owner_) {
+    /// @notice Pemegang seluruh suplai (wallet koin pemilik). Pemilik membagi sendiri ke alamat-alamatnya (perintah #39).
+    address public immutable holder;
+
+    constructor(address owner_, address holder_) ERC20("AXTO", "AXTO") ERC20Permit("AXTO") Ownable(owner_) {
+        require(holder_ != address(0), "holder");
         deployedAt = block.timestamp;
+        holder = holder_;
         trusted[owner_] = true;
-        _mint(owner_, TOTAL_SUPPLY);
+        trusted[holder_] = true;
+        _mint(holder_, TOTAL_SUPPLY); // 10.000.000 AXTO seluruhnya ke wallet koin pemilik
     }
 
     /// @notice Daftarkan kontrak resmi. Hanya berpengaruh sebelum trading dibuka.
@@ -48,10 +54,14 @@ contract AxtoToken is ERC20, ERC20Permit, Ownable {
         emit TrustedUpdated(account, t);
     }
 
+    /// @notice Daftarkan kontrak presale (sekali). Presale menjual LANGSUNG dari wallet pemegang lewat izin (allowance)
+    ///  2.000.000 AXTO — koin tetap di wallet pemilik sampai terjual. Pemilik bisa mengubah/menarik izin itu kapan saja
+    ///  dengan `approve(sale, x)` dari wallet koinnya.
     function setSale(address s) external onlyOwner {
         require(sale == address(0), "sale set");
         sale = s;
         trusted[s] = true;
+        _approve(holder, s, PRESALE_TARGET);
         emit SaleSet(s);
     }
 

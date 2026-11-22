@@ -21,7 +21,8 @@ interface IPriceFeed {
  *  - `buyWithUSDC`: dari wallet mana pun (MetaMask, Trust Wallet), USDC langsung ke treasury.
  *  - `buyWithETH`: harga ETH/USD dari Chainlink (dicek kebaruannya), ETH langsung ke treasury.
  *  - `claimPaid`: pembeli PayPal mengklaim voucher bertanda tangan signer (gas oleh pembeli). Dibatasi `dailyCap`.
- *  Kontrak tidak pernah menyimpan dana pembeli.
+ *  Kontrak tidak pernah menyimpan dana pembeli maupun koin: koin dijual langsung dari wallet koin pemilik (`holder`)
+ *  lewat allowance 2.000.000 AXTO (perintah pemilik #39); uang langsung ke treasury.
  */
 contract AxtoSale is Ownable2Step, Pausable, ReentrancyGuard, EIP712 {
     using SafeERC20 for IERC20;
@@ -55,10 +56,15 @@ contract AxtoSale is Ownable2Step, Pausable, ReentrancyGuard, EIP712 {
     error BadSignature();
     error DailyCap();
 
-    constructor(address owner_, IERC20 token_, IERC20 usdc_, IPriceFeed ethUsd_, address treasury_, address signer_)
+    /// @notice Wallet sumber koin presale (wallet koin pemilik); presale memakai allowance dari wallet ini.
+    address public immutable holder;
+
+    constructor(address owner_, IERC20 token_, IERC20 usdc_, IPriceFeed ethUsd_, address treasury_, address signer_, address holder_)
         Ownable(owner_)
         EIP712("AXTO Sale", "1")
     {
+        require(holder_ != address(0), "holder");
+        holder = holder_;
         require(treasury_ != address(0), "treasury");
         token = token_;
         usdc = usdc_;
@@ -81,7 +87,7 @@ contract AxtoSale is Ownable2Step, Pausable, ReentrancyGuard, EIP712 {
         _reserve(amount);
         uint256 cost = quoteUSDC(amount);
         usdc.safeTransferFrom(msg.sender, treasury, cost);
-        token.safeTransfer(msg.sender, amount);
+        token.safeTransferFrom(holder, msg.sender, amount);
         emit Bought(msg.sender, amount, address(usdc), cost);
     }
 
@@ -108,7 +114,7 @@ contract AxtoSale is Ownable2Step, Pausable, ReentrancyGuard, EIP712 {
         _reserve(amount);
         (bool ok,) = treasury.call{value: msg.value}("");
         require(ok, "eth");
-        token.safeTransfer(msg.sender, amount);
+        token.safeTransferFrom(holder, msg.sender, amount);
         emit Bought(msg.sender, amount, address(0), msg.value);
     }
 
@@ -127,7 +133,7 @@ contract AxtoSale is Ownable2Step, Pausable, ReentrancyGuard, EIP712 {
         voucherDay[day] += amount;
         refUsed[ref] = true;
         _reserve(amount);
-        token.safeTransfer(to, amount);
+        token.safeTransferFrom(holder, to, amount);
         emit VoucherClaimed(to, amount, ref);
     }
 
@@ -171,7 +177,4 @@ contract AxtoSale is Ownable2Step, Pausable, ReentrancyGuard, EIP712 {
     }
 
     /// @notice Sisa koin presale yang tidak terjual hanya bisa ditarik ke owner setelah presale dihentikan permanen.
-    function withdrawUnsold() external onlyOwner whenPaused {
-        token.safeTransfer(owner(), token.balanceOf(address(this)));
-    }
 }

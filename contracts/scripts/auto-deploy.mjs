@@ -180,10 +180,9 @@ async function main() {
     log(`✓ ${key}`);
   };
 
-  const token = await deploy('token', 'AxtoToken', me);
-  const sale = await deploy('sale', 'AxtoSale', COIN, token, net.usdc, net.feed, TREASURY, signer);
-  const vesting = await deploy('vesting', 'AxtoVesting', token, COIN, ethers.parseEther('3000000'));
-  const lock = await deploy('lock', 'AxtoLock', token, TREASURY);
+  // 10.000.000 AXTO seluruhnya ke wallet koin pemilik (perintah #39); pemilik membagi sendiri ke alamat-alamatnya
+  const token = await deploy('token', 'AxtoToken', me, COIN);
+  const sale = await deploy('sale', 'AxtoSale', COIN, token, net.usdc, net.feed, TREASURY, signer, COIN);
   const house = await deploy('auctionHouse', 'AxtoAuctionHouse', ADMIN, TREASURY, signer, [net.usdc, token]);
   st.collections = st.collections ?? {};
   for (const [k, name, sym, max] of COLS) {
@@ -195,20 +194,15 @@ async function main() {
     save();
   }
   const T = new ethers.Contract(token, art('AxtoToken').abi, wallet);
-  const E = (n) => ethers.parseEther(String(n));
   await step('setSale', (o) => T.setSale(sale, o));
-  for (const [k, a] of [['trust:house', house], ['trust:vesting', vesting], ['trust:lock', lock], ['trust:treasury', TREASURY], ['trust:coin', COIN]]) await step(k, (o) => T.setTrusted(a, true, o));
-  await step('presale 2.000.000', (o) => T.transfer(sale, E(2_000_000), o));
-  await step('vesting 3.000.000', (o) => T.transfer(vesting, E(3_000_000), o));
-  await step('lock 2.000.000', (o) => T.transfer(lock, E(2_000_000), o));
-  await step('dex 3.000.000 → wallet koin', (o) => T.transfer(COIN, E(3_000_000), o));
+  for (const [k, a] of [['trust:house', house], ['trust:treasury', TREASURY]]) await step(k, (o) => T.setTrusted(a, true, o));
   await step('untrust deployer', (o) => T.setTrusted(me, false, o));
   await step('owner token → wallet koin', (o) => T.transferOwnership(COIN, o));
   st.done = true;
   save();
   if (!LOCAL) { st.verified = await verifyAll(chainId, st); save(); }
 
-  const body = JSON.stringify({ chainId, token, sale, auctionHouse: house, vesting, lock, collections: st.collections });
+  const body = JSON.stringify({ chainId, token, sale, auctionHouse: house, collections: st.collections });
   if (!LOCAL) {
     const key = process.env.ENGINE_HMAC_KEY || createHmac('sha256', process.env.CLOUDFLARE_API_KEY).update('axto:ENGINE_HMAC_KEY').digest('hex');
     const ts = Date.now();

@@ -32,7 +32,8 @@ export async function saveContracts(env, admin, body) {
   const chainId = Number(body.chainId);
   const net = NETWORKS[chainId];
   if (!net) return { ok: false, error: 'chain' };
-  const all = [body.token, body.sale, body.auctionHouse, body.vesting, body.lock, ...COL_KEYS.map((k) => body.collections?.[k])];
+  // vesting/lock opsional: sejak perintah #39 seluruh koin di wallet koin pemilik (dibagi sendiri)
+  const all = [body.token, body.sale, body.auctionHouse, ...(body.vesting ? [body.vesting] : []), ...(body.lock ? [body.lock] : []), ...COL_KEYS.map((k) => body.collections?.[k])];
   if (!all.every(isAddress)) return { ok: false, error: 'address' };
   const rpc = async (method, params) => {
     const r = await fetch(net.rpc, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }) });
@@ -51,7 +52,7 @@ export async function saveContracts(env, admin, body) {
   const prev = await readJSON(env.STORE, 'cfg/active.json').catch(() => null);
   // ronde pertama: segel saat ini juga, live 1 jam kemudian (lelang 72 jam mulai $1) — tidak diubah bila disimpan ulang
   const genesis = prev?.chainId === chainId && prev?.genesis ? prev.genesis : Math.ceil((Date.now() + 65 * 60_000) / 60_000) * 60_000;
-  const cfg = { chainId, token: body.token, sale: body.sale, auctionHouse: body.auctionHouse, vesting: body.vesting, lock: body.lock, usdc: net.usdc, collections: Object.fromEntries(COL_KEYS.map((k) => [k, body.collections[k]])), genesis, savedAt: Date.now(), by: admin };
+  const cfg = { chainId, token: body.token, sale: body.sale, auctionHouse: body.auctionHouse, vesting: body.vesting ?? null, lock: body.lock ?? null, usdc: net.usdc, collections: Object.fromEntries(COL_KEYS.map((k) => [k, body.collections[k]])), genesis, savedAt: Date.now(), by: admin };
   await putJSON(env.STORE, `cfg/contracts-${chainId}.json`, cfg);
   await putJSON(env.STORE, 'cfg/active.json', cfg);
   await appendLog(env.STORE, 'admin', { ev: 'contracts', chainId, by: admin });

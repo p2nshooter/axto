@@ -96,14 +96,13 @@ before(async () => {
   chainId = (await provider.getNetwork()).chainId;
   usdc = await deploy('MockUSDC');
   const feed = await deploy('MockFeed', 2000n * 10n ** 8n);
-  token = await deploy('AxtoToken', owner.address);
-  sale = await deploy('AxtoSale', owner.address, await token.getAddress(), await usdc.getAddress(), await feed.getAddress(), treasury.address, signerW.address);
+  token = await deploy('AxtoToken', owner.address, owner.address);
+  sale = await deploy('AxtoSale', owner.address, await token.getAddress(), await usdc.getAddress(), await feed.getAddress(), treasury.address, signerW.address, owner.address);
   house = await deploy('AxtoAuctionHouse', owner.address, treasury.address, signerW.address, [await usdc.getAddress(), await token.getAddress()]);
   col = await deploy('AxtoCollection', { name: 'AXTO Time', symbol: 'AXTIME', maxSupply: 2_000_000, owner: owner.address, royaltyReceiver: treasury.address, baseURI: 'https://axto.io/api/meta/time/', contractURI: 'https://axto.io/api/contract/time', custody: owner.address, premint: 2_000_000, operator: await house.getAddress(), signer: ZERO });
   colEx = await deploy('AxtoCollection', { name: 'AXTO Exclusive Time', symbol: 'AXXTIME', maxSupply: 50_000, owner: owner.address, royaltyReceiver: treasury.address, baseURI: 'https://axto.io/api/meta/ex-time/', contractURI: 'https://axto.io/api/contract/ex-time', custody: ZERO, premint: 0, operator: ZERO, signer: signerW.address });
   await (await token.setSale(await sale.getAddress())).wait();
   for (const a of [await house.getAddress(), treasury.address]) await (await token.setTrusted(a, true)).wait();
-  await (await token.transfer(await sale.getAddress(), E(2_000_000))).wait();
   for (const w of [alice, bob, carol]) await (await usdc.mint(w.address, U(1000))).wait();
   // env vault = konfigurasi produksi, kunci signer = wallet signer kontrak
   env = { SIGNER_KEY: signerW.privateKey, CHAIN_ID: String(chainId), AUCTION_HOUSE: await house.getAddress(), AXTO_SALE: await sale.getAddress(), USDC: await usdc.getAddress(), VAULT_STORE: memR2() };
