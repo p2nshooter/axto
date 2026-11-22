@@ -233,8 +233,37 @@ document.querySelectorAll('[data-buy]').forEach((b) => b.addEventListener('click
       location.href = `https://www.paypal.com/checkoutnow?token=${encodeURIComponent(r.id)}`;
       return;
     }
-    out.textContent = lang === 'id' ? 'Buka wallet Anda untuk membeli langsung dari kontrak AxtoSale.' : 'Open your wallet to buy directly from the AxtoSale contract.';
+    // beli langsung dari kontrak AxtoSale: harga tetap $10/AXTO, koin langsung masuk wallet pembeli, dana ke treasury
+    const c = await config();
+    if (!c.sale || !c.axto) { out.textContent = lang === 'id' ? 'Kontrak koin belum aktif — sedang dideploy otomatis oleh sistem.' : 'The coin contract is not live yet — it is being deployed automatically.'; return; }
+    await ensureChain();
+    const me = await get('/api/me');
+    const amount = BigInt(coins) * 10n ** 18n;
+    let hash;
+    if (b.dataset.buy === 'usdc') {
+      const cost = BigInt(coins) * 10n * 10n ** 6n; // $10 per koin, USDC 6 desimal
+      out.textContent = L.approve;
+      await approveIfNeeded(c.usdc, me.wallet, c.sale, cost);
+      out.textContent = L.signing;
+      hash = await eth().request({ method: 'eth_sendTransaction', params: [{ from: me.wallet, to: c.sale, data: `0xaeccf735${pad(amount.toString(16))}` }] });
+    } else {
+      const price = BigInt(await eth().request({ method: 'eth_call', params: [{ to: c.sale, data: '0xff186b2e' }, 'latest'] })); // USD/ETH × 1e18 (Chainlink)
+      const value = (amount * 10n * 10n ** 18n + price - 1n) / price; // ETH tepat untuk jumlah koin (dibulatkan ke atas)
+      const minAmount = (amount * 98n) / 100n; // toleransi 2% bila harga ETH bergerak sebelum transaksi masuk blok
+      out.textContent = L.signing;
+      hash = await eth().request({ method: 'eth_sendTransaction', params: [{ from: me.wallet, to: c.sale, value: `0x${value.toString(16)}`, data: `0x94dc9cf3${pad(minAmount.toString(16))}` }] });
+    }
+    out.textContent = `${lang === 'id' ? 'Terkirim' : 'Sent'}: ${hash.slice(0, 12)}… · ${lang === 'id' ? 'AXTO masuk ke wallet Anda setelah transaksi terkonfirmasi.' : 'AXTO lands in your wallet once the transaction confirms.'}`;
   } catch (e) { out.textContent = `${L.err}: ${e.message ?? e}`; }
+}));
+
+// ---- tambahkan AXTO ke MetaMask (wallet_watchAsset) ----
+document.querySelectorAll('[data-watch-axto]').forEach((b) => b.addEventListener('click', async () => {
+  try {
+    const c = await config();
+    if (!c.axto) { b.textContent = lang === 'id' ? 'Kontrak koin belum aktif' : 'Coin contract not live yet'; return; }
+    await eth().request({ method: 'wallet_watchAsset', params: { type: 'ERC20', options: { address: c.axto, symbol: 'AXTO', decimals: 18, image: `${location.origin}/logo-192.png` } } });
+  } catch (e) { b.textContent = `${L.err}: ${e.message ?? e}`; }
 }));
 
 // ---- penjelajah koleksi cepat (perintah pemilik #37) ----

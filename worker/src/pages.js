@@ -207,7 +207,7 @@ export function coinPage(lang, sale, paypalOn) {
   <table class="split"><tbody>${t.split.map(([a, b]) => `<tr><th>${esc(a)}</th><td>${esc(b)}</td></tr>`).join('')}</tbody></table>
   <div class="buy" id="coin-buy"><label>${lang === 'id' ? 'Jumlah koin' : 'Number of coins'} <input type="number" min="1" max="5000" step="1" value="10" id="coin-n"></label>
   <p>${paypalOn ? `<button class="btn gold" type="button" data-buy="paypal">${esc(t.buyPaypal)}</button>` : `<span class="muted">${esc(t.paypalOff)}</span>`}
-  <button class="btn" type="button" data-buy="usdc">${esc(t.buyUsdc)}</button> <button class="btn" type="button" data-buy="eth">${esc(t.buyEth)}</button></p><p class="buymsg" role="status"></p></div>
+  <button class="btn" type="button" data-buy="usdc">${esc(t.buyUsdc)}</button> <button class="btn" type="button" data-buy="eth">${esc(t.buyEth)}</button> <button class="btn ghost" type="button" data-watch-axto>${lang === 'id' ? 'Tambahkan AXTO ke MetaMask' : 'Add AXTO to MetaMask'}</button></p><p class="buymsg" role="status"></p></div>
   <p class="disclaimer">${esc(t.disclaimer)}</p></section>`;
 }
 
