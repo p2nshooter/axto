@@ -8,7 +8,7 @@ import { collection, permute, OPENSEA_PRICE_USD } from './core.js';
 import { dna } from './dna.js';
 
 export const SHOWCASE_N = 5000;
-export const SHOWCASE_KEYS = ['time', 'stamp', 'quran', 'model'];
+export const SHOWCASE_KEYS = ['time', 'stamp', 'quran', 'model', 'hadith'];
 
 /** Calon ke-k (0-based) dalam urutan acak etalase → tokenId. */
 export function showcaseCandidate(key, k) {

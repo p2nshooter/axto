@@ -16,4 +16,12 @@ export const fsProvider = {
     return { ar: v.ar, tr: v.tr, lt: v.lt };
   },
   async page(p) { return json(`h/${p}.json`); },
+  // #49: hadits dari aset statis yang dibangun dari data ulyah.com (worker/public/hadith/<kitab>/<blok>.json)
+  async hadith(k, n) {
+    const { indexOfNumber } = await import('./catalog/hadith.js');
+    const i = indexOfNumber(k, n);
+    if (i < 0) throw new Error(`hadits ${k}:${n} tidak ditemukan`);
+    const arr = JSON.parse(await readFile(fileURLToPath(new URL(`../../worker/public/hadith/${k}/${Math.floor(i / 100)}.json`, import.meta.url)), 'utf8'));
+    return arr[i % 100];
+  },
 };

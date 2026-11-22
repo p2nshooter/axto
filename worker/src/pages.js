@@ -6,12 +6,12 @@ import { seriesOptions } from '../../engine/src/metadata.js';
 import { OPENSEA_PRICE_USD } from '../../engine/src/core.js';
 import { seriesLabel, surahInfo, BREAD } from './seo.js';
 
-const PUBLIC = ['time', 'stamp', 'quran', 'model'];
-const EXCL = ['ex-time', 'ex-stamp', 'ex-quran', 'ex-model'];
+const PUBLIC = ['time', 'stamp', 'quran', 'model', 'hadith'];
+const EXCL = ['ex-time', 'ex-stamp', 'ex-quran', 'ex-model', 'ex-hadith'];
 const fmt = (n, lang) => Number(n ?? 0).toLocaleString(lang === 'id' ? 'id-ID' : 'en-US');
 export const money = (units, cur, lang) => (cur === 'USDC' ? `$${(units / 100).toLocaleString(lang === 'id' ? 'id-ID' : 'en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : `${(units / 1000).toLocaleString(lang === 'id' ? 'id-ID' : 'en-US', { maximumFractionDigits: 3 })} AXTO`);
 const nftPath = (lang, c, id) => `/${lang}/nft/${c}/${id}`;
-const IMGV = 'v=6';
+const IMGV = 'v=7';
 const img = (c, id) => `/img/${c}/${id}.svg?${IMGV}`;
 /** Lencana jenis karya: publik (USDC, OpenSea, MetaMask) atau eksklusif (koin AXTO, kustodi axto.io, WD). */
 export const badge = (lang, c, long = false) => {

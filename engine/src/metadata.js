@@ -9,23 +9,26 @@ import { stampSvg, stampPlayer, ANIM_CSS as STAMP_ANIM_CSS } from './render/stam
 import { quranSvg, quranPlayer } from './render/quran.js';
 import { modelSvg, modelPlayer } from './render/model.js';
 import { modelTraits } from './catalog/model.js';
+import { hadithSvg, hadithPlayer, hadithRef } from './render/hadith.js';
+import { HADITH_KITAB } from './catalog/hadith.js';
 import { applyMotion } from './render/motion.js';
 
 /** Seri koleksi TIME = kategori bentuk (untuk saringan OpenSea & penjelajah). [id, EN, ID] */
 export const TIME_SERIES = [['wrist', 'Wristwear', 'Jam Tangan'], ['body', 'Jewelry & Wearables', 'Perhiasan'], ['bag', 'Bags & Charms', 'Tas & Charm'], ['apparel', 'Apparel', 'Busana'], ['home', 'Home', 'Rumah'], ['vehicle', 'Vehicle', 'Kendaraan'], ['public', 'Public Spaces', 'Ruang Publik'], ['digital', 'Digital Screens', 'Layar Digital'], ['novel', 'Novelty', 'Unik']];
 const TIME_SERIES_NAME = Object.fromEntries(TIME_SERIES.map((x) => [x[0], x[1]]));
 const QURAN_SERIES_NAME = { ayah: 'Ayah', page: 'Mushaf Page', juz: 'Juz', mushaf: 'Complete Mushaf' };
-const GALLERY_KIND = { time: 'Time', stamp: 'Stamps', quran: "Qur'an", model: 'Models' };
+const GALLERY_KIND = { time: 'Time', stamp: 'Stamps', quran: "Qur'an", model: 'Models', hadith: 'Hadith' };
 
 /** Nama seri (EN) sebuah token — dipakai sifat „Series" & „Gallery" agar NFT tersusun rapi dan mudah dicari di OpenSea. */
 export function seriesName(d) {
   if (d.kind === 'time') return TIME_SERIES_NAME[d.pick[0][4]] ?? 'Other';
   if (d.kind === 'quran') return QURAN_SERIES_NAME[d.series.series];
+  if (d.kind === 'hadith') return hadithRef(d).nameEn;
   return d.pick[1][1];
 }
 
-const KIND_NAME = { time: 'AXTO Time', stamp: 'AXTO Stamps', quran: 'AXTO Quran Calligraphy', model: 'AXTO Models' };
-const KIND_NAME_ID = { time: 'AXTO Jam', stamp: 'AXTO Prangko', quran: 'AXTO Kaligrafi Al-Qur\'an', model: 'AXTO Model' };
+const KIND_NAME = { time: 'AXTO Time', stamp: 'AXTO Stamps', quran: 'AXTO Quran Calligraphy', model: 'AXTO Models', hadith: 'AXTO Hadith Calligraphy' };
+const KIND_NAME_ID = { time: 'AXTO Jam', stamp: 'AXTO Prangko', quran: 'AXTO Kaligrafi Al-Qur\'an', model: 'AXTO Model', hadith: 'AXTO Kaligrafi Hadits' };
 
 const parseRef = (r) => r.split(':').map(Number);
 /** Halaman mushaf tempat ayat (surah, ayah) berada. */
@@ -96,6 +99,10 @@ export async function renderCtx(d, provider = {}) {
     }
     return ctx;
   }
+  if (d.kind === 'hadith' && provider.hadith) {
+    const r = hadithRef(d);
+    return (await provider.hadith(r.key, r.number)) ?? {};
+  }
   if (d.kind === 'model' && provider.head) {
     const p = d.pick[0][5];
     const href = await provider.head(d.pick[0][4], p[1]);
@@ -112,6 +119,7 @@ export function title(d, ref) {
     case 'time': return `${ex}AXTO Time ${id} — ${p[1][1]} ${p[0][1]}`;
     case 'stamp': return `${ex}${p[0][1]} · ${p[1][1]} ${p[6][4]} ${id}`;
     case 'model': { const m = modelTraits(d); return `${ex}AXTO Model ${id} — ${m[1]} · ${m[2]}`; }
+    case 'hadith': { const r = hadithRef(d); return `${ex}Hadith ${r.nameEn} ${r.number} — ${p[0][1]} ${id}`; }
     case 'quran': {
       const r = ref ?? quranRef(d);
       if (r.series === 'ayah') return `${ex}Quran ${r.surahLt} ${r.surah}:${r.ayah} — ${p[0][1]} ${id}`;
@@ -132,16 +140,20 @@ function description(d, ref, base) {
     stamp: 'A digital postage stamp from an imaginary realm, engraved in vector so every detail stays sharp at any zoom.',
     quran: 'Quranic calligraphy artwork in 3D motion with a recitation by the reciter of your choice and word-by-word highlighting. The text is reproduced unaltered from the Uthmani Hafs mushaf (KFGQPC, CC BY 4.0). This token represents the artwork and the collectible — not any right over the verses of the Qur\'an.',
     model: 'An animated figure artwork from the AXTO model series, created with the model\'s written permission.',
+    hadith: 'Hadith calligraphy artwork in motion. The Arabic text is reproduced unaltered from the hadith collection named below (data: ulyah.com, from public-domain/MIT datasets) and can be read aloud with an Arabic voice; the translation follows your language and country. References use international numbering — printed page numbers differ between editions. This token represents the artwork and the collectible — not any right over the hadith.',
   }[d.kind];
   const id = {
     time: 'Jam digital hidup — menampilkan waktu nyata di mana pun ditampilkan. Pilih zona waktu di player.',
     stamp: 'Prangko digital dari negeri imajiner, diukir vektor sehingga setiap detail tetap tajam saat di-zoom.',
     quran: 'Karya kaligrafi Al-Qur\'an bergerak 3D dengan bacaan qari pilihan dan penunjuk tiap kata. Teks disalin tanpa perubahan dari mushaf Utsmani Hafs (KFGQPC, CC BY 4.0). Token ini mewakili karya seni dan koleksinya, bukan hak atas ayat Al-Qur\'an.',
     model: 'Karya figur beranimasi dari seri model AXTO, dibuat dengan izin tertulis model.',
+    hadith: 'Karya kaligrafi hadits bergerak. Teks Arab disalin tanpa perubahan dari kitab hadits di bawah (data: ulyah.com, dari dataset domain publik/MIT) dan bisa dibacakan dengan suara Arab; terjemahan mengikuti bahasa & negara Anda. Rujukan memakai penomoran internasional — nomor halaman cetak berbeda per penerbit. Token ini mewakili karya seni dan koleksinya, bukan hak atas hadits.',
   }[d.kind];
   const only = c.exclusive ? '\n\nExclusive edition — sold only on axto.io. / Edisi eksklusif — hanya dijual di axto.io.' : '';
+  const hr = d.kind === 'hadith' ? hadithRef(d) : null;
+  const hadithLine = hr ? `\n\nReference / Rujukan: ${hr.nameEn} (${hr.nameAr}) — Hadith No. ${hr.number}${hr.book ? ` · Book ${hr.book.no}: ${hr.book.name}` : ''} · ${hr.author}` : '';
   const sale = c.exclusive ? 'AXTO coin auction at axto.io / Lelang koin AXTO di axto.io' : `Price $${OPENSEA_PRICE_USD[d.tier.rank]} on OpenSea / Harga $${OPENSEA_PRICE_USD[d.tier.rank]} di OpenSea`;
-  return `${en}\n\n${id}${only}\n\nGallery: ${GALLERY_KIND[d.kind]} · ${seriesName(d)} · Edition ${edition} · Rarity: ${d.tier.name} · ${sale} · Certificate: ${cert}\n\n© AXTO (axto.io). The owner may display the artwork for personal and promotional use; copyright of the artwork remains with AXTO. Resale royalty 10%.`;
+  return `${en}\n\n${id}${hadithLine}${only}\n\nGallery: ${GALLERY_KIND[d.kind]} · ${seriesName(d)} · Edition ${edition} · Rarity: ${d.tier.name} · ${sale} · Certificate: ${cert}\n\n© AXTO (axto.io). The owner may display the artwork for personal and promotional use; copyright of the artwork remains with AXTO. Resale royalty 10%.`;
 }
 
 /** Metadata ERC-721 untuk tokenURI. */
@@ -153,7 +165,12 @@ export function metadata(key, tokenId, base = 'https://axto.io') {
   const attrs = d.pick.map((o, i) => ({ trait_type: d.names[i], value: mt ? (mt[i] ?? o[1]) : d.kind === 'stamp' && d.names[i] === 'Subject' ? d.pick[1][4][o[4]] : o[1] }));
   // Galeri & seri (perintah pemilik #44): setiap NFT punya „Gallery" dan „Series" → saringan rapi di OpenSea & axto.io
   const sname = seriesName(d);
-  if (d.kind === 'time') attrs.unshift({ trait_type: 'Series', value: sname });
+  if (d.kind === 'time' || d.kind === 'hadith') attrs.unshift({ trait_type: 'Series', value: sname });
+  if (d.kind === 'hadith') {
+    const r = hadithRef(d);
+    attrs.push({ trait_type: 'Kitab', value: `${r.nameEn} · ${r.nameAr}` }, { display_type: 'number', trait_type: 'Hadith Number', value: r.number });
+    if (r.book) attrs.push({ trait_type: 'Book', value: `${r.book.no}. ${r.book.name}` });
+  }
   attrs.unshift({ trait_type: 'Gallery', value: `${c.exclusive ? 'Exclusive ' : ''}${GALLERY_KIND[d.kind]} · ${sname}` });
   if (ref) {
     attrs.splice(1, 0, { trait_type: 'Series', value: sname });
@@ -205,6 +222,7 @@ export function renderSvg(d, ctx) {
     case 'stamp': return stampSvg(d);
     case 'quran': return quranSvg(d, ctx);
     case 'model': return modelSvg(d, ctx);
+    case 'hadith': return hadithSvg(d, ctx);
     default: throw new Error('kind?');
   }
 }
@@ -226,7 +244,7 @@ export function animatedSvg(d, ctx) {
   }
   // #43: jam, prangko, Al-Qur'an — genom gerak unik per token (tidak ada dua NFT yang bergerak sama)
   const { svg: s, css: mcss } = applyMotion(d, renderSvg(d, ctx));
-  const css = { time: TIME_ANIM_CSS, stamp: STAMP_ANIM_CSS, quran: '' }[d.kind] + mcss;
+  const css = { time: TIME_ANIM_CSS, stamp: STAMP_ANIM_CSS, quran: '', hadith: '' }[d.kind] + mcss;
   const open = s.indexOf('>', s.indexOf('<svg')) + 1;
   return `${s.slice(0, open)}<style>${css}</style>${s.slice(open)}`;
 }
@@ -238,6 +256,7 @@ export function renderPlayer(d, meta, ctx, opts) {
     case 'stamp': return stampPlayer(d, meta, opts);
     case 'quran': return quranPlayer(d, meta, ctx, opts);
     case 'model': return modelPlayer(d, meta, ctx, opts);
+    case 'hadith': return hadithPlayer(d, meta, ctx, opts);
     default: throw new Error('kind?');
   }
 }
@@ -255,6 +274,7 @@ export function seriesOptions(key) {
   if (kind === 'model') return MODEL_SERIES.map((s) => [s[0], s[1], s[2]]);
   if (kind === 'quran') return QURAN_SERIES;
   if (kind === 'time') return TIME_SERIES;
+  if (kind === 'hadith') return HADITH_KITAB.map((k) => [k.key, k.nameEn, k.nameId]);
   return [];
 }
 
@@ -262,6 +282,7 @@ export function seriesKey(d) {
   if (d.kind === 'stamp' || d.kind === 'model') return d.pick[1][0];
   if (d.kind === 'quran') return d.series.series;
   if (d.kind === 'time') return d.pick[0][4];
+  if (d.kind === 'hadith') return d.series.series;
   return '';
 }
 

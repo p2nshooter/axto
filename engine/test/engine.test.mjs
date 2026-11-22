@@ -22,7 +22,7 @@ test('permute adalah bijeksi (domain kecil, penuh)', () => {
 
 test('ruang kombinasi setiap koleksi > max', () => {
   for (const k of Object.keys(COLLECTIONS)) {
-    if (COLLECTIONS[k].kind === 'quran') continue;
+    if (COLLECTIONS[k].kind === 'quran' || COLLECTIONS[k].kind === 'hadith') { assert.ok(spaceSize(k) >= 263, `${k}: gaya per teks kurang`); continue; } // ruang gaya per ayat/hadits
     assert.ok(spaceSize(k) >= COLLECTIONS[k].max, `${k}: ${spaceSize(k)} < ${COLLECTIONS[k].max}`);
   }
   assert.equal(planTotal(PLANS.quran), 10_000_000);
@@ -119,5 +119,21 @@ test('#43 genom gerak: tidak ada dua NFT yang bergerak sama (20.000 berurutan pe
     assert.ok(wellFormed(s), `${k}#${id} SVG rusak`);
     assert.match(s, /@keyframes mx/);
     assert.doesNotMatch(s, /axsw/); // sapuan cahaya klasik sudah diganti
+  }
+});
+
+test('#49 hadits: 10 jt publik & 10.000 eksklusif tanpa kembar, teks sama persis dengan sumber ulyah.com, rujukan lengkap', async () => {
+  const { TOTAL_HADITH } = await import('../src/catalog/hadith.js');
+  assert.equal(TOTAL_HADITH, 38144);
+  const seen = new Set();
+  for (let id = 1; id <= 20000; id += 1) { const c = canonical(dna('hadith', id)); assert.ok(!seen.has(c), `hadith#${id} kembar`); seen.add(c); }
+  const units = new Set();
+  for (let id = 1; id <= 10000; id += 1) units.add(dna('ex-hadith', id).series.unit);
+  assert.equal(units.size, 10000, 'eksklusif: 10.000 hadits berbeda');
+  for (const [k, id] of [['hadith', 1], ['hadith', 9_999_999], ['ex-hadith', 7]]) {
+    const r = await qaToken(k, id, fsProvider);
+    assert.ok(r.ok, `${k}#${id}: ${r.errors.join('; ')}`);
+    const m = metadata(k, id);
+    for (const t of ['Kitab', 'Hadith Number', 'Series', 'Gallery']) assert.ok(m.attributes.some((a) => a.trait_type === t), `${k}#${id} tanpa ${t}`);
   }
 });

@@ -6,6 +6,7 @@ import * as TIME from './catalog/time.js';
 import * as STAMP from './catalog/stamp.js';
 import * as QURAN from './catalog/quran.js';
 import * as MODEL from './catalog/model.js';
+import * as HADITH from './catalog/hadith.js';
 
 /** Sifat tambahan khusus edisi eksklusif → ruang kombinasi eksklusif terpisah dari publik. */
 export const EX_FINISH = [
@@ -21,18 +22,19 @@ const TRAIT_NAMES = {
   stamp: ['Realm', 'Series', 'Subject', 'Frame', 'Palette', 'Mode', 'Year', 'Denomination'],
   model: ['Pose', 'Series', 'Outfit', 'Prop', 'Setting', 'Light', 'Motion', 'Accessory', 'Palette'],
   quran: ['Composition', 'Illumination', 'Material', 'Background', 'Animation', 'Frame'],
+  hadith: ['Composition', 'Illumination', 'Material', 'Background', 'Animation', 'Frame'],
 };
 const TRAIT_NAMES_ID = {
   Form: 'Bentuk', Theme: 'Tema', Digits: 'Angka', Motion: 'Gerak', Gems: 'Permata', Backdrop: 'Latar', Realm: 'Penerbit',
   Series: 'Seri', Subject: 'Subjek', Frame: 'Bingkai', Palette: 'Palet', Mode: 'Mode', Year: 'Tahun', Denomination: 'Nominal',
   Pose: 'Pose', Outfit: 'Busana', Prop: 'Properti', Scene: 'Latar', Animation: 'Animasi', Hue: 'Rona', Composition: 'Komposisi',
   Illumination: 'Iluminasi', Material: 'Bahan', Background: 'Latar', Finish: 'Edisi', Setting: 'Latar', Light: 'Cahaya',
-  Motion: 'Gerak', Accessory: 'Aksesori', Gallery: 'Galeri', Tier: 'Tingkat', Edition: 'Edisi', Collection: 'Koleksi',
+  Motion: 'Gerak', Accessory: 'Aksesori', Kitab: 'Kitab', Book: 'Bab', 'Hadith Number': 'Nomor Hadits', Gallery: 'Galeri', Tier: 'Tingkat', Edition: 'Edisi', Collection: 'Koleksi',
 };
 export const traitNameId = (n) => TRAIT_NAMES_ID[n] ?? n;
 
 function spaceFor(c) {
-  const base = { time: TIME.SPACE, stamp: STAMP.SPACE, model: MODEL.SPACE, quran: QURAN.STYLE_SPACE }[c.kind];
+  const base = { time: TIME.SPACE, stamp: STAMP.SPACE, model: MODEL.SPACE, quran: QURAN.STYLE_SPACE, hadith: QURAN.STYLE_SPACE }[c.kind];
   return c.exclusive ? [...base, EX_FINISH] : base;
 }
 
@@ -68,6 +70,11 @@ export function dna(key, tokenId) {
     series = QURAN.decodeSlot(plan, slot);
     const combo = permute(series.variant, product(radices), `${c.salt}:style:${series.series}:${series.unit}`);
     digits = decodeRadix(combo, radices);
+  } else if (c.kind === 'hadith') {
+    const slot = permute(index, c.max, `${c.salt}:slot`);
+    series = HADITH.decodeSlot(c.key, slot, c.salt);
+    const combo = permute(series.variant, product(radices), `${c.salt}:style:${series.unit}`);
+    digits = decodeRadix(combo, radices);
   } else {
     const combo = permute(index, product(radices), `${c.salt}:combo`);
     digits = decodeRadix(combo, radices);
@@ -78,6 +85,7 @@ export function dna(key, tokenId) {
   if (series) {
     if (series.series === 'mushaf' || series.series === 'juz') percentile = 0.999;
     else if (series.series === 'page') percentile = Math.max(percentile, 0.95);
+    else if (['nawawi', 'qudsi', 'dehlawi'].includes(series.series)) percentile = Math.max(percentile, 0.95); // kumpulan 40 hadits: langka
   }
   const tier = tierFor(percentile);
   const seed = hash32(`${c.salt}:seed:${tokenId}`);

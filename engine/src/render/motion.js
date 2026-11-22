@@ -208,7 +208,7 @@ const QURAN = {
   object: GLOW,
 };
 
-const KINDS = { time: TIME, stamp: STAMP, quran: QURAN };
+const KINDS = { time: TIME, stamp: STAMP, quran: QURAN, hadith: QURAN }; // hadits: teks diam, cahaya hidup (#49)
 
 /** Radix genom: [efek utama, suasana, objek, tempo, easing, arah, rona, fase]. Hasil kali ≥ 10 juta. */
 export function radices(kind) {
@@ -243,7 +243,7 @@ export function motionLayers(d) {
   const amb = AMB[K.ambient[ai]](P);
   let objCss = '';
   let objOver = '';
-  if (d.kind === 'quran') objCss = Object.values(K.object)[oi](P);
+  if (d.kind === 'quran' || d.kind === 'hadith') objCss = Object.values(K.object)[oi](P);
   else {
     const oname = K.object[oi];
     if (oname === 'rimlight') objOver = `<use href="#sil" class="mxrim" fill="none" stroke="${P.A}" stroke-width="5" stroke-dasharray="${R(90 + J() * 120)} ${R(260 + J() * 300)}" stroke-linecap="round"/>`;
@@ -257,7 +257,7 @@ export function motionLayers(d) {
 }
 
 /** Penanda tempat sisip lapisan „di bawah" (tepat setelah latar) per jenis karya. */
-const UNDER_AT = { time: 'fill="url(#bgG)"/>', stamp: 'fill="url(#page)"/>', quran: 'fill="url(#bgq)"/>' };
+const UNDER_AT = { time: 'fill="url(#bgG)"/>', stamp: 'fill="url(#page)"/>', quran: 'fill="url(#bgq)"/>', hadith: 'fill="url(#bgq)"/>' };
 
 /** Sisipkan lapisan gerak ke string SVG; kembalikan {svg, css} (CSS dipasang pemanggil: <style> di SVG atau di player). */
 export function applyMotion(d, svg) {

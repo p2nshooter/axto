@@ -39,11 +39,11 @@ test('urutan lengkap selesai; gas di bawah anggaran yang dipakai untuk menghitun
   assert.ok(result.gasUsed <= mod.TOTAL_GAS, `gas ${result.gasUsed} > anggaran ${mod.TOTAL_GAS}`);
 });
 
-test('kepemilikan langsung ke pemilik: AuctionHouse + 8 koleksi → admin, AxtoSale + AxtoToken → wallet koin', async () => {
+test('kepemilikan langsung ke pemilik: AuctionHouse + 10 koleksi → admin, AxtoSale + AxtoToken → wallet koin', async () => {
   const own = async (a) => new ethers.Contract(a, ['function owner() view returns (address)'], provider).owner();
   const c = result.contracts;
   assert.equal(await own(c.auctionHouse), ADMIN);
-  assert.equal(Object.keys(c.collections).length, 8);
+  assert.equal(Object.keys(c.collections).length, 10);
   for (const a of Object.values(c.collections)) assert.equal(await own(a), ADMIN);
   assert.equal(await own(c.sale), COIN);
   assert.equal(await own(c.token), COIN);
@@ -52,7 +52,7 @@ test('kepemilikan langsung ke pemilik: AuctionHouse + 8 koleksi → admin, AxtoS
 test('#44/#47: 40 jt NFT publik tercetak ke wallet toko sistem, konduit OpenSea disetujui sejak konstruktor; eksklusif 4 × 10.000 kosong dengan signer vault', async () => {
   const c = result.contracts;
   assert.equal(c.store, storeW.address);
-  for (const k of ['time', 'stamp', 'quran', 'model']) {
+  for (const k of ['time', 'stamp', 'quran', 'model', 'hadith']) {
     const col = new ethers.Contract(c.collections[k], art('AxtoCollection').abi, provider);
     assert.equal(await col.balanceOf(storeW.address), 10_000_000n, k);
     assert.equal(await col.ownerOf(1), storeW.address, k);
@@ -61,7 +61,7 @@ test('#44/#47: 40 jt NFT publik tercetak ke wallet toko sistem, konduit OpenSea 
     assert.equal(await col.isApprovedForAll(storeW.address, mod.OPENSEA_CONDUIT), true, k);
     assert.equal(await col.balanceOf(ADMIN), 0n, k);
   }
-  for (const k of ['ex-time', 'ex-stamp', 'ex-quran', 'ex-model']) {
+  for (const k of ['ex-time', 'ex-stamp', 'ex-quran', 'ex-model', 'ex-hadith']) {
     const col = new ethers.Contract(c.collections[k], art('AxtoCollection').abi, provider);
     assert.equal(await col.totalMinted(), 0n, k);
     assert.equal(await col.maxSupply(), 10_000n, k);
@@ -98,3 +98,19 @@ test('aman diulang: run kedua tidak mendeploy apa pun lagi', async () => {
   assert.equal(again.done, true);
   assert.equal(await provider.getTransactionCount(result.deployer, 'latest'), n0);
 });
+
+test('#49 deploy bertahap: koleksi baru (mis. Eksklusif Hadits) ditambahkan otomatis setelah semua kontrak aktif', async () => {
+  const k = 'axto-vault-data/deploy-8453.json';
+  const st = JSON.parse(mod.LOCALSTORE[k]);
+  const old = st.collections['ex-hadith'];
+  delete st.collections['ex-hadith'];
+  mod.LOCALSTORE[k] = JSON.stringify(st);
+  const n0 = await provider.getTransactionCount(result.deployer, 'latest');
+  const again = await mod.main();
+  assert.equal(again.done, true);
+  assert.equal(await provider.getTransactionCount(result.deployer, 'latest'), n0 + 1); // hanya satu kontrak baru
+  assert.ok(ethers.isAddress(again.contracts.collections['ex-hadith']));
+  assert.notEqual(again.contracts.collections['ex-hadith'], old);
+  for (const c of ['time', 'ex-model', 'hadith']) assert.equal(again.contracts.collections[c], result.contracts.collections[c]);
+});
+

@@ -48,6 +48,14 @@ export async function qaToken(key, tokenId, provider) {
       const src = ctx.ar.split(/\s+/).filter(Boolean).join(' ');
       if (d.series.series === 'ayah' && joined !== src) errors.push('teks ayat di karya tidak sama dengan sumber');
     }
+    if (d.kind === 'hadith') {
+      // #49: teks hadits di karya = awal teks sumber, kata demi kata (boleh dipotong „…" bila terlalu panjang; lengkap di player)
+      if (!ctx.ar) errors.push('teks hadits tidak ditemukan');
+      const lines = [...svg.matchAll(/<text[^>]*direction="rtl"[^>]*stroke-opacity="[^"]*"[^>]*>([^<]*)<\/text>/g)].map((x) => unescapeXml(x[1]));
+      const shown = lines.join(' ').replace(/ …$/, '').split(/\s+/).filter(Boolean);
+      const src = String(ctx.ar ?? '').split(/\s+/).filter(Boolean);
+      if (!shown.length || shown.some((w, i) => w !== src[i])) errors.push('teks hadits di karya tidak sama dengan sumber');
+    }
   } catch (e) {
     errors.push(`render gagal: ${e.message}`);
   }

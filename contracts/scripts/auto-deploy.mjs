@@ -38,11 +38,14 @@ const COLS = [
   ['time', 'AXTO Time', 'AXTIME', 10_000_000], ['stamp', 'AXTO Stamp', 'AXSTAMP', 10_000_000], ['quran', "AXTO Qur'an", 'AXQURAN', 10_000_000], ['model', 'AXTO Model', 'AXMODEL', 10_000_000],
   // #44: eksklusif koin AXTO 4 × 10.000 (ex-model ditambahkan di akhir → alamat koleksi sebelumnya tidak bergeser)
   ['ex-time', 'AXTO Exclusive Time', 'AXXTIME', 10_000], ['ex-stamp', 'AXTO Exclusive Stamp', 'AXXSTAMP', 10_000], ['ex-quran', "AXTO Exclusive Qur'an", 'AXXQURAN', 10_000], ['ex-model', 'AXTO Exclusive Model', 'AXXMODEL', 10_000],
+  // #49: kaligrafi hadits (data ulyah.com) — selalu di AKHIR agar alamat koleksi lain tidak bergeser; bila kontrak lain sudah
+  // aktif lebih dulu, skrip ini menambahkannya otomatis (deploy bertahap) begitu saldo deployer cukup
+  ['hadith', 'AXTO Hadith', 'AXHADITH', 10_000_000], ['ex-hadith', 'AXTO Exclusive Hadith', 'AXXHADITH', 10_000],
 ];
 /** Konduit OpenSea (Seaport) — sama di semua jaringan; disetujui sejak konstruktor agar listing tanpa transaksi persetujuan. */
 export const OPENSEA_CONDUIT = '0x1E0049783F008A0085193E00003D00cd54003c71';
 /** Gas terukur di ganache untuk seluruh urutan ini (lihat test/auto-deploy.test.mjs), dibulatkan ke atas. */
-export const TOTAL_GAS = 48_000_000n;
+export const TOTAL_GAS = 58_000_000n;
 
 const LOCAL = !!process.env.LOCAL_RPC;
 const CHAIN = Number(process.env.CHAIN_ID || 8453);
@@ -117,8 +120,10 @@ async function main() {
   const chainId = Number((await provider.getNetwork()).chainId);
 
   // kontrak sudah aktif di jaringan ini → tidak ada yang perlu dikerjakan
-  if (!LOCAL && r2get(`axto-nft-data/cfg/contracts-${chainId}.json`)) {
-    const prev = JSON.parse(r2get(`axto-vault-data/deploy-${chainId}.json`) || '{}');
+  const prevSt = JSON.parse((LOCAL ? null : r2get(`axto-vault-data/deploy-${chainId}.json`)) || LOCALSTORE[`axto-vault-data/deploy-${chainId}.json`] || '{}');
+  const missing = COLS.filter(([k]) => !prevSt.collections?.[k]).map(([k]) => k);
+  if (!LOCAL && r2get(`axto-nft-data/cfg/contracts-${chainId}.json`) && !missing.length) {
+    const prev = prevSt;
     if (prev.done && !prev.verified?.etherscan) {
       prev.verified = await verifyAll(chainId, prev);
       r2put(`axto-vault-data/deploy-${chainId}.json`, JSON.stringify(prev));
@@ -178,7 +183,9 @@ async function main() {
     log(`::notice::Deploy ditahan — ${hold}`);
     return { held: hold, address: me };
   }
-  if (bal < need && !st.done) {
+  const adding = st.done && COLS.some(([k]) => !st.collections?.[k]); // deploy bertahap: koleksi baru setelah semua aktif
+  if (adding) log(`Deploy bertahap: menambah ${COLS.filter(([k]) => !st.collections?.[k]).map(([k]) => k).join(', ')}`);
+  if (bal < need && (!st.done || adding)) {
     status('menunggu dana');
     log(`::notice::Kirim ±${ethers.formatEther(need)} ETH (jaringan ${net.name}) ke ${me}. Workflow ini mencoba lagi tiap jam.`);
     return { waiting: true, address: me, need };
@@ -246,7 +253,7 @@ async function main() {
   return { done: true, gasUsed: BigInt(st.gasUsed), contracts: JSON.parse(body), deployer: me };
 }
 
-export { main };
+export { main, LOCALSTORE };
 if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).href) {
   main().then((r) => {
     if (process.env.GITHUB_STEP_SUMMARY && r) writeFileSync(process.env.GITHUB_STEP_SUMMARY, `## Deploy kontrak otomatis\n\n${r.waiting ? `Menunggu dana: kirim ±${ethers.formatEther(r.need)} ETH ke \`${r.address}\` (jaringan ${CHAIN === 8453 ? 'Base' : 'Base Sepolia'}).` : r.done ? 'Kontrak aktif ✅' : ''}\n`, { flag: 'a' });

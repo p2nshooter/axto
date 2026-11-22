@@ -7,7 +7,7 @@ import { svgOpen, linear, radial, starPath, polyPath, girihPattern, roundRect, r
 import { AMIRI_WOFF2_B64 } from './font-amiri.js';
 import { applyMotion } from './motion.js';
 
-const FONT_FACE = `<style>@font-face{font-family:'AXTO Amiri';src:url(data:font/woff2;base64,${AMIRI_WOFF2_B64}) format('woff2')}</style>`;
+export const FONT_FACE = `<style>@font-face{font-family:'AXTO Amiri';src:url(data:font/woff2;base64,${AMIRI_WOFF2_B64}) format('woff2')}</style>`;
 
 const AR_DIGITS = '٠١٢٣٤٥٦٧٨٩';
 export const arNum = (n) => String(n).replace(/\d/g, (x) => AR_DIGITS[Number(x)]);
@@ -28,7 +28,7 @@ export const RECITERS = [
   ['dussary', 'Yasser Ad-Dussary', 'Yasser_Ad-Dussary_128kbps', 0],
 ];
 
-function illumination(id, kind, gold, seed) {
+export function illumination(id, kind, gold, seed) {
   switch (kind) {
     case 'girih': case 'star-lattice': case 'zellige': return `<rect width="1000" height="1000" fill="url(#gp)" />`;
     case 'shamsa': return `<g opacity=".28">${Array.from({ length: 48 }, (_, i) => `<path d="M500 500L${r1(500 + 700 * Math.cos((i / 48) * Math.PI * 2))} ${r1(500 + 700 * Math.sin((i / 48) * Math.PI * 2))}" stroke="${gold}" stroke-width="${i % 2 ? 1 : 3}"/>`).join('')}</g>`;

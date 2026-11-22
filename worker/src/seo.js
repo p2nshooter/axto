@@ -12,6 +12,7 @@ const KIND = {
   stamp: { id: ['NFT Prangko Digital', 'prangko digital dari negeri imajiner, diukir vektor', 'NFT prangko'], en: ['Digital Stamp NFTs', 'vector-engraved digital postage stamps from imaginary realms', 'stamp NFT'] },
   quran: { id: ['NFT Kaligrafi Al-Qur\'an', 'kaligrafi Al-Qur\'an 3D dengan bacaan qari dan penunjuk kata', 'NFT kaligrafi Islami'], en: ['Qur\'an Calligraphy NFTs', '3D Qur\'an calligraphy with recitation and word-by-word highlighting', 'Islamic calligraphy NFT'] },
   model: { id: ['NFT Figur Animasi', 'figur beranimasi 2D dalam seri pendidikan, antariksa dan lainnya', 'NFT animasi'], en: ['Animated Figure NFTs', 'animated 2D figures in education, space and more series', 'animated NFT'] },
+  hadith: { id: ['NFT Kaligrafi Hadits', 'kaligrafi hadits lengkap dengan nama kitab, bab & nomor, dibacakan suara Arab dan diterjemahkan ke bahasa Anda', 'NFT hadits'], en: ['Hadith Calligraphy NFTs', 'hadith calligraphy with collection, book and number, read aloud in Arabic and translated into your language', 'hadith NFT'] },
 };
 const PRICE = { id: 'harga tetap $10–$1.000 per tingkat kelangkaan', en: 'fixed prices from $10 to $1,000 by rarity tier' };
 const fmt = (n, lang) => Number(n).toLocaleString(lang === 'id' ? 'id-ID' : 'en-US');

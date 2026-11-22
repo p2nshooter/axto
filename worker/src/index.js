@@ -21,11 +21,12 @@ import { ownerOf, isAddress, encodeClaim } from './eth.js';
 import { Ledger, KEYS } from './ledger.js';
 import { withCfg, saveContracts, NETWORKS } from './config.js';
 import { vault } from './vault.js';
+import { hadithItem, translateHadith } from './translate.js';
 
 export { Ledger };
 
 /** Nama EIP-712 kontrak eksklusif (harus sama dengan nama saat deploy, contracts/scripts/deploy.mjs). */
-export const EX_NAMES = { 'ex-time': 'AXTO Exclusive Time', 'ex-stamp': 'AXTO Exclusive Stamp', 'ex-quran': "AXTO Exclusive Qur'an", 'ex-model': 'AXTO Exclusive Model' };
+export const EX_NAMES = { 'ex-time': 'AXTO Exclusive Time', 'ex-stamp': 'AXTO Exclusive Stamp', 'ex-quran': "AXTO Exclusive Qur'an", 'ex-model': 'AXTO Exclusive Model', 'ex-hadith': 'AXTO Exclusive Hadith' };
 
 const IMMUTABLE = 'public, max-age=300, s-maxage=86400, stale-while-revalidate=604800';
 const json = (v, status = 200, extra = {}) => new Response(JSON.stringify(v), { status, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', ...extra } });
@@ -55,6 +56,7 @@ function assetProvider(env, origin) {
   const prov = {
     async ayah(s, a) { const j = await get(`s/${s}.json`); const v = j.ayat[a - 1]; return { ar: v.ar, tr: v.tr, lt: v.lt }; },
     async page(p) { return get(`h/${p}.json`); },
+    async hadith(k, n) { return hadithItem(env, origin, k, n); }, // #49: teks hadits dari aset statis (data ulyah.com)
   };
   // Wajah model hanya disisipkan bila izin tertulis model tercatat (MODEL_CONSENT berisi id model, mis. "luaja-1").
   // Disisipkan sebagai data-URI: SVG yang ditampilkan lewat <img>/OpenSea tidak boleh memuat gambar eksternal.
@@ -74,7 +76,7 @@ function assetProvider(env, origin) {
 }
 
 /** Versi render: naikkan saat tampilan karya berubah → cache tepi lama otomatis tidak terpakai. */
-const RENDER_V = '7';
+const RENDER_V = '8';
 async function cached(request, ctx, make) {
   const cache = caches.default;
   const u = new URL(request.url);
@@ -139,6 +141,16 @@ async function api(request, env, ctx, url) {
     }
     const produced = (await ledger(env).stats()).collections?.[m[1]]?.produced ?? 0;
     return json(browse(m[1], { from: Number(q.get('from') ?? 1) | 0, n, tier: Number.isInteger(tier) && tier >= 0 && tier <= 4 ? tier : null, series: String(q.get('series') ?? '').slice(0, 32), produced }), 200, { 'cache-control': 'public, max-age=60' });
+  }
+  // #49: mesin penerjemah hadits (terjemahan penerjemah bila ada, selain itu Workers AI), cache tepi 30 hari
+  if (p === '/api/hadith/tr') {
+    const q = url.searchParams;
+    const to = String(q.get('to') ?? '').toLowerCase().slice(0, 3);
+    const n = Number(q.get('n'));
+    if (!Number.isSafeInteger(n) || n < 1) return json({ error: 'n' }, 400);
+    if (!(await rateLimit(env, `tr:${request.headers.get('cf-connecting-ip') ?? 'x'}`, 40))) return json({ error: 'rate_limited' }, 429);
+    const r = await translateHadith(env, url.origin, String(q.get('c') ?? ''), n, to, ctx);
+    return json(r, r.error ? 400 : 200, r.error ? {} : { 'cache-control': 'public, max-age=86400' });
   }
   m = /^\/api\/lots\/([a-z-]+)$/.exec(p);
   if (m && COLLECTIONS[m[1]]) return json(await ledger(env).lots(m[1], { sort: url.searchParams.get('sort') ?? 'ending', offset: Number(url.searchParams.get('o') ?? 0) }));
