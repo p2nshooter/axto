@@ -21,6 +21,8 @@ export async function withCfg(env) {
   const c = cache.cfg;
   if (!c) return env;
   const out = { ...env, CHAIN_ID: String(c.chainId), BASE_RPC: NETWORKS[c.chainId]?.rpc ?? env.BASE_RPC, AUCTION_HOUSE: c.auctionHouse, AXTO_TOKEN: c.token, AXTO_SALE: c.sale, USDC: c.usdc };
+  // lelang langsung jalan begitu kontrak aktif (perintah pemilik #38): genesis dari cfg bila wrangler tidak menetapkan
+  if (!Number(env.GENESIS_MS) && c.genesis) out.GENESIS_MS = String(c.genesis);
   for (const k of COL_KEYS) out[colVar(k)] = c.collections?.[k] ?? '';
   return out;
 }
@@ -46,7 +48,10 @@ export async function saveContracts(env, admin, body) {
     const o = await ethCall(net.rpc, a, '0x8da5cb5b');
     if (`0x${o.slice(-40)}`.toLowerCase() !== String(want).toLowerCase()) return { ok: false, error: `owner ${a}` };
   }
-  const cfg = { chainId, token: body.token, sale: body.sale, auctionHouse: body.auctionHouse, vesting: body.vesting, lock: body.lock, usdc: net.usdc, collections: Object.fromEntries(COL_KEYS.map((k) => [k, body.collections[k]])), savedAt: Date.now(), by: admin };
+  const prev = await readJSON(env.STORE, 'cfg/active.json').catch(() => null);
+  // ronde pertama: segel saat ini juga, live 1 jam kemudian (lelang 72 jam mulai $1) — tidak diubah bila disimpan ulang
+  const genesis = prev?.chainId === chainId && prev?.genesis ? prev.genesis : Math.ceil((Date.now() + 65 * 60_000) / 60_000) * 60_000;
+  const cfg = { chainId, token: body.token, sale: body.sale, auctionHouse: body.auctionHouse, vesting: body.vesting, lock: body.lock, usdc: net.usdc, collections: Object.fromEntries(COL_KEYS.map((k) => [k, body.collections[k]])), genesis, savedAt: Date.now(), by: admin };
   await putJSON(env.STORE, `cfg/contracts-${chainId}.json`, cfg);
   await putJSON(env.STORE, 'cfg/active.json', cfg);
   await appendLog(env.STORE, 'admin', { ev: 'contracts', chainId, by: admin });
