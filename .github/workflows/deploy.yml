@@ -93,9 +93,14 @@ jobs:
             npx wrangler r2 object put axto-vault-data/signer.json --file /tmp/signer.json --content-type application/json --remote >/dev/null
             echo "SIGNER_KEY baru dibuat; alamat signer: $addr"
           fi
-          for k in PAYPAL_CLIENT_ID PAYPAL_CLIENT_SECRET PAYPAL_WEBHOOK_ID; do
+          for k in PAYPAL_CLIENT_ID PAYPAL_CLIENT_SECRET; do
             [ -n "${!k}" ] && printf '%s' "${!k}" | npx wrangler secret put "$k" >/dev/null || true
           done
+          # webhook PayPal didaftarkan otomatis + uji order (mode sesuai PAYPAL_MODE di wrangler.toml vault)
+          if [ -n "$PAYPAL_CLIENT_ID" ] && [ -f scripts/paypal-setup.mjs ]; then
+            mode=$(grep -oP '^PAYPAL_MODE = "\K[a-z]+' wrangler.toml || echo sandbox)
+            hook=$(PAYPAL_MODE=$mode node scripts/paypal-setup.mjs) && printf '%s' "$hook" | npx wrangler secret put PAYPAL_WEBHOOK_ID >/dev/null && echo "- PayPal $mode: webhook + uji order OK" >> "$GITHUB_STEP_SUMMARY"
+          fi
           if ls models/*/*.webp >/dev/null 2>&1; then
             for f in models/*/*.webp; do
               id=$(basename "$(dirname "$f")"); name=$(basename "$f")
