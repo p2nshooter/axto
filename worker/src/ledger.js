@@ -473,7 +473,7 @@ export class Ledger extends DurableObject {
     const res = {
       lotId: lot.lotId, collection: colAddr(env, c), tokenId: String(lot.tokenId), winner: lot.winner.bidder,
       currency: exclusive ? env.AXTO_TOKEN : env.USDC, price: A.toBase(lot.winner.amount, currencyOf(c)), seller: lot.seller ?? '0x0000000000000000000000000000000000000000', // primer: 100% treasury; resale: 90% penjual + 10% fee
-      mode: exclusive ? 2 : 0, deadline: String(Math.floor((lot.claim.until + 3_600_000) / 1000)),
+      mode: exclusive ? 2 : 1, deadline: String(Math.floor((lot.claim.until + 3_600_000) / 1000)),
     };
     try {
       const att = await vault(env, 'attestResult', { result: res, bid: { maxUnits: sig.units, nonce: sig.nonce, deadline: sig.deadline, sig: sig.sig } });

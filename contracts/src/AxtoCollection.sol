@@ -9,6 +9,7 @@ import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
+import {IERC2309} from "@openzeppelin/contracts/interfaces/IERC2309.sol";
 
 /// @notice Antarmuka Creator Token (ERC-721C, Limit Break) — OpenSea menegakkan royalti untuk kontrak yang mendukungnya.
 interface ICreatorToken {
@@ -24,18 +25,25 @@ interface ITransferValidator {
 
 /**
  * @title AxtoCollection
- * @notice Koleksi 1/1 AXTO (TIME, STAMP, QURAN, MODEL, dan edisi eksklusif). Token hanya bisa lahir lewat:
- *  - `mint` oleh kontrak minter resmi (AxtoAuctionHouse) saat pemenang lelang mengklaim, atau
- *  - `mintWithVoucher` bertanda tangan signer yang ditunjuk owner (penarikan edisi eksklusif).
+ * @notice Koleksi 1/1 AXTO (TIME, STAMP, QURAN, MODEL, dan edisi eksklusif). Token lahir lewat:
+ *  - premint saat deploy (koleksi publik, perintah pemilik #30): token 1..premint langsung milik kustodi AuctionHouse,
+ *    diumumkan dengan event ERC-2309 `ConsecutiveTransfer` (maks. 5.000 per event, hanya di konstruktor sesuai ERC-721)
+ *    → tampil di OpenSea tanpa transaksi per token; pemenang lelang menerimanya lewat transfer dari kustodi;
+ *  - `mint` oleh kontrak minter resmi, atau
+ *  - `mintWithVoucher` bertanda tangan signer yang ditunjuk owner (penarikan/WD edisi eksklusif, gas oleh member).
  *  Royalti jual kembali 10% (ERC-2981) ke treasury; kait ERC-721C untuk penegakan royalti di OpenSea.
  */
-contract AxtoCollection is ERC721, ERC2981, Ownable2Step, Pausable, EIP712, ICreatorToken {
+contract AxtoCollection is ERC721, ERC2981, Ownable2Step, Pausable, EIP712, ICreatorToken, IERC2309 {
     using Strings for uint256;
 
     bytes32 public constant VOUCHER_TYPEHASH =
         keccak256("MintVoucher(address to,uint256 tokenId,bytes32 ref,uint256 deadline)");
 
     uint256 public immutable maxSupply;
+    /// @notice Token 1..premint dicetak saat deploy ke `custody` (0 untuk edisi eksklusif).
+    uint256 public immutable premint;
+    address public immutable custody;
+    uint256 public constant CONSECUTIVE_BATCH = 5000;
     uint256 public totalMinted;
     address public signer;
     bool public metadataFrozen;
@@ -59,20 +67,46 @@ contract AxtoCollection is ERC721, ERC2981, Ownable2Step, Pausable, EIP712, ICre
     error BadSignature();
     error Frozen();
 
-    constructor(
-        string memory name_,
-        string memory symbol_,
-        uint256 maxSupply_,
-        address owner_,
-        address royaltyReceiver,
-        string memory baseURI_,
-        string memory contractURI_
-    ) ERC721(name_, symbol_) Ownable(owner_) EIP712(name_, "1") {
-        require(maxSupply_ > 0 && royaltyReceiver != address(0), "config");
-        maxSupply = maxSupply_;
-        _base = baseURI_;
-        _contractURI = contractURI_;
-        _setDefaultRoyalty(royaltyReceiver, 1000); // 10%
+    struct Config {
+        string name;
+        string symbol;
+        uint256 maxSupply;
+        address owner;
+        address royaltyReceiver;
+        string baseURI;
+        string contractURI;
+        address custody; // kustodi premint (AuctionHouse); 0 bila tanpa premint
+        uint256 premint; // jumlah token 1..premint yang dicetak saat deploy
+        address signer; // signer voucher WD (edisi eksklusif); boleh 0
+    }
+
+    /// @notice Semua pengaturan di konstruktor → owner (wallet admin) tidak perlu mengirim transaksi apa pun.
+    constructor(Config memory c) ERC721(c.name, c.symbol) Ownable(c.owner) EIP712(c.name, "1") {
+        require(c.maxSupply > 0 && c.royaltyReceiver != address(0) && c.premint <= c.maxSupply, "config");
+        require(c.premint == 0 || c.custody != address(0), "custody");
+        maxSupply = c.maxSupply;
+        premint = c.premint;
+        custody = c.custody;
+        signer = c.signer;
+        _base = c.baseURI;
+        _contractURI = c.contractURI;
+        _setDefaultRoyalty(c.royaltyReceiver, 1000); // 10%
+        if (c.premint > 0) {
+            _increaseBalance(c.custody, uint128(c.premint));
+            totalMinted = c.premint;
+            for (uint256 from = 1; from <= c.premint; from += CONSECUTIVE_BATCH) {
+                uint256 to = from + CONSECUTIVE_BATCH - 1;
+                if (to > c.premint) to = c.premint;
+                emit ConsecutiveTransfer(from, to, address(0), c.custody);
+            }
+        }
+        if (c.signer != address(0)) emit SignerUpdated(c.signer);
+    }
+
+    /// @dev Token premint yang belum pernah berpindah tetap milik kustodi.
+    function _ownerOf(uint256 tokenId) internal view override returns (address o) {
+        o = super._ownerOf(tokenId);
+        if (o == address(0) && tokenId != 0 && tokenId <= premint) o = custody;
     }
 
     // ---------------------------------------------------------------- mint

@@ -4,7 +4,6 @@ pragma solidity 0.8.28;
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {ERC20Permit} from "@openzeppelin/contracts/token/ERC20/extensions/ERC20Permit.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
-import {Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
 
 interface IAxtoSaleSold {
     function sold() external view returns (uint256);
@@ -19,7 +18,8 @@ interface IAxtoSaleSold {
  *  tepercaya (Sale, AuctionHouse, Vesting, Lock, treasury, owner). `enableTrading` satu arah — tidak bisa dimatikan
  *  lagi — dan hanya bisa setelah presale 2.000.000 AXTO habis atau 365 hari sejak deploy.
  */
-contract AxtoToken is ERC20, ERC20Permit, Ownable2Step {
+/// @dev Ownable satu langkah: deployer sistem membagi koin lalu langsung menyerahkan owner ke wallet koin (perintah #31).
+contract AxtoToken is ERC20, ERC20Permit, Ownable {
     uint256 public constant TOTAL_SUPPLY = 10_000_000 ether;
     uint256 public constant PRESALE_TARGET = 2_000_000 ether;
     uint256 public immutable deployedAt;

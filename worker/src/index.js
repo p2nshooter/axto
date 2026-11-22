@@ -159,7 +159,7 @@ async function api(request, env, ctx, url) {
     if (!s?.admin) return json({ error: 'admin_only' }, 403);
     let signer = null;
     try { signer = (await vault(env, 'signerAddress', {})).address; } catch { signer = null; }
-    return json({ admin: env.ADMIN_WALLET, coinWallet: env.COIN_WALLET, treasury: env.TREASURY, signer, networks: NETWORKS, active: await readJSON(env.STORE, 'cfg/active.json') });
+    return json({ admin: env.ADMIN_WALLET, coinWallet: env.COIN_WALLET, treasury: env.TREASURY, signer, networks: NETWORKS, active: await readJSON(env.STORE, 'cfg/active.json'), deployer: await readJSON(env.STORE, 'cfg/deployer.json') });
   }
   if (p === '/api/admin/contracts' && method === 'POST') {
     if (!s?.admin) return json({ error: 'admin_only' }, 403);
@@ -249,6 +249,16 @@ async function api(request, env, ctx, url) {
     if (!COLLECTIONS[c]) return json({ error: 'collection' }, 400);
     if (!(await engineAuth(request, env, ''))) return json({ error: 'auth' }, 401);
     return json(await ledger(env).engineState(c));
+  }
+  // deploy otomatis oleh sistem (contracts/scripts/auto-deploy.mjs): simpan alamat setelah diverifikasi on-chain
+  if (p === '/internal/contracts' && method === 'POST') {
+    const body = await request.text();
+    if (!(await engineAuth(request, env, body))) return json({ error: 'auth' }, 401);
+    const r = await saveContracts(env, env.ADMIN_WALLET, JSON.parse(body));
+    if (r.ok) {
+      try { await vault(env, 'setConfig', { chainId: r.cfg.chainId, auctionHouse: r.cfg.auctionHouse, sale: r.cfg.sale, usdc: r.cfg.usdc, rpc: NETWORKS[r.cfg.chainId].rpc }); } catch (e) { r.vault = String(e.message); }
+    }
+    return json(r, r.ok ? 200 : 400);
   }
   if (p === '/internal/engine/commit' && method === 'POST') {
     const body = await request.text();

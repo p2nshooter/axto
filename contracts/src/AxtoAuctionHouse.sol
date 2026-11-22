@@ -23,8 +23,8 @@ interface IAxtoMint {
  *  (gas dibayar pemenang) dengan tawarannya + attestasi hasil dari signer axto.io.
  *  Kontrak memastikan: tanda tangan penawar sah, harga ≤ batas yang ditandatangani penawar, lot belum pernah
  *  diselesaikan, attestasi belum kedaluwarsa. Mode pengiriman:
- *   0 = mint langsung ke pemenang (lazy mint, koleksi publik)
- *   1 = transfer dari kustodi kontrak ini (mode premint)
+ *   0 = mint langsung ke pemenang (cadangan)
+ *   1 = transfer dari kustodi kontrak ini (koleksi publik: premint saat deploy, perintah pemilik #30)
  *   2 = kustodi axto.io (edisi eksklusif; hanya pembayaran + event, NFT dicatat off-chain sampai WD)
  *  Pembagian: seller == 0 → 100% treasury; seller != 0 (resale marketplace eksklusif) → 90% seller, 10% treasury.
  */
@@ -91,10 +91,18 @@ contract AxtoAuctionHouse is Ownable2Step, Pausable, ReentrancyGuard, EIP712, IE
     error CurrencyNotAllowed();
     error BadMode();
 
-    constructor(address owner_, address treasury_, address signer_) Ownable(owner_) EIP712("AXTO Auction House", "1") {
+    /// @notice Mata uang (USDC, AXTO) langsung di konstruktor → owner tidak perlu transaksi tambahan.
+    constructor(address owner_, address treasury_, address signer_, address[] memory currencies_)
+        Ownable(owner_)
+        EIP712("AXTO Auction House", "1")
+    {
         require(treasury_ != address(0), "treasury");
         treasury = treasury_;
         signer = signer_;
+        for (uint256 i; i < currencies_.length; ++i) {
+            currencies[currencies_[i]] = true;
+            emit CurrencyUpdated(currencies_[i], true);
+        }
     }
 
     function hashBid(Bid calldata b) public view returns (bytes32) {

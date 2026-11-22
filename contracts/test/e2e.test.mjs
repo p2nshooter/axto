@@ -44,7 +44,8 @@ let usdc, token, sale, house, col, colEx, env;
 
 async function deploy(name, ...args) {
   const a = art(name);
-  const c = await new ethers.ContractFactory(a.abi, a.bytecode, owner).deploy(...args);
+  // nonce eksplisit: ganache kadang memberi nonce "pending" usang setelah deploy besar (premint 2 jt)
+  const c = await new ethers.ContractFactory(a.abi, a.bytecode, owner).deploy(...args, { nonce: await provider.getTransactionCount(owner.address, 'latest') });
   await c.waitForDeployment();
   return c;
 }
@@ -97,23 +98,19 @@ before(async () => {
   const feed = await deploy('MockFeed', 2000n * 10n ** 8n);
   token = await deploy('AxtoToken', owner.address);
   sale = await deploy('AxtoSale', owner.address, await token.getAddress(), await usdc.getAddress(), await feed.getAddress(), treasury.address, signerW.address);
-  house = await deploy('AxtoAuctionHouse', owner.address, treasury.address, signerW.address);
-  col = await deploy('AxtoCollection', 'AXTO Time', 'AXTIME', 2_000_000, owner.address, treasury.address, 'https://axto.io/api/meta/time/', 'https://axto.io/api/contract/time');
-  colEx = await deploy('AxtoCollection', 'AXTO Exclusive Time', 'AXXTIME', 50_000, owner.address, treasury.address, 'https://axto.io/api/meta/ex-time/', 'https://axto.io/api/contract/ex-time');
+  house = await deploy('AxtoAuctionHouse', owner.address, treasury.address, signerW.address, [await usdc.getAddress(), await token.getAddress()]);
+  col = await deploy('AxtoCollection', { name: 'AXTO Time', symbol: 'AXTIME', maxSupply: 2_000_000, owner: owner.address, royaltyReceiver: treasury.address, baseURI: 'https://axto.io/api/meta/time/', contractURI: 'https://axto.io/api/contract/time', custody: await house.getAddress(), premint: 2_000_000, signer: ZERO });
+  colEx = await deploy('AxtoCollection', { name: 'AXTO Exclusive Time', symbol: 'AXXTIME', maxSupply: 50_000, owner: owner.address, royaltyReceiver: treasury.address, baseURI: 'https://axto.io/api/meta/ex-time/', contractURI: 'https://axto.io/api/contract/ex-time', custody: ZERO, premint: 0, signer: signerW.address });
   await (await token.setSale(await sale.getAddress())).wait();
   for (const a of [await house.getAddress(), treasury.address]) await (await token.setTrusted(a, true)).wait();
   await (await token.transfer(await sale.getAddress(), E(2_000_000))).wait();
-  await (await col.setMinter(await house.getAddress(), true)).wait();
-  await (await colEx.setSigner(signerW.address)).wait();
-  await (await house.setCurrency(await usdc.getAddress(), true)).wait();
-  await (await house.setCurrency(await token.getAddress(), true)).wait();
   for (const w of [alice, bob, carol]) await (await usdc.mint(w.address, U(1000))).wait();
   // env vault = konfigurasi produksi, kunci signer = wallet signer kontrak
   env = { SIGNER_KEY: signerW.privateKey, CHAIN_ID: String(chainId), AUCTION_HOUSE: await house.getAddress(), AXTO_SALE: await sale.getAddress(), USDC: await usdc.getAddress(), VAULT_STORE: memR2() };
   assert.equal((await methods.signerAddress(env)).address.toLowerCase(), signerW.address.toLowerCase());
 });
 
-test('1. lelang publik USDC mulai $1: proxy vs tetap → vault attest → pemenang klaim, NFT di-mint, dana ke treasury', async () => {
+test('1. lelang publik USDC mulai $1: proxy vs tetap → vault attest → pemenang klaim, NFT pindah dari kustodi (premint) ke pemenang, dana ke treasury', async () => {
   const c = await col.getAddress();
   const cu = await usdc.getAddress();
   const start = A.startUnits(A.START_USD, 'USDC');
@@ -123,9 +120,10 @@ test('1. lelang publik USDC mulai $1: proxy vs tetap → vault attest → pemena
   const lot = runLot('axto:time:7', 'USDC', [{ who: alice.address, kind: 'proxy', bid: a }, { who: bob.address, kind: 'fixed', bid: b }], start);
   assert.equal(lot.winner.bidder, alice.address);
   assert.ok(lot.winner.amount > 300 && lot.winner.amount <= 500, `harga ${lot.winner.amount}`);
-  const { tx, result } = await attestAndClaim({ lot, winnerWallet: alice, winBid: a, colAddr: c, tokenId: 7, currency: cu, cur: 'USDC', mode: 0 });
+  const { tx, result } = await attestAndClaim({ lot, winnerWallet: alice, winBid: a, colAddr: c, tokenId: 7, currency: cu, cur: 'USDC', mode: 1 });
   await (await usdc.connect(alice).approve(await house.getAddress(), BigInt(result.price))).wait();
   const before = await usdc.balanceOf(treasury.address);
+  assert.equal(await col.ownerOf(7), await house.getAddress()); // sudah tercetak & tampil di OpenSea sejak deploy
   await (await alice.sendTransaction({ ...tx, gasLimit: 600_000 })).wait(); // pemenang membayar gas
   assert.equal(await col.ownerOf(7), alice.address);
   assert.equal((await usdc.balanceOf(treasury.address)) - before, BigInt(result.price));
@@ -137,10 +135,10 @@ test('2. bukan pemenang tidak bisa klaim; tanda tangan bid orang lain ditolak', 
   const cu = await usdc.getAddress();
   const a = await signBid(alice, { c: 'time', colAddr: c, tokenId: 8, currency: cu, units: 200, lotKey: 'axto:time:8' });
   const lot = runLot('axto:time:8', 'USDC', [{ who: alice.address, kind: 'fixed', bid: a }], 100);
-  const { tx } = await attestAndClaim({ lot, winnerWallet: alice, winBid: a, colAddr: c, tokenId: 8, currency: cu, cur: 'USDC', mode: 0 });
+  const { tx } = await attestAndClaim({ lot, winnerWallet: alice, winBid: a, colAddr: c, tokenId: 8, currency: cu, cur: 'USDC', mode: 1 });
   await (await usdc.connect(bob).approve(await house.getAddress(), U(10))).wait();
   await assert.rejects(bob.sendTransaction({ ...tx, gasLimit: 600_000 }).then((t) => t.wait()), 'bob bukan pemenang');
-  const forged = await methods.attestResult(env, { result: { lotId: a.msg.lotId, collection: c, tokenId: '8', winner: bob.address, currency: cu, price: A.toBase(200, 'USDC'), seller: ZERO, mode: 0, deadline: String(now() + 86400) }, bid: { maxUnits: 200, nonce: String(a.msg.nonce), deadline: String(a.msg.deadline), sig: a.sig } });
+  const forged = await methods.attestResult(env, { result: { lotId: a.msg.lotId, collection: c, tokenId: '8', winner: bob.address, currency: cu, price: A.toBase(200, 'USDC'), seller: ZERO, mode: 1, deadline: String(now() + 86400) }, bid: { maxUnits: 200, nonce: String(a.msg.nonce), deadline: String(a.msg.deadline), sig: a.sig } });
   assert.equal(forged.error, 'bid_signature', 'vault menolak attestasi untuk pemenang yang tidak menandatangani bid');
 });
 

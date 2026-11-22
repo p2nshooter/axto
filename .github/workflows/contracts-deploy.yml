@@ -1,0 +1,52 @@
+name: Deploy kontrak otomatis (sistem)
+
+# Perintah pemilik #30–32: sistem sendiri yang mendeploy semua kontrak di Base dari wallet deployer khusus
+# (kunci terenkripsi di bucket privat vault). Tiap jam: bila saldo deployer belum cukup → tulis status "menunggu dana"
+# (tampil di Portal admin); bila cukup → deploy berurutan & lanjutkan dari langkah terakhir; selesai → simpan ke worker.
+on:
+  schedule:
+    - cron: '23 * * * *'
+  workflow_dispatch:
+    inputs:
+      chain:
+        description: 'Chain id (8453 = Base, 84532 = Base Sepolia)'
+        required: false
+        default: '8453'
+  push:
+    branches: [main, ccr-9ef9a045-gmv4m2]
+    paths:
+      - 'contracts/src/**'
+      - 'contracts/scripts/auto-deploy.mjs'
+      - '.github/workflows/contracts-deploy.yml'
+
+concurrency:
+  group: contracts-deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Pasang & kompilasi kontrak
+        working-directory: contracts
+        run: |
+          npm ci --no-audit --no-fund || npm install --no-save --no-audit --no-fund
+          node scripts/compile.mjs
+      - name: Deploy otomatis (menunggu dana / lanjut / selesai)
+        working-directory: contracts
+        env:
+          CLOUDFLARE_API_KEY: ${{ secrets.CLOUDFLARE_API_KEY }}
+          CLOUDFLARE_EMAIL: ${{ secrets.CLOUDFLARE_EMAIL }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          ENGINE_HMAC_KEY: ${{ secrets.ENGINE_HMAC_KEY }}
+          CHAIN_ID: ${{ inputs.chain || '8453' }}
+          AXTO_API: https://axto.io
+        run: node scripts/auto-deploy.mjs

@@ -9,12 +9,13 @@ const E = (n) => ethers.parseEther(String(n));
 const U = (n) => ethers.parseUnits(String(n), 6);
 
 let provider, owner, treasury, signerW, alice, bob, carol, chainId;
-let usdc, feed, token, sale, house, col, colEx, vest, lock;
+let usdc, feed, token, sale, house, col, colEx, vest, lock, premintRcpt;
 
 async function deploy(name, ...args) {
   const a = art(name);
   const f = new ethers.ContractFactory(a.abi, a.bytecode, owner);
-  const c = await f.deploy(...args);
+  // nonce eksplisit: ganache kadang memberi nonce "pending" usang setelah deploy besar (premint 2 jt)
+  const c = await f.deploy(...args, { nonce: await provider.getTransactionCount(owner.address, 'latest') });
   await c.waitForDeployment();
   return c;
 }
@@ -41,9 +42,10 @@ before(async () => {
   feed = await deploy('MockFeed', 2000n * 10n ** 8n);
   token = await deploy('AxtoToken', owner.address);
   sale = await deploy('AxtoSale', owner.address, await token.getAddress(), await usdc.getAddress(), await feed.getAddress(), treasury.address, signerW.address);
-  house = await deploy('AxtoAuctionHouse', owner.address, treasury.address, signerW.address);
-  col = await deploy('AxtoCollection', 'AXTO Time', 'AXTIME', 2_000_000, owner.address, treasury.address, 'https://axto.io/api/meta/time/', 'https://axto.io/api/contract/time');
-  colEx = await deploy('AxtoCollection', 'AXTO Exclusive Time', 'AXXTIME', 50_000, owner.address, treasury.address, 'https://axto.io/api/meta/ex-time/', 'https://axto.io/api/contract/ex-time');
+  house = await deploy('AxtoAuctionHouse', owner.address, treasury.address, signerW.address, [await usdc.getAddress(), await token.getAddress()]);
+  col = await deploy('AxtoCollection', { name: 'AXTO Time', symbol: 'AXTIME', maxSupply: 2_000_000, owner: owner.address, royaltyReceiver: treasury.address, baseURI: 'https://axto.io/api/meta/time/', contractURI: 'https://axto.io/api/contract/time', custody: await house.getAddress(), premint: 2_000_000, signer: ethers.ZeroAddress });
+  premintRcpt = await provider.getTransactionReceipt(col.deploymentTransaction().hash);
+  colEx = await deploy('AxtoCollection', { name: 'AXTO Exclusive Time', symbol: 'AXXTIME', maxSupply: 50_000, owner: owner.address, royaltyReceiver: treasury.address, baseURI: 'https://axto.io/api/meta/ex-time/', contractURI: 'https://axto.io/api/contract/ex-time', custody: ethers.ZeroAddress, premint: 0, signer: signerW.address });
   vest = await deploy('AxtoVesting', await token.getAddress(), owner.address, E(3_000_000));
   lock = await deploy('AxtoLock', await token.getAddress(), treasury.address);
   // distribusi persis seperti skrip deploy
@@ -52,10 +54,6 @@ before(async () => {
   await (await token.transfer(await sale.getAddress(), E(2_000_000))).wait();
   await (await token.transfer(await vest.getAddress(), E(3_000_000))).wait();
   await (await token.transfer(await lock.getAddress(), E(2_000_000))).wait();
-  await (await col.setMinter(await house.getAddress(), true)).wait();
-  await (await colEx.setSigner(signerW.address)).wait();
-  await (await house.setCurrency(await usdc.getAddress(), true)).wait();
-  await (await house.setCurrency(await token.getAddress(), true)).wait();
   for (const w of [alice, bob, carol]) await (await usdc.mint(w.address, U(10_000))).wait();
 });
 
@@ -115,19 +113,41 @@ async function lot(collection, tokenId, bidder, max, price, opts = {}) {
   const lotId = ethers.id(opts.lotId ?? `lot-${collection}-${tokenId}`);
   const bid = { lotId, collection, tokenId, currency, maxAmount: max, nonce: opts.nonce ?? BigInt(tokenId), deadline: (await now()) + 86400 * 10 };
   const bidSig = await bidder.signTypedData(hd, BID, bid);
-  const res = { lotId, collection, tokenId, winner: opts.winner ?? bidder.address, currency, price, seller: opts.seller ?? ethers.ZeroAddress, mode: opts.mode ?? 0, deadline: (await now()) + 86400 * 2 };
+  const res = { lotId, collection, tokenId, winner: opts.winner ?? bidder.address, currency, price, seller: opts.seller ?? ethers.ZeroAddress, mode: opts.mode ?? 1, deadline: (await now()) + 86400 * 2 };
   const resSig = await (opts.resSigner ?? signerW).signTypedData(hd, RESULT, res);
   return { bid, bidSig, res, resSig };
 }
 
-test('lelang publik: pemenang klaim (bayar gas sendiri) → USDC ke treasury, NFT di-mint ke pemenang', async () => {
+test('premint koleksi publik: 2.000.000 token milik kustodi AuctionHouse sejak deploy (ERC-2309, maks 5.000 per event)', async () => {
+  const h = await house.getAddress();
+  assert.equal(await col.balanceOf(h), 2_000_000n);
+  assert.equal(await col.totalMinted(), 2_000_000n);
+  for (const id of [1, 5000, 5001, 1_234_567, 2_000_000]) assert.equal(await col.ownerOf(id), h);
+  await revert(col.ownerOf(2_000_001));
+  const topic = col.interface.getEvent('ConsecutiveTransfer').topicHash;
+  const evs = premintRcpt.logs.filter((l) => l.topics[0] === topic).map((l) => col.interface.parseLog(l).args);
+  assert.equal(evs.length, 400);
+  assert.equal(evs[0].fromTokenId, 1n);
+  assert.equal(evs[0].toTokenId, 5000n);
+  assert.equal(evs[399].toTokenId, 2_000_000n);
+  assert.ok(evs.every((e) => e.toAddress === h && e.fromAddress === ethers.ZeroAddress && e.toTokenId - e.fromTokenId < 5000n));
+  assert.equal(await col.owner(), owner.address);
+  assert.equal(await colEx.signer(), signerW.address);
+  assert.equal(await house.currencies(await usdc.getAddress()), true);
+  assert.equal(await house.currencies(await token.getAddress()), true);
+  console.log(`gas deploy koleksi publik + premint 2 jt: ${premintRcpt.gasUsed}`);
+});
+
+test('lelang publik: pemenang klaim (bayar gas sendiri) → USDC ke treasury, NFT pindah dari kustodi ke pemenang', async () => {
   const c = await col.getAddress();
   await (await as(usdc, alice).approve(await house.getAddress(), U(50))).wait(); // dana tetap di wallet sampai klaim
   const L = await lot(c, 42, alice, U(50), U(1));
   const t0 = await usdc.balanceOf(treasury.address);
   await revert(as(house, bob).claim(L.bid, L.bidSig, L.res, L.resSig)); // bukan pemenang
+  assert.equal(await col.ownerOf(42), await house.getAddress());
   await (await as(house, alice).claim(L.bid, L.bidSig, L.res, L.resSig)).wait();
   assert.equal(await col.ownerOf(42), alice.address);
+  assert.equal(await col.balanceOf(await house.getAddress()), 2_000_000n - 1n);
   assert.equal((await usdc.balanceOf(treasury.address)) - t0, U(1));
   assert.equal(await col.tokenURI(42), 'https://axto.io/api/meta/time/42');
   const [rcv, roy] = await col.royaltyInfo(42, U(100));
@@ -147,8 +167,9 @@ test('lelang: harga > batas tawaran, attestasi palsu, dan kedaluwarsa ditolak', 
   await revert(as(house, alice).claim(L3.bid, L3.bidSig, L3.res, L3.resSig));
 });
 
-test('hanya minter resmi yang bisa mint; tokenId di luar rentang ditolak', async () => {
+test('hanya minter resmi yang bisa mint; token premint tidak bisa dicetak ulang; tokenId di luar rentang ditolak', async () => {
   await revert(as(col, alice).mint(alice.address, 1));
+  await revert(col.mint(owner.address, 1)); // owner pun bukan minter; token 1 sudah ada
   const c = await col.getAddress();
   await (await as(usdc, bob).approve(await house.getAddress(), U(10))).wait();
   const L = await lot(c, 2_000_001, bob, U(5), U(1));

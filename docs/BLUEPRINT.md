@@ -301,7 +301,7 @@ filter koleksi/tier/harga/seri.
 Pada `end` (plus perpanjangan) lot ditutup. Vault menerbitkan **attestasi** `{lotId, tokenId, winner, price, bidHash,
 deadline}`. Pemenang menekan "Klaim" → wallet mengirim `AuctionHouse.claim(...)` (gas dibayar pemenang):
 `transferFrom` dana (USDC/AXTO) → treasury (publik/eksklusif primer) atau 90% penjual + 10% treasury (marketplace
-eksklusif) → NFT di-mint ke pemenang (publik) atau dicatat ke kustodi axto.io (eksklusif).
+eksklusif) → NFT publik **dipindahkan dari kustodi AuctionHouse** ke pemenang (sudah tercetak sejak deploy, #30) atau dicatat ke kustodi axto.io (eksklusif).
 
 ### 6.6 Cascade
 Jendela klaim 48 jam. Tidak klaim / gagal (dana kurang) → hak turun ke penawar tertinggi berikutnya yang dananya
@@ -475,11 +475,10 @@ pembatalan voucher.
 |---|---|
 | Produksi 8.150.000 NFT | $0 (deterministik; GitHub Actions gratis untuk repo publik) |
 | Penyimpanan karya publik | $0 (tanpa R2) |
-| Mint, klaim, WD | Dibayar pembeli/pemenang (Base ±$0,001–0,02 per transaksi) |
+| Klaim (transfer dari kustodi), WD eksklusif | Dibayar pemenang/member (Base ±$0,001–0,02 per transaksi) |
 | Listing OpenSea | $0 (tidak ada order) |
 | Cloudflare | Gratis: 100 rb request/hari, DO SQLite, R2 10 GB; disarankan Workers Paid $5/bulan saat trafik tinggi |
-| Deploy kontrak (sekali) | Dibayar owner, ±$1–5 di Base |
-| Premint (opsional) | ±$0,02–0,05 per 1.000 token |
+| Deploy semua kontrak + cetak 8.000.000 NFT publik (sekali, #30–32) | **28,2 juta gas terukur** (ganache, `contracts/test/auto-deploy.test.mjs`) → ±0,0002–0,0005 ETH di Base pada biaya dasar minimum 0,005 gwei + biaya data L1; workflow meminta saldo dengan cadangan 50%. Dibayar sekali dari wallet deployer sistem |
 
 ---
 
