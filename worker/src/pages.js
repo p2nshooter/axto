@@ -221,7 +221,7 @@ function nftPublicPage(lang, c, id, meta, attrs, opensea, info) {
     ${crumbs}
     <p class="kindline">${badge(lang, c, true)}</p>
     <h1>${esc(meta.name)}</h1>
-    <p class="meta">${esc(t.nft.edition)} · ${esc(t.nft.rarity)}: ${esc(rarity)} · ${lang === 'id' ? 'Galeri' : 'Gallery'}: <a class="link" href="${info.galleryHref}">${esc(info.galleryName)}</a></p>
+    <p class="meta">${esc(t.nft.edition)} · ${esc(t.nft.rarity)}: ${esc(TIER_NAMES[lang][TIER_NAMES.en.indexOf(rarity)] ?? rarity)} · ${lang === 'id' ? 'Galeri' : 'Gallery'}: <a class="link" href="${info.galleryHref}">${esc(info.galleryName)}</a></p>
     ${buyBox(lang, c, id, meta, opensea, info.usd)}
     <h2>${esc(t.nft.traits)}</h2>
     <dl class="traits">${attrs.map((a) => `<div><dt>${esc(a.trait_type)}</dt><dd>${esc(a.value)}</dd></div>`).join('')}</dl>
