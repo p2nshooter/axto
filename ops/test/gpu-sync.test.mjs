@@ -23,23 +23,24 @@ test('deskripsi GPU: tanpa teks, Figur Model tidak diproduksi', () => {
   assert.throws(() => promptFor('model', 1));
 });
 
-test('GPU gratis bergiliran: Workers AI & Pollinations merender, gagal → pindah penyedia; seri G- per koleksi', async () => {
+test('GPU gratis: Workers AI merender, gagal sesekali dilewati; seri G- per koleksi berurutan; Pollinations tidak dipakai (watermark)', async () => {
   const io = mkIO();
   let cf = 0;
   let pol = 0;
   const fetchImpl = async (url) => {
     if (url.endsWith('/internal/gpu/render')) { cf += 1; return cf % 3 === 0 ? res(502, JSON.stringify({ error: 'ai' }), 'application/json') : res(200, JSON.stringify({ ok: true, type: 'image/jpeg' }), 'application/json'); }
-    if (url.includes('pollinations')) { pol += 1; return res(200, IMG, 'image/jpeg'); }
+    if (url.includes('pollinations')) { pol += 1; return res(200, IMG, 'image/jpeg'); } // tidak boleh dipanggil
     if (url.includes('/generate/async')) return res(202, JSON.stringify({ id: `h${Math.random()}` }), 'application/json');
     return res(404, 'x');
   };
   const r = await run({ io, fetchImpl, env: ENV, log: () => {}, perCol: 2, max: { direct: 16, horde: 2 }, pause: async () => {} });
   assert.equal(Object.values(r.made).reduce((a, b) => a + b, 0), 16);
-  assert.ok(r.made['cloudflare-workers-ai'] > 0 && r.made.pollinations > 0, JSON.stringify(r.made));
+  assert.equal(r.made['cloudflare-workers-ai'], 16, JSON.stringify(r.made));
+  assert.equal(pol, 0, 'Pollinations tidak pernah dipanggil');
   for (const c of GPU_KEYS) {
     const st = JSON.parse(io.files[`axto-nft-data/os/gpu-${c}.json`]);
-    assert.equal(st.ids.length, 2, c);
-    assert.deepEqual(Object.values(st.serial).sort(), [1, 2]);
+    assert.ok(st.ids.length >= 1, c);
+    assert.deepEqual(Object.values(st.serial).sort((a, b) => a - b), st.ids.map((_, i) => i + 1));
     for (const id of st.ids) assert.ok(st.by[id] === 'cloudflare-workers-ai' || io.bytes[`axto-nft-data/gpu/${c}/${id}.png`], 'gambar tersimpan (Workers AI menyimpan sendiri di worker)');
   }
   assert.equal(r.hordePending, 2);

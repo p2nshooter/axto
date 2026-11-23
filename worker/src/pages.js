@@ -143,7 +143,6 @@ export function marketPage(lang, data, f) {
   ${data.rows.length ? `<ul class="lots">${data.rows.map(row).join('')}</ul>` : `<p class="empty">${esc(m.empty)} <a class="link" href="${altPath('exclusive', lang)}">${esc(t.nav.exclusive)} →</a></p>`}</section>`;
 }
 
-const GPU_NAME = { 'cloudflare-workers-ai': 'Cloudflare Workers AI', pollinations: 'Pollinations.ai', 'ai-horde': 'AI Horde', 'huggingface-ulyah': 'Hugging Face · ulyah.com' };
 const TIER_NAMES = { id: ['Klasik', 'Langka', 'Epik', 'Legendaris', 'Mahakarya'], en: ['Classic', 'Rare', 'Epic', 'Legendary', 'Masterpiece'] };
 
 /**
@@ -162,7 +161,7 @@ export function collectionPage(lang, c, o) {
   const pub = !COLLECTIONS[c].exclusive;
   // harga di kartu: eksklusif = $1 + sisa edisi (dari 10); publik = harga tetap OpenSea + jumlah edisi
   const tag = (it) => (pub ? `${it.usd ? `<span class="pr">$${fmt(it.usd, lang)}</span>` : ''}${it.ed ? `<span class="ed">${it.ed}×</span>` : ''}` : `<span class="pr">$1</span><span class="ed${it.left === 0 ? ' out' : ''}">${it.left ?? EXCLUSIVE_SUPPLY}/${EXCLUSIVE_SUPPLY}</span>`);
-  const tile = (it) => `<li data-id="${it.id}" data-tier="${it.tier}"${it.gpu ? ` class="g" data-g="${it.g}"` : ''}><a href="${nftPath(lang, c, it.id)}${it.gpu ? '?v=g' : ''}"><img src="${it.gpu ? `/gpu/${c}/${it.id}.png` : img(c, it.id)}" alt="${esc(it.name)}" loading="lazy" width="300" height="300"><span class="id">${it.gpu ? `G-${fmt(it.g, lang)}` : `#${fmt(it.id, lang)}`}</span><span class="nm">${esc(it.name)}</span><span class="tr t${it.tier}">${esc(TIER_NAMES[lang][it.tier])}</span>${tag(it)}</a></li>`;
+  const tile = (it) => `<li data-id="${it.id}" data-tier="${it.tier}"${it.gpu ? ` class="g" data-g="${it.g}"` : ''}><a href="${nftPath(lang, c, it.id)}${it.gpu ? '?v=g' : ''}"><img src="${it.gpu ? `/gpu/${c}/${it.id}.png?v=b` : img(c, it.id)}" alt="${esc(it.name)}" loading="lazy" width="300" height="300"><span class="id">${it.gpu ? `G-${fmt(it.g, lang)}` : `#${fmt(it.id, lang)}`}</span><span class="nm">${esc(it.name)}</span><span class="tr t${it.tier}">${esc(TIER_NAMES[lang][it.tier])}</span>${tag(it)}</a></li>`;
   const crumbs = o.crumbs ? `<nav class="crumbs" aria-label="breadcrumb">${o.crumbs.map(([n, h], i) => (i < o.crumbs.length - 1 ? `<a href="${h}">${esc(n)}</a>` : `<span aria-current="page">${esc(n)}</span>`)).join(' › ')}</nav>` : '';
   const gpuChip = !/model$/.test(c) ? `<a href="/${lang}/c/${c}?maker=gpu"${o.maker === 'gpu' ? ' aria-current="true"' : ''} class="gchip">${esc(t.opensea.gpu)} <small>${fmt(o.gpuCount ?? 0, lang)}</small></a>` : '';
   const exChips = !pub && gpuChip ? `<nav class="chips" aria-label="G-"><a href="/${lang}/c/${c}"${o.maker !== 'gpu' ? ' aria-current="true"' : ''}>${esc(lang === 'id' ? 'Semua' : 'All')} <small>${fmt(COLLECTIONS[c].max, lang)}</small></a>${gpuChip}</nav>` : '';
@@ -213,8 +212,9 @@ function stageHtml(lang, c, id, meta, info) {
   if (!info?.gpuSerial) return `<div class="stage">${play}</div>`;
   const g = Boolean(info.gpuFirst);
   const gl = `G-${fmt(info.gpuSerial, lang)}`;
-  const tabs = `<nav class="stagetabs" aria-label="${esc(lang === 'id' ? 'Versi karya' : 'Artwork version')}"><a href="?v=g"${g ? ' aria-current="true"' : ''}>${esc(gl)} · ${esc(lang === 'id' ? 'Lukisan GPU' : 'GPU painting')}</a><a href="?v=a"${g ? '' : ' aria-current="true"'}>${esc(lang === 'id' ? 'Animasi asli' : 'Original animation')}</a></nav>`;
-  return `<div class="stage${g ? ' gstage' : ''}">${g ? `<img src="/gpu/${c}/${id}.png" alt="${esc(meta.name)} — ${esc(gl)}" width="768" height="768" decoding="async"><span class="gbadge">${esc(gl)}</span>` : play}</div>${tabs}`;
+  const tabs = `<nav class="stagetabs" aria-label="${esc(lang === 'id' ? 'Versi karya' : 'Artwork version')}"><a href="?v=g"${g ? ' aria-current="true"' : ''}>${esc(gl)} · ${esc(lang === 'id' ? 'Lukisan GPU hidup' : 'Living GPU painting')}</a><a href="?v=a"${g ? '' : ' aria-current="true"'}>${esc(lang === 'id' ? 'Animasi asli' : 'Original animation')}</a></nav>`;
+  const hidup = `<iframe src="/gplay/${c}/${id}" title="${esc(meta.name)} — ${esc(gl)}" loading="lazy" allow="fullscreen" sandbox="allow-scripts allow-same-origin"></iframe>`;
+  return `<div class="stage${g ? ' gstage' : ''}">${g ? hidup : play}</div>${tabs}`;
 }
 
 export function nftPage(lang, c, id, meta, attrsId, opensea = '', info = null) {
@@ -235,7 +235,7 @@ export function nftPage(lang, c, id, meta, attrsId, opensea = '', info = null) {
     <p class="kindline">${badge(lang, c, true)}</p>
     <h1>${esc(meta.name)}</h1>
     <p class="meta">${esc(t.nft.rarity)}: ${esc(TIER_NAMES[lang][TIER_NAMES.en.indexOf(rarity)] ?? rarity)} · ${EXCLUSIVE_SUPPLY} ${esc(t.nft.editionOf)}</p>
-    ${info.gpuSerial && !info.gpuFirst ? `<figure class="gpuv"><img src="/gpu/${c}/${id}.png" alt="${esc(meta.name)} — G-${info.gpuSerial}" width="768" height="768" loading="lazy"><figcaption><b>G-${fmt(info.gpuSerial, lang)}</b> · ${esc(lang === 'id' ? 'Versi GPU — dilukis GPU dari DNA karya ini' : 'GPU version — painted by GPU from this work’s DNA')}${info.gpuBy ? ` · ${esc(GPU_NAME[info.gpuBy] ?? info.gpuBy)}` : ''}</figcaption></figure>` : ''}
+    ${info.gpuSerial && !info.gpuFirst ? `<figure class="gpuv"><img src="/gpu/${c}/${id}.png?v=b" alt="${esc(meta.name)} — G-${info.gpuSerial}" width="768" height="768" loading="lazy"><figcaption><b>G-${fmt(info.gpuSerial, lang)}</b> · ${esc(lang === 'id' ? 'Versi GPU — dilukis GPU dari DNA karya ini' : 'GPU version — painted by GPU from this work’s DNA')}</figcaption></figure>` : ''}
     <div class="buybox shopbox" data-mk="shop" data-c="${c}" data-id="${id}" data-left="${st.left}">
       <p class="price"><span>${esc(x.price)}</span><b>$1</b><small>${esc(info.priceCoins)} AXTO · ${esc(x.left)}: ${st.left}/${EXCLUSIVE_SUPPLY}</small></p>
       ${st.left > 0 ? `<p class="bidrow"><label>${esc(x.qty)} <select name="qty">${opts}</select></label> <button class="btn gold big" type="button" data-mk-buy>${esc(x.buy)}</button></p>` : `<p class="status">${esc(x.soldOut)}</p>`}
@@ -265,7 +265,7 @@ function nftPublicPage(lang, c, id, meta, attrs, opensea, info) {
     <p class="kindline">${badge(lang, c, true)}</p>
     <h1>${esc(meta.name)}</h1>
     <p class="meta">${esc(t.nft.rarity)}: ${esc(TIER_NAMES[lang][TIER_NAMES.en.indexOf(rarity)] ?? rarity)} · ${info.ed} ${esc(t.nft.editionOf)} · ${lang === 'id' ? 'Galeri' : 'Gallery'}: <a class="link" href="${info.galleryHref}">${esc(info.galleryName)}</a></p>
-    ${info.gpuSerial && !info.gpuFirst ? `<figure class="gpuv"><img src="/gpu/${c}/${id}.png" alt="${esc(meta.name)} — G-${info.gpuSerial}" width="768" height="768" loading="lazy"><figcaption><b>G-${fmt(info.gpuSerial, lang)}</b> · ${esc(lang === 'id' ? 'Versi GPU — dilukis GPU dari DNA karya ini' : 'GPU version — painted by GPU from this work’s DNA')}${info.gpuBy ? ` · ${esc(GPU_NAME[info.gpuBy] ?? info.gpuBy)}` : ''}</figcaption></figure>` : ''}
+    ${info.gpuSerial && !info.gpuFirst ? `<figure class="gpuv"><img src="/gpu/${c}/${id}.png?v=b" alt="${esc(meta.name)} — G-${info.gpuSerial}" width="768" height="768" loading="lazy"><figcaption><b>G-${fmt(info.gpuSerial, lang)}</b> · ${esc(lang === 'id' ? 'Versi GPU — dilukis GPU dari DNA karya ini' : 'GPU version — painted by GPU from this work’s DNA')}</figcaption></figure>` : ''}
     ${buyBox(lang, c, id, meta, opensea, info)}
     <h2>${esc(t.nft.traits)}</h2>
     <dl class="traits">${attrs.map((a) => `<div><dt>${esc(a.trait_type)}</dt><dd>${esc(a.value)}</dd></div>`).join('')}</dl>

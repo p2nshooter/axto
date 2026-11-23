@@ -4,9 +4,8 @@
  * Dijalankan workflow gpu-sync.yml tiap jam (GitHub Actions punya internet). GPU gratis / terbuka yang dipakai bergiliran,
  * pindah otomatis bila satu penyedia menolak atau habis jatah:
  *   1. Cloudflare Workers AI — FLUX.1 schnell, jatah gratis harian akun Cloudflare yang sudah ada (tanpa kunci baru).
- *   2. Pollinations.ai — GPU terbuka tanpa kunci (FLUX).
- *   3. AI Horde — jaringan GPU sukarelawan dunia, anonim (asinkron: dikirim sekarang, diambil di putaran berikutnya).
- *   4. Kunci GPU Hugging Face ulyah.com — antrean ulyah-media/axto-gpu/jobs.json, dirender heartbeat 15 menit ulyah.com.
+ *   2. AI Horde — jaringan GPU sukarelawan dunia, anonim (asinkron: dikirim sekarang, diambil di putaran berikutnya).
+ *   3. Kunci GPU Hugging Face ulyah.com — antrean ulyah-media/axto-gpu/jobs.json, dirender heartbeat 15 menit ulyah.com.
  *
  * Karya: etalase berikutnya per koleksi (kecuali Figur Model — GPU tidak boleh melukis sosok orang sungguhan), deskripsi
  * dari DNA karya, SELALU tanpa teks (teks Al-Qur'an & hadits tidak pernah dibuat mesin). Hasil → R2 axto-nft-data/gpu/<c>/<id>.png
@@ -48,18 +47,7 @@ export function providers({ fetchImpl = fetch, env = process.env } = {}) {
       },
     });
   }
-  list.push({
-    name: 'pollinations',
-    async render(job) {
-      const u = `https://image.pollinations.ai/prompt/${encodeURIComponent(job.prompt)}?width=768&height=768&seed=${job.id % 1_000_000_000}&model=flux&nologo=true&negative_prompt=${encodeURIComponent(NEGATIVE)}`;
-      let r = await fetchImpl(u, { headers: { 'user-agent': UA } });
-      if (r.status === 429) { await (env.__pause ?? ((ms) => new Promise((res) => setTimeout(res, ms))))(20_000); r = await fetchImpl(u, { headers: { 'user-agent': UA } }); }
-      if (!r.ok) { list.why ??= {}; list.why[this.name] = `HTTP ${r.status}`; return null; }
-      const type = r.headers.get('content-type') ?? '';
-      const bytes = Buffer.from(await r.arrayBuffer());
-      return isImage(type, bytes) ? { bytes, type: type.split(';')[0] } : null;
-    },
-  });
+  // Pollinations.ai DIHAPUS (23 Nov 2026): gambarnya bertanda situs lain walau diminta nologo — tidak boleh tampil.
   return list;
 }
 

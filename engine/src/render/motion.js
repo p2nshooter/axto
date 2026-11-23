@@ -258,6 +258,8 @@ export function motionLayers(d) {
 
 /** Penanda tempat sisip lapisan „di bawah" (tepat setelah latar) per jenis karya. */
 const UNDER_AT = { time: 'fill="url(#bgG)"/>', stamp: 'fill="url(#page)"/>', quran: 'fill="url(#bgq)"/>', hadith: 'fill="url(#bgq)"/>' };
+/** Penanda tempat sisip lapisan „di atas" (default: akhir SVG). */
+const OVER_AT = { time: '<g id="digits">' };
 
 /** Sisipkan lapisan gerak ke string SVG; kembalikan {svg, css} (CSS dipasang pemanggil: <style> di SVG atau di player). */
 export function applyMotion(d, svg) {
@@ -266,7 +268,9 @@ export function applyMotion(d, svg) {
   let s = svg;
   const at = s.indexOf(UNDER_AT[d.kind]);
   if (at >= 0) { const k = at + UNDER_AT[d.kind].length; s = `${s.slice(0, k)}${m.under}${s.slice(k)}`; }
-  const close = s.lastIndexOf('</svg>');
+  // Jam: lapisan „di atas" disisipkan TEPAT di bawah angka — partikel tidak pernah menutupi angka (pemilik: „angka g jelas")
+  const over = OVER_AT[d.kind] ? s.indexOf(OVER_AT[d.kind]) : -1;
+  const close = over >= 0 ? over : s.lastIndexOf('</svg>');
   s = `${s.slice(0, close)}${m.over}${s.slice(close)}`;
   return { svg: s, css: m.css, key: m.key };
 }

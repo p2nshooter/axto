@@ -1,6 +1,6 @@
 /**
  * Seri G- (karya GPU) — bagian bersama worker axto.io (produksi tiap 5 menit lewat Cron Trigger + Workers AI) dan
- * ops/gpu-sync.mjs (GitHub Actions: Pollinations, AI Horde, kunci GPU ulyah.com). Deskripsi dari DNA karya, SELALU tanpa
+ * ops/gpu-sync.mjs (GitHub Actions, penyedia GPU gratis lain). Deskripsi dari DNA karya, SELALU tanpa
  * teks (teks Al-Qur'an & hadits tidak pernah dibuat mesin), tanpa sosok orang (Figur Model tidak dilukis GPU).
  */
 import { metadata } from './metadata.js';

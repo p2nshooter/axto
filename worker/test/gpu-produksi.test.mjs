@@ -64,3 +64,16 @@ test('alokasi gratis Workers AI habis (4006) → berhenti sampai esok, tidak per
   const besok = await lukisGratis(env, 'time', candidates('time')[1], 'x no text', { now: JAM(12) + 86_400_000, rata: false });
   assert.equal(besok.ok, true);
 });
+
+test('karya bertanda situs lain dilukis ulang lebih dulu dengan nomor seri G- yang sama', async () => {
+  const env = envDengan(async () => ({ image: GAMBAR }));
+  const [a, b] = candidates('stamp');
+  env.STORE.m.set('os/gpu-stamp.json', { body: JSON.stringify({ ids: [a, b], serial: { [a]: 1, [b]: 2 }, by: { [a]: 'cloudflare-workers-ai', [b]: 'pollinations' } }), etag: 'x1' });
+  const r = await gpuTick(env, { now: JAM(23, 55) });
+  assert.deepEqual(r.dibuat, { c: 'stamp', id: b, g: 2, ulang: true });
+  const doc = JSON.parse(env.STORE.m.get('os/gpu-stamp.json').body);
+  assert.deepEqual(doc.ids, [a, b]);
+  assert.equal(doc.serial[b], 2);
+  assert.equal(doc.by[b], 'cloudflare-workers-ai');
+  assert.ok(env.STORE.m.has(`gpu/stamp/${b}.png`));
+});

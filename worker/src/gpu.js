@@ -4,10 +4,12 @@
  *
  * Penyebab berhenti: produksi hanya digerakkan cron GitHub Actions, dan GitHub melewatkan jadwal saat sibuk (gpu-sync
  * tidak pernah sekali pun terpicu jadwal). Sekarang Cron Trigger worker (tiap 5 menit, andal) ikut melukis dengan Workers
- * AI — GRATIS: jatah harian dibatasi jauh di bawah alokasi gratis akun (10.000 neuron/hari, dipakai bersama ulyah.com;
+ * AI — GRATIS: jatah harian dibatasi jauh di bawah alokasi gratis akun (10.000 neuron/hari, dipakai bersama layanan lain;
  * FLUX schnell ±77 neuron/karya) dan disebar merata 24 jam. Bila alokasi gratis habis (galat 4006) produksi Workers AI
- * berhenti sampai esok hari — tidak pernah berbayar. GPU terbuka lain (Pollinations, AI Horde, HF ulyah.com) tetap jalan
- * lewat ops/gpu-sync.mjs yang dipicu penjaga produksi.
+ * berhenti sampai esok hari — tidak pernah berbayar. Penyedia lain tetap jalan lewat ops/gpu-sync.mjs (penjaga produksi).
+ *
+ * Gambar bertanda situs lain (watermark penyedia GPU terbuka) tidak pernah tampil: karya itu disembunyikan dan dilukis
+ * ulang di sini lebih dulu, dengan nomor seri G- yang SAMA.
  *
  * Penyimpanan hanya R2: gambar gpu/<c>/<id>.png, seri os/gpu-<c>.json (compare-and-swap, tidak dobel), jatah harian
  * os/gpu-jatah/<tanggal>.json (satu tulis per karya), galat ke log append-only.
@@ -17,6 +19,8 @@ import { GPU_KEYS, candidates, promptFor, tambahSeri } from '../../engine/src/gp
 import { getJSON, update, appendLog } from './r2.js';
 
 export const GPU_HARIAN = 48;
+/** Penyedia yang gambarnya bertanda situs lain → disembunyikan & dilukis ulang (nomor seri tetap). */
+export const PERLU_ULANG = new Set(['pollinations']);
 const MODEL = '@cf/black-forest-labs/flux-1-schnell';
 const tanggal = (now) => new Date(now).toISOString().slice(0, 10);
 const kunciJatah = (now) => `os/gpu-jatah/${tanggal(now)}.json`;
@@ -67,6 +71,19 @@ export async function lukisGratis(env, c, id, prompt, { now = Date.now(), rata =
 export async function gpuTick(env, { now = Date.now() } = {}) {
   const docs = {};
   for (const c of GPU_KEYS) docs[c] = (await getJSON(env.STORE, `os/gpu-${c}.json`))?.value ?? { ids: [], serial: {}, by: {} };
+  // 1) lukis ulang karya bertanda situs lain lebih dulu (nomor seri G- tetap)
+  for (const c of GPU_KEYS) {
+    const id = docs[c].ids.find((x) => PERLU_ULANG.has(String(docs[c].by?.[x] ?? '')));
+    if (id === undefined) continue;
+    const r = await lukisGratis(env, c, id, promptFor(c, id), { now });
+    if (!r.ok) {
+      if (r.alasan !== 'jatah') await appendLog(env.STORE, 'gpu', { c, id, ulang: true, e: r.alasan }, now);
+      return { dibuat: null, alasan: r.alasan };
+    }
+    const doc = await update(env.STORE, `os/gpu-${c}.json`, (cur) => (cur?.ids?.includes(id) ? { ...cur, by: { ...cur.by, [id]: 'cloudflare-workers-ai' }, at: new Date(now).toISOString() } : undefined));
+    return { dibuat: { c, id, g: Number(doc?.serial?.[id] ?? 0), ulang: true } };
+  }
+  // 2) karya baru
   const urut = [...GPU_KEYS].sort((a, b) => docs[a].ids.length - docs[b].ids.length || GPU_KEYS.indexOf(a) - GPU_KEYS.indexOf(b));
   for (const c of urut) {
     const ada = new Set(docs[c].ids);
