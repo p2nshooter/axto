@@ -148,7 +148,7 @@ if (ex) {
     const a = document.createElement('a');
     a.href = `/${lang}/nft/${c}/${it.id}${it.gpu ? '?v=g' : ''}`;
     const im = document.createElement('img');
-    Object.assign(im, { src: it.gpu ? `/gpu/${c}/${it.id}.png` : `/img/${c}/${it.id}.svg?v=9`, alt: it.name, loading: 'lazy', width: 300, height: 300 });
+    Object.assign(im, { src: it.gpu ? `/gpu/${c}/${it.id}.png?v=b` : `/img/${c}/${it.id}.svg?v=9`, alt: it.name, loading: 'lazy', width: 300, height: 300 });
     const id = document.createElement('span'); id.className = 'id'; id.textContent = it.gpu ? `G-${fmtN(it.g)}` : `#${fmtN(it.id)}`;
     if (it.gpu) { li.classList.add('g'); li.dataset.g = String(it.g); }
     const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = it.name;
@@ -212,8 +212,8 @@ if (ex) {
     const id = li.dataset.id;
     // seri G-: pratinjau = lukisan GPU yang sama dengan kartunya (bukan animasi prosedural yang bentuknya lain)
     const g = li.classList.contains('g');
-    if (g) { fr.src = 'about:blank'; fr.hidden = true; gim.hidden = false; gim.src = `/gpu/${c}/${id}.png`; gim.alt = li.querySelector('.nm')?.textContent ?? ''; }
-    else { gim.hidden = true; gim.removeAttribute('src'); fr.hidden = false; fr.src = `/play/${c}/${id}`; }
+    // seri G-: player hidup dari lukisan GPU yang sama dengan kartunya (jarum jam bergerak, cap pos, teks Arab asli)
+    gim.hidden = true; gim.removeAttribute('src'); fr.hidden = false; fr.src = g ? `/gplay/${c}/${id}` : `/play/${c}/${id}`;
     const nm = li.querySelector('.nm')?.textContent ?? `#${id}`;
     nameEl.textContent = g ? `G-${fmtN(li.dataset.g || li.querySelector('.id')?.textContent?.replace(/\D/g, '') || 0)} · ${nm}` : nm;
     det.href = `/${lang}/nft/${c}/${id}${g ? '?v=g' : ''}`;

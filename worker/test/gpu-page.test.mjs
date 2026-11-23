@@ -7,11 +7,11 @@ import { metadata } from '../../engine/src/metadata.js';
 test('halaman karya dari kartu G- (?v=g): panggung = lukisan GPU, bukan animasi prosedural', () => {
   const c = 'ex-hadith', id = 42;
   const meta = metadata(c, id, 'https://axto.io');
-  const info = { stock: { left: 10 }, listings: [], priceCoins: '1', crumbs: [['Beranda', '/id']], gpuSerial: 3, gpuBy: 'pollinations', gpuFirst: true };
+  const info = { stock: { left: 10 }, listings: [], priceCoins: '1', crumbs: [['Beranda', '/id']], gpuSerial: 3, gpuFirst: true };
   const html = P.nftPage('id', c, id, meta, meta.attributes, '', info);
   const stage = html.slice(html.indexOf('<div class="stage'), html.indexOf('<div class="info">'));
-  assert.match(stage, /src="\/gpu\/ex-hadith\/42\.png"/);
-  assert.doesNotMatch(stage, /<iframe/);
+  assert.match(stage, /<iframe src="\/gplay\/ex-hadith\/42"/, 'player G- hidup dari lukisan yang sama');
+  assert.doesNotMatch(stage, /\/play\//);
   assert.match(stage, /G-3/);
   assert.match(stage, /href="\?v=a"/);
   const tanpa = P.nftPage('id', c, id, meta, meta.attributes, '', { ...info, gpuFirst: false });
@@ -20,5 +20,27 @@ test('halaman karya dari kartu G- (?v=g): panggung = lukisan GPU, bukan animasi 
 
 test('kartu seri G- menaut ke versi GPU halaman karya', () => {
   const html = P.collectionPage('id', 'ex-hadith', { produced: 1, from: 1, first: { items: [{ id: 42, tier: 0, name: 'X', gpu: true, g: 3 }], next: null }, crumbs: [['Beranda', '/id']], maker: 'gpu', gpuCount: 1 });
-  assert.match(html, /<li data-id="42"[^>]*class="g" data-g="3"><a href="[^"]*\/nft\/ex-hadith\/42\?v=g"><img src="\/gpu\/ex-hadith\/42\.png"/);
+  assert.match(html, /<li data-id="42"[^>]*class="g" data-g="3"><a href="[^"]*\/nft\/ex-hadith\/42\?v=g"><img src="\/gpu\/ex-hadith\/42\.png\?v=b"/);
+});
+
+test('halaman publik tidak pernah menyebut penyedia GPU (rahasia perusahaan)', () => {
+  const c = 'time', id = 7;
+  const meta = metadata(c, id, 'https://axto.io');
+  for (const gpuFirst of [true, false]) {
+    const html = P.nftPage('id', c, id, meta, meta.attributes, '', { usd: 1, ed: 3, crumbs: [['Beranda', '/id']], related: [], gpuSerial: 5, gpuFirst });
+    assert.doesNotMatch(html, /pollinations|workers ai|cloudflare|hugging ?face|ulyah|horde/i);
+  }
+});
+
+test('player G- Jam & Prangko tidak pernah memuat teks Arab/ayat — teks Arab hanya di koleksi Al-Qur\'an & Hadits', async () => {
+  const { gpuPlayer } = await import('../../engine/src/render/gpu-player.js');
+  const { dna } = await import('../../engine/src/dna.js');
+  const AYAT = { ar: 'بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ', surah: 1, ayah: 1 }; // sengaja diberikan: tetap tidak boleh tampil
+  for (const c of ['time', 'ex-time', 'stamp', 'ex-stamp']) {
+    const html = gpuPlayer(dna(c, 5), metadata(c, 5, 'https://axto.io'), AYAT, { img: `/gpu/${c}/5.png?v=b`, g: 1, ref: 'x' });
+    assert.doesNotMatch(html, /[؀-ۿ]/, `${c}: tidak boleh ada huruf Arab`);
+    assert.doesNotMatch(html, /id="ar"|Amiri/, c);
+  }
+  assert.match(gpuPlayer(dna('time', 5), metadata('time', 5, 'https://axto.io'), {}, { img: 'x', g: 1 }), /id="hh"[\s\S]*id="mm"[\s\S]*id="ss"/, 'jam: jarum jam, menit, detik');
+  for (const c of ['hadith', 'ex-quran']) assert.match(gpuPlayer(dna(c, 5), metadata(c, 5, 'https://axto.io'), AYAT, { img: 'x', g: 1, ref: 'r' }), /بِسْمِ/, c);
 });

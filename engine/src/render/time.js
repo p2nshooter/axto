@@ -51,8 +51,10 @@ export function digitsSvg(style, hhmm, ss, x, y, w, h, on, off, seed) {
     digits.forEach((n, i) => {
       for (let b = 0; b < 4; b += 1) {
         const lit = (n >> (3 - b)) & 1;
-        s += `<rect x="${R(xs[i] + cw * 0.2)}" y="${R(y + b * cs * 1.15)}" width="${R(cs)}" height="${R(cs)}" rx="${R(cs * 0.25)}" fill="${lit ? on : off}" ${lit ? glow : 'opacity=".22"'}/>`;
+        s += `<rect x="${R(xs[i] + cw * 0.05)}" y="${R(y + b * cs * 1.15)}" width="${R(cs * 0.8)}" height="${R(cs * 0.8)}" rx="${R(cs * 0.2)}" fill="${lit ? on : off}" ${lit ? glow : 'opacity=".3"'}/>`;
       }
+      // angka biasa di samping kolom biner — jam biner tetap terbaca siapa pun (pemilik: „angka g jelas")
+      s += `<text x="${R(xs[i] + cw * 0.05 + cs * 0.95)}" y="${R(y + h * 0.72)}" font-family="Helvetica,Arial,sans-serif" font-weight="800" font-size="${R(Math.min(h * 0.62, cw * 0.62))}" fill="${on}" ${glow}>${n}</text>`;
     });
   } else {
     // orbit & hybrid: lingkaran waktu + angka kecil

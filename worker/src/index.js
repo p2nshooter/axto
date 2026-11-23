@@ -10,6 +10,7 @@ import { metadata, contractMetadata, renderCtx, animatedSvg, renderPlayerLive, a
 import { showcaseIds, SHOWCASE_KEYS, priceUsd } from '../../engine/src/showcase.js';
 import { edition, designOf } from '../../engine/src/editions.js';
 import { hadithRef } from '../../engine/src/render/hadith.js';
+import { gpuPlayer } from '../../engine/src/render/gpu-player.js';
 import { collectionSeo, seriesSeo, surahSeo, hubSeo, breadcrumb, itemList, seriesLabel, surahInfo, BREAD } from './seo.js';
 import { COLLECTIONS, sha256Hex } from '../../engine/src/core.js';
 import { canonical } from '../../engine/src/dna.js';
@@ -27,6 +28,7 @@ import { withCfg, saveContracts, NETWORKS } from './config.js';
 import { vault } from './vault.js';
 import * as COIN from './coin.js';
 import * as SHOP from './shop.js';
+import * as GPUP from './gpu.js';
 import { hadithItem, translateHadith } from './translate.js';
 
 export { Ledger };
@@ -64,8 +66,12 @@ async function gpuSet(env, c) {
   if (hit && Date.now() - hit.at < 120_000) return hit;
   let doc = null;
   try { doc = await readJSON(env.STORE, `os/gpu-${c}.json`); } catch { doc = null; }
-  const ids = Array.isArray(doc?.ids) ? doc.ids.filter((x) => Number.isSafeInteger(x) && x >= 1 && x <= COLLECTIONS[c].max) : [];
-  const v = { at: Date.now(), ids, serial: doc?.serial ?? {}, by: doc?.by ?? {} };
+  // Karya yang menunggu dilukis ulang (gambar bertanda situs lain) TIDAK ditampilkan sampai gambarnya bersih —
+  // nomor seri G- tetap (src/gpu.js melukis ulang dengan nomor yang sama).
+  const tampil = (x) => !GPUP.PERLU_ULANG.has(String(doc?.by?.[x] ?? ''));
+  const ids = Array.isArray(doc?.ids) ? doc.ids.filter((x) => Number.isSafeInteger(x) && x >= 1 && x <= COLLECTIONS[c].max && tampil(x)) : [];
+  const serial = Object.fromEntries(ids.map((x) => [x, doc.serial?.[x]]));
+  const v = { at: Date.now(), ids, serial, by: {} };
   GPU.set(c, v);
   return v;
 }
@@ -432,13 +438,10 @@ async function api(request, env, ctx, url) {
     if (!(await engineAuth(request, env, body))) return json({ error: 'auth' }, 401);
     const b = JSON.parse(body);
     if (!['time', 'stamp', 'quran', 'hadith', 'ex-time', 'ex-stamp', 'ex-quran', 'ex-hadith'].includes(b.c) || !validToken(b.c, Number(b.id)) || typeof b.prompt !== 'string' || b.prompt.length > 900 || !/no text/.test(b.prompt)) return json({ error: 'input' }, 400);
-    try {
-      const out = await env.AI.run('@cf/black-forest-labs/flux-1-schnell', { prompt: b.prompt, steps: 6 }); // FLUX schnell tidak menerima seed
-      const bytes = Uint8Array.from(atob(out?.image ?? ''), (ch) => ch.charCodeAt(0));
-      if (bytes.byteLength < 15_000) return json({ error: 'empty' }, 502);
-      await env.STORE.put(`gpu/${b.c}/${Number(b.id)}.png`, bytes, { httpMetadata: { contentType: 'image/jpeg', cacheControl: 'public, max-age=31536000, immutable' } });
-      return json({ ok: true, type: 'image/jpeg', bytes: bytes.byteLength });
-    } catch (e) { return json({ error: 'ai', detail: String(e?.message ?? e).slice(0, 200) }, 502); }
+    // jatah gratis Workers AI yang sama dengan cron worker (tanpa penyebaran waktu: sisa jatah hari ini boleh dipakai)
+    const r = await GPUP.lukisGratis(env, b.c, Number(b.id), b.prompt, { rata: false });
+    if (r.ok) return json({ ok: true, type: 'image/jpeg', bytes: r.bytes });
+    return json({ error: r.alasan === 'jatah' ? 'jatah' : 'ai', detail: String(r.alasan).slice(0, 200) }, r.alasan === 'jatah' ? 429 : 502);
   }
   if (p === '/internal/engine/commit' && method === 'POST') {
     const body = await request.text();
@@ -482,6 +485,23 @@ async function svg(request, env, ctx, c, id, origin) {
     const body = animatedSvg(d, await renderCtx(d, assetProvider(env, origin)));
     return new Response(body, { headers: { 'content-type': 'image/svg+xml; charset=utf-8', 'cache-control': IMMUTABLE, 'access-control-allow-origin': '*', 'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'; font-src data:; img-src data: https:", 'x-content-type-options': 'nosniff' } });
   });
+}
+
+/** Player hidup seri G- (lukisan GPU + jarum jam / cap pos / teks Arab asli, bergerak di peramban). */
+async function gpuPlay(env, c, id, origin) {
+  const gs = await gpuSet(env, c);
+  if (!gs.ids.includes(id)) return new Response('not found', { status: 404 });
+  const d = dna(c, id);
+  const meta = metadata(c, id, env.BASE_URL);
+  let ctx = {};
+  let ref = '';
+  if (d.kind === 'quran' || d.kind === 'hadith') {
+    try { ctx = await renderCtx(d, assetProvider(env, origin)); } catch { ctx = {}; }
+    if (d.kind === 'quran' && ctx.surah) ref = ctx.ayah ? `${ctx.surahLt ?? ''} · ${ctx.surah}:${ctx.ayah}` : `${ctx.surahLt ?? ''}`;
+    if (d.kind === 'hadith') { const hr = hadithRef(d); ref = `${hr.nameId} · No. ${hr.number}`; }
+  }
+  const html = gpuPlayer(d, meta, ctx, { img: `/gpu/${c}/${id}.png?v=b`, g: Number(gs.serial[id] ?? 0), ref });
+  return new Response(html, { headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'public, max-age=300', 'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer' } });
 }
 
 async function player(request, env, ctx, c, id, origin) {
@@ -621,8 +641,7 @@ async function html(request, env, ctx, url) {
       const desc = `${meta.name}: ${gal[1]} · ${meta.attributes.find((a) => a.trait_type === 'Tier')?.value} · ${e.supply} ${lang === 'id' ? 'edisi' : 'editions'} · $${usd} ${os ? (lang === 'id' ? 'di OpenSea (jaringan Base)' : 'on OpenSea (Base network)') : (lang === 'id' ? '— segera di OpenSea' : '— coming to OpenSea')}.`.slice(0, 160);
       const gs = await gpuSet(env, c);
       const gpuSerial = gs.serial[id] ? Number(gs.serial[id]) : 0;
-      const gpuBy = gs.by?.[id] ?? '';
-      return out({ page: 'home', rest: `/nft/${c}/${id}`, title: `${meta.name} — $${usd}`, desc, image: meta.image, noindex: !inStock, jsonld: [product, breadcrumb(base, [...crumbs, [meta.name, `/${lang}/nft/${c}/${id}`]])], body: P.nftPage(lang, c, id, meta, attributesFor(c, id, lang), os, { usd, ed: e.supply, crumbs, related, galleryHref: gal[0], galleryName: gal[1], desc: c === 'hadith' ? hadithBlurb(c, id, lang) : null, gpuSerial, gpuBy, gpuFirst: gpuSerial > 0 && url.searchParams.get('v') === 'g' }) });
+      return out({ page: 'home', rest: `/nft/${c}/${id}`, title: `${meta.name} — $${usd}`, desc, image: meta.image, noindex: !inStock, jsonld: [product, breadcrumb(base, [...crumbs, [meta.name, `/${lang}/nft/${c}/${id}`]])], body: P.nftPage(lang, c, id, meta, attributesFor(c, id, lang), os, { usd, ed: e.supply, crumbs, related, galleryHref: gal[0], galleryName: gal[1], desc: c === 'hadith' ? hadithBlurb(c, id, lang) : null, gpuSerial, gpuFirst: gpuSerial > 0 && url.searchParams.get('v') === 'g' }) });
     }
     // eksklusif: toko $1/edisi + listing pasar member untuk karya ini
     const stock = await SHOP.stockOf(env, c, id);
@@ -635,7 +654,7 @@ async function html(request, env, ctx, url) {
     const exgs = await gpuSet(env, c);
     const crumbs = [[BREAD[lang].home, `/${lang}`], [BREAD[lang].ex, `/${lang}/${PATHS.exclusive[lang]}`], [P.collName(lang, c), `/${lang}/c/${c}`]];
     const product = { '@context': 'https://schema.org', '@type': 'Product', name: meta.name, image: meta.image, description: meta.description.slice(0, 300), sku: `${c}-${id}`, brand: { '@type': 'Brand', name: 'AXTO' }, offers: { '@type': 'Offer', priceCurrency: 'USD', price: 1, availability: stock.left > 0 ? 'https://schema.org/InStock' : 'https://schema.org/SoldOut', url: `${base}/${lang}/nft/${c}/${id}`, seller: { '@type': 'Organization', name: 'AXTO' } } };
-    return out({ page: 'home', rest: `/nft/${c}/${id}`, title: `${meta.name} — $1`, desc: `${meta.name}: ${lang === 'id' ? 'karya eksklusif, 10 edisi, $1 per edisi dengan koin AXTO di axto.io' : 'exclusive work, 10 editions, $1 per edition in AXTO coin on axto.io'}.`.slice(0, 160), image: meta.image, jsonld: [product, breadcrumb(base, [...crumbs, [meta.name, `/${lang}/nft/${c}/${id}`]])], body: P.nftPage(lang, c, id, meta, attributesFor(c, id, lang), '', { stock, listings, priceCoins, crumbs, gpuSerial: exgs.serial[id] ? Number(exgs.serial[id]) : 0, gpuBy: exgs.by?.[id] ?? '', gpuFirst: Boolean(exgs.serial[id]) && url.searchParams.get('v') === 'g' }), script: "const x=document.createElement('script');x.type='module';x.src='/market.js?v=1';document.head.append(x);" });
+    return out({ page: 'home', rest: `/nft/${c}/${id}`, title: `${meta.name} — $1`, desc: `${meta.name}: ${lang === 'id' ? 'karya eksklusif, 10 edisi, $1 per edisi dengan koin AXTO di axto.io' : 'exclusive work, 10 editions, $1 per edition in AXTO coin on axto.io'}.`.slice(0, 160), image: meta.image, jsonld: [product, breadcrumb(base, [...crumbs, [meta.name, `/${lang}/nft/${c}/${id}`]])], body: P.nftPage(lang, c, id, meta, attributesFor(c, id, lang), '', { stock, listings, priceCoins, crumbs, gpuSerial: exgs.serial[id] ? Number(exgs.serial[id]) : 0, gpuFirst: Boolean(exgs.serial[id]) && url.searchParams.get('v') === 'g' }), script: "const x=document.createElement('script');x.type='module';x.src='/market.js?v=1';document.head.append(x);" });
   }
   const key = pageFromSlug(sub);
   const mk = "const x=document.createElement('script');x.type='module';x.src='/market.js?v=1';document.head.append(x);";
@@ -699,10 +718,14 @@ export default {
       if (m && validToken(m[1], Number(m[2]))) return await svg(request, env, ctx, m[1], Number(m[2]), url.origin);
       m = /^\/gpu\/([a-z-]+)\/(\d+)\.png$/.exec(p);
       if (m && validToken(m[1], Number(m[2]))) {
+        // hanya karya seri G- yang tampil (karya bertanda situs lain disembunyikan sampai dilukis ulang)
+        if (!(await gpuSet(env, m[1])).ids.includes(Number(m[2]))) return new Response('not found', { status: 404 });
         const o = await env.STORE.get(`gpu/${m[1]}/${m[2]}.png`);
         if (!o) return new Response('not found', { status: 404 });
         return new Response(o.body, { headers: { 'content-type': o.httpMetadata?.contentType ?? 'image/png', 'cache-control': 'public, max-age=86400, s-maxage=31536000, immutable', 'x-content-type-options': 'nosniff' } });
       }
+      m = /^\/gplay\/([a-z-]+)\/(\d+)$/.exec(p);
+      if (m && validToken(m[1], Number(m[2]))) return await gpuPlay(env, m[1], Number(m[2]), url.origin);
       m = /^\/play\/([a-z-]+)\/(\d+)$/.exec(p);
       if (m && validToken(m[1], Number(m[2]))) return await player(request, env, ctx, m[1], Number(m[2]), url.origin);
       m = /^\/lang\/(id|en)$/.exec(p);
@@ -733,6 +756,8 @@ export default {
     ctx.waitUntil(SHOP.settleDue(e2).catch((e) => appendLog(env.STORE, 'error', { path: 'cron:settle', e: String(e?.message ?? e).slice(0, 300) })));
     ctx.waitUntil(SHOP.recover(e2, colAddrOf(e2), EX_NAMES).catch((e) => appendLog(env.STORE, 'error', { path: 'cron:recover', e: String(e?.message ?? e).slice(0, 300) })));
     ctx.waitUntil(COIN.processCashouts(env).catch((e) => appendLog(env.STORE, 'error', { path: 'cron:cashout', e: String(e?.message ?? e).slice(0, 300) })));
+    // seri G- 24 jam: satu karya per tick bila jatah gratis harian terbuka (lihat src/gpu.js)
+    ctx.waitUntil(GPUP.gpuTick(env).catch((e) => appendLog(env.STORE, 'error', { path: 'cron:gpu', e: String(e?.message ?? e).slice(0, 300) })));
   },
 };
 
