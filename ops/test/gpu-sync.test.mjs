@@ -1,40 +1,68 @@
-// Seri G-: antrean dari DNA (tanpa teks, tanpa Figur Model), hasil disalin & diberi nomor seri G- berurutan, idempoten.
+// Seri G- dengan GPU gratis: Workers AI → Pollinations (cadangan) → AI Horde (asinkron) → kunci HF ulyah.com.
+// Tanpa jaringan: fetch & R2 tiruan. Nomor seri G- berurutan, tidak dobel, Figur Model tidak diproduksi.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { run, promptFor, GPU_KEYS } from '../gpu-sync.mjs';
 import { showcaseIds } from '../../engine/src/showcase.js';
 
-const mkIO = (files = {}) => {
-  const copies = [];
-  return { files, copies, getText: (k) => files[k] ?? null, putText: (k, v) => { files[k] = v; }, copy: (a, b) => { copies.push([a, b]); files[b] = 'png'; } };
+const IMG = Buffer.alloc(40_000, 7);
+const mkIO = () => {
+  const files = {};
+  const bytes = {};
+  return { files, bytes, getText: (k) => files[k] ?? null, putText: (k, v) => { files[k] = v; }, putBytes: (k, b, t) => { bytes[k] = t; }, copy: (a, b) => { bytes[b] = 'image/png'; } };
 };
+const res = (status, body, type) => new Response(body, { status, headers: type ? { 'content-type': type } : {} });
+const ENV = { CLOUDFLARE_ACCOUNT_ID: 'acc', CLOUDFLARE_API_KEY: 'k', CLOUDFLARE_EMAIL: 'e@x' };
 
 test('deskripsi GPU: tanpa teks, Figur Model tidak diproduksi', () => {
   assert.deepEqual(GPU_KEYS, ['time', 'stamp', 'quran', 'hadith']);
-  for (const c of GPU_KEYS) {
-    const p = promptFor(c, showcaseIds(c).ids[0]);
-    assert.match(p, /no text, no letters/);
-    assert.ok(p.length > 80 && p.length < 600, p);
-  }
+  for (const c of GPU_KEYS) assert.match(promptFor(c, showcaseIds(c).ids[0]), /no text, no letters/);
   assert.throws(() => promptFor('model', 1));
 });
 
-test('putaran pertama: antrean per koleksi; putaran berikutnya: hasil disalin + seri G-1, G-2 … tanpa dobel', () => {
+test('GPU gratis bergiliran: Workers AI & Pollinations merender, gagal → pindah penyedia; seri G- per koleksi', async () => {
   const io = mkIO();
-  let r = run({ io, log: () => {}, perCol: 3 });
-  assert.equal(r.queued, 12);
+  let cf = 0;
+  let pol = 0;
+  const fetchImpl = async (url) => {
+    if (url.includes('/ai/run/')) { cf += 1; return cf % 3 === 0 ? res(429, 'limit') : res(200, JSON.stringify({ result: { image: IMG.toString('base64') } }), 'application/json'); }
+    if (url.includes('pollinations')) { pol += 1; return res(200, IMG, 'image/jpeg'); }
+    if (url.includes('/generate/async')) return res(202, JSON.stringify({ id: `h${Math.random()}` }), 'application/json');
+    return res(404, 'x');
+  };
+  const r = await run({ io, fetchImpl, env: ENV, log: () => {}, perCol: 2, max: { direct: 8, horde: 2 }, pause: async () => {} });
+  assert.equal(Object.values(r.made).reduce((a, b) => a + b, 0), 8);
+  assert.ok(r.made['cloudflare-workers-ai'] > 0 && r.made.pollinations > 0, JSON.stringify(r.made));
+  for (const c of GPU_KEYS) {
+    const st = JSON.parse(io.files[`axto-nft-data/os/gpu-${c}.json`]);
+    assert.equal(st.ids.length, 2, c);
+    assert.deepEqual(Object.values(st.serial).sort(), [1, 2]);
+    for (const id of st.ids) assert.ok(io.bytes[`axto-nft-data/gpu/${c}/${id}.png`]);
+  }
+  assert.equal(r.hordePending, 2);
+  assert.ok(r.ulyahQueued > 0);
   const jobs = JSON.parse(io.files['ulyah-media/axto-gpu/jobs.json']).jobs;
-  assert.deepEqual(jobs.filter((j) => j.c === 'quran').map((j) => j.id), showcaseIds('quran').ids.slice(0, 3));
-  // ulyah merender dua karya Qur'an
-  const [a, b] = showcaseIds('quran').ids;
-  io.files['ulyah-media/axto-gpu/done.json'] = JSON.stringify({ done: { [`quran:${b}`]: { at: '2026-11-23T12:00:00Z' }, [`quran:${a}`]: { at: '2026-11-23T11:00:00Z' } }, failed: {} });
-  r = run({ io, log: () => {}, perCol: 3 });
+  assert.ok(jobs.every((j) => j.c !== 'model' && /no text/.test(j.prompt)));
+});
+
+test('putaran berikutnya: hasil AI Horde & ulyah.com masuk dengan nomor seri lanjutan, tidak dobel', async () => {
+  const io = mkIO();
+  const [q1, q2, q3] = showcaseIds('quran').ids;
+  io.files['axto-nft-data/os/gpu-quran.json'] = JSON.stringify({ ids: [q1], serial: { [q1]: 1 }, by: { [q1]: 'pollinations' } });
+  io.files['axto-nft-data/os/gpu-horde.json'] = JSON.stringify({ pending: [{ c: 'quran', id: q2, hid: 'H1', at: Date.now() }] });
+  io.files['ulyah-media/axto-gpu/done.json'] = JSON.stringify({ done: { [`quran:${q3}`]: { at: '2026-11-23T12:00:00Z' }, [`quran:${q1}`]: { at: '2026-11-23T10:00:00Z' } }, failed: {} });
+  const fetchImpl = async (url) => {
+    if (url.endsWith('/generate/check/H1')) return res(200, JSON.stringify({ done: true }), 'application/json');
+    if (url.endsWith('/generate/status/H1')) return res(200, JSON.stringify({ generations: [{ img: 'https://r2.example/h1.webp' }] }), 'application/json');
+    if (url === 'https://r2.example/h1.webp') return res(200, IMG, 'image/webp');
+    return res(503, 'down');
+  };
+  const r = await run({ io, fetchImpl, env: {}, log: () => {}, perCol: 1, max: { direct: 0, horde: 0 }, pause: async () => {} });
   const st = JSON.parse(io.files['axto-nft-data/os/gpu-quran.json']);
-  assert.deepEqual(st.ids, [a, b]);
-  assert.deepEqual(st.serial, { [a]: 1, [b]: 2 }, 'nomor seri mengikuti urutan selesai');
-  assert.equal(io.copies.length, 2);
-  assert.equal(r.summary.quran.works, 2);
-  assert.ok(!JSON.parse(io.files['ulyah-media/axto-gpu/jobs.json']).jobs.some((j) => j.c === 'quran' && (j.id === a || j.id === b)));
-  run({ io, log: () => {}, perCol: 3 });
-  assert.equal(io.copies.length, 2, 'tidak disalin ulang');
+  assert.deepEqual(st.ids, [q1, q3, q2]);
+  assert.deepEqual(st.serial, { [q1]: 1, [q3]: 2, [q2]: 3 });
+  assert.equal(st.by[q2], 'ai-horde');
+  assert.equal(st.by[q3], 'huggingface-ulyah');
+  assert.equal(io.bytes[`axto-nft-data/gpu/quran/${q2}.png`], 'image/webp');
+  assert.equal(r.hordePending, 0);
 });

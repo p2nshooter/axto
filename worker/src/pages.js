@@ -142,6 +142,7 @@ export function marketPage(lang, data, f) {
   ${data.rows.length ? `<ul class="lots">${data.rows.map(row).join('')}</ul>` : `<p class="empty">${esc(m.empty)} <a class="link" href="${altPath('exclusive', lang)}">${esc(t.nav.exclusive)} →</a></p>`}</section>`;
 }
 
+const GPU_NAME = { 'cloudflare-workers-ai': 'Cloudflare Workers AI', pollinations: 'Pollinations.ai', 'ai-horde': 'AI Horde', 'huggingface-ulyah': 'Hugging Face · ulyah.com' };
 const TIER_NAMES = { id: ['Klasik', 'Langka', 'Epik', 'Legendaris', 'Mahakarya'], en: ['Classic', 'Rare', 'Epic', 'Legendary', 'Masterpiece'] };
 
 /**
@@ -250,7 +251,7 @@ function nftPublicPage(lang, c, id, meta, attrs, opensea, info) {
     <p class="kindline">${badge(lang, c, true)}</p>
     <h1>${esc(meta.name)}</h1>
     <p class="meta">${esc(t.nft.rarity)}: ${esc(TIER_NAMES[lang][TIER_NAMES.en.indexOf(rarity)] ?? rarity)} · ${info.ed} ${esc(t.nft.editionOf)} · ${lang === 'id' ? 'Galeri' : 'Gallery'}: <a class="link" href="${info.galleryHref}">${esc(info.galleryName)}</a></p>
-    ${info.gpuSerial ? `<figure class="gpuv"><img src="/gpu/${c}/${id}.png" alt="${esc(meta.name)} — G-${info.gpuSerial}" width="768" height="768" loading="lazy"><figcaption><b>G-${fmt(info.gpuSerial, lang)}</b> · ${esc(lang === 'id' ? 'Versi GPU — dilukis kunci GPU ulyah.com dari DNA karya ini' : 'GPU version — painted by ulyah.com GPU keys from this work’s DNA')}</figcaption></figure>` : ''}
+    ${info.gpuSerial ? `<figure class="gpuv"><img src="/gpu/${c}/${id}.png" alt="${esc(meta.name)} — G-${info.gpuSerial}" width="768" height="768" loading="lazy"><figcaption><b>G-${fmt(info.gpuSerial, lang)}</b> · ${esc(lang === 'id' ? 'Versi GPU — dilukis GPU dari DNA karya ini' : 'GPU version — painted by GPU from this work’s DNA')}${info.gpuBy ? ` · ${esc(GPU_NAME[info.gpuBy] ?? info.gpuBy)}` : ''}</figcaption></figure>` : ''}
     ${buyBox(lang, c, id, meta, opensea, info)}
     <h2>${esc(t.nft.traits)}</h2>
     <dl class="traits">${attrs.map((a) => `<div><dt>${esc(a.trait_type)}</dt><dd>${esc(a.value)}</dd></div>`).join('')}</dl>

@@ -65,7 +65,7 @@ async function gpuSet(env, c) {
   let doc = null;
   try { doc = await readJSON(env.STORE, `os/gpu-${c}.json`); } catch { doc = null; }
   const ids = Array.isArray(doc?.ids) ? doc.ids.filter((x) => Number.isSafeInteger(x) && x >= 1 && x <= COLLECTIONS[c].max) : [];
-  const v = { at: Date.now(), ids, serial: doc?.serial ?? {} };
+  const v = { at: Date.now(), ids, serial: doc?.serial ?? {}, by: doc?.by ?? {} };
   GPU.set(c, v);
   return v;
 }
@@ -594,7 +594,8 @@ async function html(request, env, ctx, url) {
       const desc = `${meta.name}: ${gal[1]} · ${meta.attributes.find((a) => a.trait_type === 'Tier')?.value} · ${e.supply} ${lang === 'id' ? 'edisi' : 'editions'} · $${usd} ${os ? (lang === 'id' ? 'di OpenSea (jaringan Base)' : 'on OpenSea (Base network)') : (lang === 'id' ? '— segera di OpenSea' : '— coming to OpenSea')}.`.slice(0, 160);
       const gs = await gpuSet(env, c);
       const gpuSerial = gs.serial[id] ? Number(gs.serial[id]) : 0;
-      return out({ page: 'home', rest: `/nft/${c}/${id}`, title: `${meta.name} — $${usd}`, desc, image: meta.image, noindex: !inStock, jsonld: [product, breadcrumb(base, [...crumbs, [meta.name, `/${lang}/nft/${c}/${id}`]])], body: P.nftPage(lang, c, id, meta, attributesFor(c, id, lang), os, { usd, ed: e.supply, crumbs, related, galleryHref: gal[0], galleryName: gal[1], desc: c === 'hadith' ? hadithBlurb(c, id, lang) : null, gpuSerial }) });
+      const gpuBy = gs.by?.[id] ?? '';
+      return out({ page: 'home', rest: `/nft/${c}/${id}`, title: `${meta.name} — $${usd}`, desc, image: meta.image, noindex: !inStock, jsonld: [product, breadcrumb(base, [...crumbs, [meta.name, `/${lang}/nft/${c}/${id}`]])], body: P.nftPage(lang, c, id, meta, attributesFor(c, id, lang), os, { usd, ed: e.supply, crumbs, related, galleryHref: gal[0], galleryName: gal[1], desc: c === 'hadith' ? hadithBlurb(c, id, lang) : null, gpuSerial, gpuBy }) });
     }
     // eksklusif: toko $1/edisi + listing pasar member untuk karya ini
     const stock = await SHOP.stockOf(env, c, id);
@@ -671,7 +672,7 @@ export default {
       if (m && validToken(m[1], Number(m[2])) && !COLLECTIONS[m[1]].exclusive) {
         const o = await env.STORE.get(`gpu/${m[1]}/${m[2]}.png`);
         if (!o) return new Response('not found', { status: 404 });
-        return new Response(o.body, { headers: { 'content-type': 'image/png', 'cache-control': 'public, max-age=86400, s-maxage=31536000, immutable', 'x-content-type-options': 'nosniff' } });
+        return new Response(o.body, { headers: { 'content-type': o.httpMetadata?.contentType ?? 'image/png', 'cache-control': 'public, max-age=86400, s-maxage=31536000, immutable', 'x-content-type-options': 'nosniff' } });
       }
       m = /^\/play\/([a-z-]+)\/(\d+)$/.exec(p);
       if (m && validToken(m[1], Number(m[2]))) return await player(request, env, ctx, m[1], Number(m[2]), url.origin);
