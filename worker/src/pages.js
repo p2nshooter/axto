@@ -207,12 +207,23 @@ function buyBox(lang, c, id, meta, opensea, info) {
 /** Karya eksklusif: kotak toko ($1/edisi, koin AXTO) + listing pasar member untuk karya ini. */
 /** Panggung karya: seri G- yang dibuka dari kartu G- menampilkan lukisan GPU yang SAMA dengan kartunya (pemilik, 23 Nov
  * 2026: „Series G- semuanya dari luar bagus, saat di klik ga bagus dalamnya"); tab untuk berpindah ke animasi asli. */
+/** Versi G- di bawah karya: karya G- baru = video animasi buatan GPU; karya G- lama = lukisan GPU aslinya, diam
+ * (pemilik 24 Nov 2026: „Series G- yg sudah terlanjur di buat, kembalikan ke gambar aslinya tanpa animasi"). */
+function gpuFigure(lang, c, id, meta, info) {
+  const al = `${esc(meta.name)} — G-${info.gpuSerial}`;
+  const media = info.gpuAnim
+    ? `<video src="/gpu/${c}/${id}.mp4?v=2" poster="/gpu/${c}/${id}.png?v=2" autoplay muted loop playsinline preload="metadata" width="768" height="768" aria-label="${al}"></video>`
+    : `<img src="/gpu/${c}/${id}.png?v=2" alt="${al}" width="768" height="768" loading="lazy">`;
+  const kata = info.gpuAnim ? (lang === 'id' ? 'Versi GPU — dilukis & dianimasikan GPU dari DNA karya ini' : 'GPU version — painted & animated by GPU from this work’s DNA') : (lang === 'id' ? 'Versi GPU — dilukis GPU dari DNA karya ini' : 'GPU version — painted by GPU from this work’s DNA');
+  return `<figure class="gpuv"><a href="?v=g">${media}</a><figcaption><b>G-${fmt(info.gpuSerial, lang)}</b> · ${esc(kata)}</figcaption></figure>`;
+}
+
 function stageHtml(lang, c, id, meta, info) {
   const play = `<iframe src="/play/${c}/${id}" title="${esc(meta.name)}" loading="lazy" allow="autoplay; fullscreen" sandbox="allow-scripts allow-same-origin"></iframe>`;
   if (!info?.gpuSerial) return `<div class="stage">${play}</div>`;
   const g = Boolean(info.gpuFirst);
   const gl = `G-${fmt(info.gpuSerial, lang)}`;
-  const tabs = `<nav class="stagetabs" aria-label="${esc(lang === 'id' ? 'Versi karya' : 'Artwork version')}"><a href="?v=g"${g ? ' aria-current="true"' : ''}>${esc(gl)} · ${esc(lang === 'id' ? 'Animasi GPU' : 'GPU animation')}</a><a href="?v=a"${g ? '' : ' aria-current="true"'}>${esc(lang === 'id' ? 'Animasi asli' : 'Original animation')}</a></nav>`;
+  const tabs = `<nav class="stagetabs" aria-label="${esc(lang === 'id' ? 'Versi karya' : 'Artwork version')}"><a href="?v=g"${g ? ' aria-current="true"' : ''}>${esc(gl)} · ${esc(info.gpuAnim ? (lang === 'id' ? 'Animasi GPU' : 'GPU animation') : (lang === 'id' ? 'Lukisan GPU' : 'GPU painting'))}</a><a href="?v=a"${g ? '' : ' aria-current="true"'}>${esc(lang === 'id' ? 'Animasi asli' : 'Original animation')}</a></nav>`;
   const hidup = `<iframe src="/gplay/${c}/${id}" title="${esc(meta.name)} — ${esc(gl)}" loading="lazy" allow="fullscreen" sandbox="allow-scripts allow-same-origin"></iframe>`;
   return `<div class="stage${g ? ' gstage' : ''}">${g ? hidup : play}</div>${tabs}`;
 }
@@ -235,7 +246,7 @@ export function nftPage(lang, c, id, meta, attrsId, opensea = '', info = null) {
     <p class="kindline">${badge(lang, c, true)}</p>
     <h1>${esc(meta.name)}</h1>
     <p class="meta">${esc(t.nft.rarity)}: ${esc(TIER_NAMES[lang][TIER_NAMES.en.indexOf(rarity)] ?? rarity)} · ${EXCLUSIVE_SUPPLY} ${esc(t.nft.editionOf)}</p>
-    ${info.gpuSerial && !info.gpuFirst ? `<figure class="gpuv"><a href="?v=g"><video src="/gpu/${c}/${id}.mp4?v=2" poster="/gpu/${c}/${id}.png?v=2" autoplay muted loop playsinline preload="metadata" width="768" height="768" aria-label="${esc(meta.name)} — G-${info.gpuSerial}"></video></a><figcaption><b>G-${fmt(info.gpuSerial, lang)}</b> · ${esc(lang === 'id' ? 'Versi GPU — dilukis & dianimasikan GPU dari DNA karya ini' : 'GPU version — painted & animated by GPU from this work’s DNA')}</figcaption></figure>` : ''}
+    ${info.gpuSerial && !info.gpuFirst ? gpuFigure(lang, c, id, meta, info) : ''}
     <div class="buybox shopbox" data-mk="shop" data-c="${c}" data-id="${id}" data-left="${st.left}">
       <p class="price"><span>${esc(x.price)}</span><b>$1</b><small>${esc(info.priceCoins)} AXTO · ${esc(x.left)}: ${st.left}/${EXCLUSIVE_SUPPLY}</small></p>
       ${st.left > 0 ? `<p class="bidrow"><label>${esc(x.qty)} <select name="qty">${opts}</select></label> <button class="btn gold big" type="button" data-mk-buy>${esc(x.buy)}</button></p>` : `<p class="status">${esc(x.soldOut)}</p>`}
@@ -265,7 +276,7 @@ function nftPublicPage(lang, c, id, meta, attrs, opensea, info) {
     <p class="kindline">${badge(lang, c, true)}</p>
     <h1>${esc(meta.name)}</h1>
     <p class="meta">${esc(t.nft.rarity)}: ${esc(TIER_NAMES[lang][TIER_NAMES.en.indexOf(rarity)] ?? rarity)} · ${info.ed} ${esc(t.nft.editionOf)} · ${lang === 'id' ? 'Galeri' : 'Gallery'}: <a class="link" href="${info.galleryHref}">${esc(info.galleryName)}</a></p>
-    ${info.gpuSerial && !info.gpuFirst ? `<figure class="gpuv"><a href="?v=g"><video src="/gpu/${c}/${id}.mp4?v=2" poster="/gpu/${c}/${id}.png?v=2" autoplay muted loop playsinline preload="metadata" width="768" height="768" aria-label="${esc(meta.name)} — G-${info.gpuSerial}"></video></a><figcaption><b>G-${fmt(info.gpuSerial, lang)}</b> · ${esc(lang === 'id' ? 'Versi GPU — dilukis & dianimasikan GPU dari DNA karya ini' : 'GPU version — painted & animated by GPU from this work’s DNA')}</figcaption></figure>` : ''}
+    ${info.gpuSerial && !info.gpuFirst ? gpuFigure(lang, c, id, meta, info) : ''}
     ${buyBox(lang, c, id, meta, opensea, info)}
     <h2>${esc(t.nft.traits)}</h2>
     <dl class="traits">${attrs.map((a) => `<div><dt>${esc(a.trait_type)}</dt><dd>${esc(a.value)}</dd></div>`).join('')}</dl>

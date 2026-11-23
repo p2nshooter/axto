@@ -1,8 +1,8 @@
-// Seri G- dibuat ulang (pemilik 24 Nov 2026: „hapus total semua", „bikin ulang semua"): reset sekali, FLUX.2 + pemeriksa
-// mutu, hanya karya lolos yang masuk seri, jatah gratis harian disebar 24 jam (R2 CAS, tidak dobel).
+// Seri G- (pemilik 24 Nov 2026): karya lama TIDAK dihapus (tampil sebagai gambar aslinya); karya baru FLUX.2 + pemeriksa
+// mutu, hanya yang lolos masuk seri; jatah gratis harian disebar 24 jam (R2 CAS, tidak dobel).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { gpuTick, ambilJatah, lukisGratis, putusan, resetSekali, RESET, MODEL, MODEL_QA, MODEL_CADANGAN } from '../src/gpu.js';
+import { gpuTick, ambilJatah, lukisGratis, putusan, MODEL, MODEL_QA, MODEL_CADANGAN } from '../src/gpu.js';
 import { candidates, QA_V } from '../../engine/src/gpu.js';
 
 function fakeR2() {
@@ -45,23 +45,20 @@ function aiTiruan(nilai = () => BAGUS) {
 }
 const envDengan = (ai) => ({ STORE: fakeR2(), AI: ai, GPU_HARIAN: '36' });
 
-test('reset sekali: semua seri G- lama dihapus total (berkas & daftar), JSON lama diarsipkan, seri mulai dari G-1', async () => {
+test('karya G- lama TIDAK dihapus atau disentuh; hanya karya bertanda situs lain dilukis ulang (lolos mutu, nomor seri sama)', async () => {
   const env = envDengan(aiTiruan());
-  const [a, b] = candidates('quran');
-  env.STORE.m.set('os/gpu-quran.json', { body: JSON.stringify({ ids: [a, b], serial: { [a]: 1, [b]: 2 }, by: {} }), etag: 'x' });
-  env.STORE.m.set(`gpu/quran/${a}.png`, { body: 'lama', etag: 'y' });
-  env.STORE.m.set(`gpu/quran/${b}.png`, { body: 'lama', etag: 'z' });
-  env.STORE.m.set('os/gpu-horde.json', { body: '{}', etag: 'h' });
-  const r = await resetSekali(env, JAM(1));
-  assert.deepEqual(r.quran, { karya: 2, berkas: 2 });
-  assert.equal(env.STORE.m.has(`gpu/quran/${a}.png`), false);
-  assert.equal(env.STORE.m.has('os/gpu-horde.json'), false);
-  assert.deepEqual(JSON.parse(env.STORE.m.get('os/gpu-quran.json').body).ids, []);
-  assert.deepEqual(JSON.parse(env.STORE.m.get('os/gpu-arsip/2026-11-24/gpu-quran.json').body).ids, [a, b]);
-  assert.ok(env.STORE.m.has(RESET));
-  env.STORE.m.set(`gpu/quran/${a}.png`, { body: 'baru', etag: 'q' });
-  assert.equal(await resetSekali(env, JAM(2)), false, 'hanya sekali — karya baru tidak ikut terhapus');
-  assert.ok(env.STORE.m.has(`gpu/quran/${a}.png`));
+  const [a, b] = candidates('stamp');
+  env.STORE.m.set('os/gpu-stamp.json', { body: JSON.stringify({ ids: [a, b], serial: { [a]: 1, [b]: 2 }, by: { [a]: 'huggingface-ulyah', [b]: 'pollinations' } }), etag: 'x1' });
+  env.STORE.m.set(`gpu/stamp/${a}.png`, { body: 'lama', etag: 'y' });
+  const r = await gpuTick(env, { now: JAM(23, 55) });
+  assert.deepEqual(r.dibuat, { c: 'stamp', id: b, g: 2, ulang: true, nilai: 9 });
+  const doc = JSON.parse(env.STORE.m.get('os/gpu-stamp.json').body);
+  assert.deepEqual(doc.ids, [a, b]);
+  assert.deepEqual(doc.serial, { [a]: 1, [b]: 2 });
+  assert.equal(doc.by[a], 'huggingface-ulyah', 'karya lama tetap');
+  assert.equal(doc.qa?.[a], undefined, 'karya lama tanpa cap — tampil sebagai gambar aslinya');
+  assert.equal(doc.qa[b].v, QA_V);
+  assert.equal(env.STORE.m.get(`gpu/stamp/${a}.png`).body, 'lama', 'gambar lama tidak dihapus');
 });
 
 test('tick: FLUX.2 melukis, pemeriksa meloloskan → seri G-1.. bergiliran 8 koleksi, cap mutu & panel tersimpan', async () => {
@@ -83,7 +80,6 @@ test('tick: FLUX.2 melukis, pemeriksa meloloskan → seri G-1.. bergiliran 8 kol
 test('lukisan bertulisan / tidak simetris DITOLAK: tidak disimpan, tidak masuk seri, kandidat dicoba ulang lalu dilewati setelah 3×', async () => {
   const env = envDengan(aiTiruan(() => ({ ...BAGUS, text: true, symmetric: false })));
   const t = JAM(23, 55);
-  await resetSekali(env, t);
   for (const c of ['time', 'stamp', 'hadith', 'ex-time', 'ex-stamp', 'ex-quran', 'ex-hadith']) env.STORE.m.set(`os/gpu-${c}.json`, { body: JSON.stringify({ ids: [1, 2], serial: { 1: 1, 2: 2 }, by: {}, qa: { 1: { v: QA_V }, 2: { v: QA_V } } }), etag: c });
   const id = candidates('quran')[0];
   for (let i = 0; i < 3; i += 1) assert.match((await gpuTick(env, { now: t + i })).alasan, /mutu: tulisan, tidak simetris/);
@@ -94,21 +90,6 @@ test('lukisan bertulisan / tidak simetris DITOLAK: tidak disimpan, tidak masuk s
   env.AI = aiTiruan();
   const r = await gpuTick(env, { now: t + 10 });
   assert.equal(r.dibuat.id, candidates('quran')[1], 'kandidat yang gagal 3× dilewati');
-});
-
-test('karya tanpa cap mutu (ditambah proses lama) dibuang dari seri & R2 setiap putaran; nomor seri dirapatkan', async () => {
-  const env = envDengan(aiTiruan());
-  const t = JAM(23, 55);
-  await resetSekali(env, t);
-  const [a, b, c] = candidates('stamp');
-  env.STORE.m.set('os/gpu-stamp.json', { body: JSON.stringify({ ids: [a, b, c], serial: { [a]: 1, [b]: 2, [c]: 3 }, by: {}, qa: { [b]: { v: QA_V, nilai: 9 } }, vid: { [a]: true } }), etag: 's' });
-  env.STORE.m.set(`gpu/stamp/${a}.png`, { body: 'x', etag: '1' });
-  await gpuTick(env, { now: t });
-  const doc = JSON.parse(env.STORE.m.get('os/gpu-stamp.json').body);
-  assert.ok(!doc.ids.includes(a) && !doc.ids.includes(c));
-  assert.equal(doc.serial[b], 1);
-  assert.deepEqual(doc.vid, {});
-  assert.equal(env.STORE.m.has(`gpu/stamp/${a}.png`), false);
 });
 
 test('putusan pemeriksa: panel Qur\'an wajib ada, cukup besar & di tengah; nilai < 8 ditolak', () => {

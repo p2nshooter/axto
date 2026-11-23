@@ -71,3 +71,13 @@ S.addEventListener('keydown',(e)=>{if(e.key===' '||e.key==='k'){e.preventDefault
 addEventListener('deviceorientation',(e)=>{if(tekan||e.gamma==null)return;miring(Math.max(-0.5,Math.min(0.5,e.gamma/60)),Math.max(-0.5,Math.min(0.5,(e.beta-45)/60)))});
 V.play().catch(()=>{});})();</script></body></html>`;
 }
+
+/**
+ * Karya G- LAMA (pemilik, 24 Nov 2026: „Series G- yg sudah terlanjur di buat, kembalikan ke gambar aslinya tanpa animasi"):
+ * hanya lukisan GPU aslinya, diam — tanpa video, tanpa skrip, tanpa jarum/panel/teks tempelan.
+ */
+export function gpuGambar(meta, o) {
+  return `<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(meta.name)} — G-${o.g}</title><style${o.nonce ? ` nonce="${o.nonce}"` : ''}>html,body{margin:0;height:100%;background:#05060c;overflow:hidden}
+img{position:absolute;left:50%;top:50%;width:100vmin;height:100vmin;transform:translate(-50%,-50%);object-fit:contain}
+.g{position:absolute;left:calc(50% - 50vmin + 2.5vmin);top:calc(50% - 50vmin + 2.5vmin);padding:.25em .75em;border-radius:999px;background:rgba(13,42,32,.86);color:#9be3c4;font:700 clamp(10px,2.4vmin,15px) system-ui;border:1px solid #2a5a52}</style></head><body><img src="${esc(o.img)}" alt="${esc(meta.name)} — G-${o.g}"><span class="g">G-${o.g}</span></body></html>`;
+}

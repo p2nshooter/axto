@@ -10,7 +10,7 @@ import { metadata, contractMetadata, renderCtx, animatedSvg, renderPlayerLive, a
 import { showcaseIds, SHOWCASE_KEYS, priceUsd } from '../../engine/src/showcase.js';
 import { edition, designOf } from '../../engine/src/editions.js';
 import { hadithRef } from '../../engine/src/render/hadith.js';
-import { gpuPlayer } from '../../engine/src/render/gpu-player.js';
+import { gpuPlayer, gpuGambar } from '../../engine/src/render/gpu-player.js';
 import { collectionSeo, seriesSeo, surahSeo, hubSeo, breadcrumb, itemList, seriesLabel, surahInfo, BREAD } from './seo.js';
 import { COLLECTIONS, sha256Hex } from '../../engine/src/core.js';
 import { canonical } from '../../engine/src/dna.js';
@@ -67,15 +67,18 @@ async function gpuSet(env, c) {
   if (hit && Date.now() - hit.at < 120_000) return hit;
   let doc = null;
   try { doc = await readJSON(env.STORE, `os/gpu-${c}.json`); } catch { doc = null; }
-  // Seri G- dibuat ulang (pemilik 24 Nov 2026: „hapus total semua", „bikin ulang semua"): hanya karya yang lolos pemeriksa mutu
-  // (cap qa versi QA_V, src/gpu.js) yang ada; dan karya TAMPIL hanya setelah videonya dibuat GPU (doc.vid) — „hasil NFT 100%
-  // sudah keluar dengan animasi". Gambar lolos-mutu tanpa video hanya bahan GPU video (route /gpu/*.png).
-  const lolos = (x) => doc?.qa?.[x]?.v === QA_V;
-  const semua = Array.isArray(doc?.ids) ? doc.ids.filter((x) => Number.isSafeInteger(x) && x >= 1 && x <= COLLECTIONS[c].max && lolos(x)) : [];
-  const ids = semua.filter((x) => doc?.vid?.[x] === true);
+  // Pemilik 24 Nov 2026: „Series G- yg sudah terlanjur di buat, kembalikan ke gambar aslinya tanpa animasi" — karya G- LAMA
+  // (tanpa cap mutu) tampil sebagai lukisan GPU aslinya, diam; karya bertanda situs lain tetap disembunyikan sampai dilukis
+  // ulang (nomor seri tetap). Karya G- BARU (cap mutu QA_V, src/gpu.js) tampil hanya setelah videonya dibuat GPU (doc.vid)
+  // dan diputar di player interaktif — „hasil NFT 100% sudah keluar dengan animasi yg interaktif".
+  const baru = (x) => doc?.qa?.[x]?.v === QA_V;
+  const lama = (x) => !doc?.qa?.[x] && !GPUP.PERLU_ULANG.has(String(doc?.by?.[x] ?? ''));
+  const semua = Array.isArray(doc?.ids) ? doc.ids.filter((x) => Number.isSafeInteger(x) && x >= 1 && x <= COLLECTIONS[c].max && (lama(x) || baru(x))) : [];
+  const ids = semua.filter((x) => lama(x) || doc?.vid?.[x] === true);
   const serial = Object.fromEntries(ids.map((x) => [x, doc.serial?.[x]]));
-  const qa = Object.fromEntries(semua.map((x) => [x, doc.qa[x]]));
-  const v = { at: Date.now(), ids, serial, bersih: new Set(semua), qa, by: {} };
+  const anim = new Set(ids.filter(baru));
+  const qa = Object.fromEntries(semua.filter(baru).map((x) => [x, doc.qa[x]]));
+  const v = { at: Date.now(), ids, serial, bersih: new Set(semua), anim, qa, by: {} };
   GPU.set(c, v);
   return v;
 }
@@ -497,6 +500,9 @@ async function gpuPlay(env, c, id, origin) {
   if (!gs.ids.includes(id)) return new Response('not found', { status: 404 });
   const d = dna(c, id);
   const meta = metadata(c, id, env.BASE_URL);
+  const H = { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'public, max-age=300', 'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer' };
+  // karya G- lama: lukisan GPU aslinya saja, diam, tanpa animasi & tanpa tempelan apa pun
+  if (!gs.anim.has(id)) return new Response(gpuGambar(meta, { img: `/gpu/${c}/${id}.png?v=${QA_V}`, g: Number(gs.serial[id] ?? 0) }), { headers: H });
   let ctx = {};
   let ref = '';
   if (d.kind === 'quran' || d.kind === 'hadith') {
@@ -505,7 +511,7 @@ async function gpuPlay(env, c, id, origin) {
     if (d.kind === 'hadith') { const hr = hadithRef(d); ref = `${hr.nameId} · No. ${hr.number}`; }
   }
   const html = gpuPlayer(d, meta, ctx, { img: `/gpu/${c}/${id}.png?v=${QA_V}`, video: `/gpu/${c}/${id}.mp4?v=${QA_V}`, g: Number(gs.serial[id] ?? 0), ref, qa: gs.qa[id] ?? null });
-  return new Response(html, { headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'public, max-age=300', 'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer' } });
+  return new Response(html, { headers: H });
 }
 
 async function player(request, env, ctx, c, id, origin) {
@@ -645,7 +651,7 @@ async function html(request, env, ctx, url) {
       const desc = `${meta.name}: ${gal[1]} · ${meta.attributes.find((a) => a.trait_type === 'Tier')?.value} · ${e.supply} ${lang === 'id' ? 'edisi' : 'editions'} · $${usd} ${os ? (lang === 'id' ? 'di OpenSea (jaringan Base)' : 'on OpenSea (Base network)') : (lang === 'id' ? '— segera di OpenSea' : '— coming to OpenSea')}.`.slice(0, 160);
       const gs = await gpuSet(env, c);
       const gpuSerial = gs.serial[id] ? Number(gs.serial[id]) : 0;
-      return out({ page: 'home', rest: `/nft/${c}/${id}`, title: `${meta.name} — $${usd}`, desc, image: meta.image, noindex: !inStock, jsonld: [product, breadcrumb(base, [...crumbs, [meta.name, `/${lang}/nft/${c}/${id}`]])], body: P.nftPage(lang, c, id, meta, attributesFor(c, id, lang), os, { usd, ed: e.supply, crumbs, related, galleryHref: gal[0], galleryName: gal[1], desc: c === 'hadith' ? hadithBlurb(c, id, lang) : null, gpuSerial, gpuFirst: gpuSerial > 0 && url.searchParams.get('v') === 'g' }) });
+      return out({ page: 'home', rest: `/nft/${c}/${id}`, title: `${meta.name} — $${usd}`, desc, image: meta.image, noindex: !inStock, jsonld: [product, breadcrumb(base, [...crumbs, [meta.name, `/${lang}/nft/${c}/${id}`]])], body: P.nftPage(lang, c, id, meta, attributesFor(c, id, lang), os, { usd, ed: e.supply, crumbs, related, galleryHref: gal[0], galleryName: gal[1], desc: c === 'hadith' ? hadithBlurb(c, id, lang) : null, gpuSerial, gpuAnim: gs.anim.has(id), gpuFirst: gpuSerial > 0 && url.searchParams.get('v') === 'g' }) });
     }
     // eksklusif: toko $1/edisi + listing pasar member untuk karya ini
     const stock = await SHOP.stockOf(env, c, id);
@@ -658,7 +664,7 @@ async function html(request, env, ctx, url) {
     const exgs = await gpuSet(env, c);
     const crumbs = [[BREAD[lang].home, `/${lang}`], [BREAD[lang].ex, `/${lang}/${PATHS.exclusive[lang]}`], [P.collName(lang, c), `/${lang}/c/${c}`]];
     const product = { '@context': 'https://schema.org', '@type': 'Product', name: meta.name, image: meta.image, description: meta.description.slice(0, 300), sku: `${c}-${id}`, brand: { '@type': 'Brand', name: 'AXTO' }, offers: { '@type': 'Offer', priceCurrency: 'USD', price: 1, availability: stock.left > 0 ? 'https://schema.org/InStock' : 'https://schema.org/SoldOut', url: `${base}/${lang}/nft/${c}/${id}`, seller: { '@type': 'Organization', name: 'AXTO' } } };
-    return out({ page: 'home', rest: `/nft/${c}/${id}`, title: `${meta.name} — $1`, desc: `${meta.name}: ${lang === 'id' ? 'karya eksklusif, 10 edisi, $1 per edisi dengan koin AXTO di axto.io' : 'exclusive work, 10 editions, $1 per edition in AXTO coin on axto.io'}.`.slice(0, 160), image: meta.image, jsonld: [product, breadcrumb(base, [...crumbs, [meta.name, `/${lang}/nft/${c}/${id}`]])], body: P.nftPage(lang, c, id, meta, attributesFor(c, id, lang), '', { stock, listings, priceCoins, crumbs, gpuSerial: exgs.serial[id] ? Number(exgs.serial[id]) : 0, gpuFirst: Boolean(exgs.serial[id]) && url.searchParams.get('v') === 'g' }), script: "const x=document.createElement('script');x.type='module';x.src='/market.js?v=1';document.head.append(x);" });
+    return out({ page: 'home', rest: `/nft/${c}/${id}`, title: `${meta.name} — $1`, desc: `${meta.name}: ${lang === 'id' ? 'karya eksklusif, 10 edisi, $1 per edisi dengan koin AXTO di axto.io' : 'exclusive work, 10 editions, $1 per edition in AXTO coin on axto.io'}.`.slice(0, 160), image: meta.image, jsonld: [product, breadcrumb(base, [...crumbs, [meta.name, `/${lang}/nft/${c}/${id}`]])], body: P.nftPage(lang, c, id, meta, attributesFor(c, id, lang), '', { stock, listings, priceCoins, crumbs, gpuSerial: exgs.serial[id] ? Number(exgs.serial[id]) : 0, gpuAnim: exgs.anim.has(id), gpuFirst: Boolean(exgs.serial[id]) && url.searchParams.get('v') === 'g' }), script: "const x=document.createElement('script');x.type='module';x.src='/market.js?v=1';document.head.append(x);" });
   }
   const key = pageFromSlug(sub);
   const mk = "const x=document.createElement('script');x.type='module';x.src='/market.js?v=1';document.head.append(x);";
@@ -731,7 +737,7 @@ export default {
       m = /^\/gpu\/([a-z-]+)\/(\d+)\.mp4$/.exec(p);
       if (m && validToken(m[1], Number(m[2]))) {
         // video seri G- buatan GPU — dukung Range agar peramban bisa memutar & melompat
-        if (!(await gpuSet(env, m[1])).ids.includes(Number(m[2]))) return new Response('not found', { status: 404 });
+        if (!(await gpuSet(env, m[1])).anim.has(Number(m[2]))) return new Response('not found', { status: 404 });
         const key = `gpu/${m[1]}/${m[2]}.mp4`;
         const rg = /^bytes=(\d*)-(\d*)$/.exec(request.headers.get('range') ?? '');
         const head = await env.STORE.head(key);

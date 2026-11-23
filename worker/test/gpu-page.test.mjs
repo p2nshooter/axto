@@ -57,5 +57,11 @@ test('player G- Jam & Prangko tidak pernah memuat teks Arab/ayat — teks Arab h
     assert.match(h, /data-p="0\.3,0\.32,0\.7,0\.68"/, c);
     assert.doesNotMatch(h, /background:rgba\(10,12,24/, 'tanpa kotak gelap tempelan');
   }
+  // karya G- lama (pemilik 24 Nov 2026: „kembalikan ke gambar aslinya tanpa animasi"): gambar asli saja, tanpa video/skrip/tempelan
+  const { gpuGambar } = await import('../../engine/src/render/gpu-player.js');
+  const lama = gpuGambar(metadata('quran', 5, 'https://axto.io'), { img: '/gpu/quran/5.png?v=2', g: 7 });
+  assert.match(lama, /<img src="\/gpu\/quran\/5\.png\?v=2"/);
+  assert.doesNotMatch(lama, /<video|<script|id="ar"|@keyframes|animation:/);
+  assert.match(lama, /G-7/);
   assert.doesNotMatch(gpuPlayer(dna('quran', 5), metadata('quran', 5, 'https://axto.io'), AYAT, { img: 'x', video: 'v', g: 1, ref: 'r', qa: { v: 2 } }), /id="ar"/, 'tanpa panel terukur, teks tidak ditempel asal');
 });

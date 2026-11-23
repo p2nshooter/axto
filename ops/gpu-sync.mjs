@@ -1,7 +1,7 @@
 /**
  * Seri G- axto.io — VIDEO GPU (pemilik, 24 Nov 2026: „Series G- wajib sudah dengan animasi saat produksi, jd 100% di
- * buatkan GPU" · „ini series G- sampah semua" · „hapus total semua" · „bikin ulang semua, hasil NFT 100% sudah keluar
- * dengan animasi yg interaktif").
+ * buatkan GPU" · „bikin ulang semua, hasil NFT 100% sudah keluar dengan animasi yg interaktif" · „Series G- yg sudah
+ * terlanjur di buat, kembalikan ke gambar aslinya tanpa animasi").
  *
  * Sejak dibuat ulang, LUKISAN seri G- hanya dibuat worker axto.io (worker/src/gpu.js: FLUX.2 + pemeriksa mutu, cap `qa`).
  * Penyedia gambar lama (AI Horde, kunci GPU ulyah.com untuk gambar) DICABUT: mutunya tidak terjaga. Skrip ini (GitHub
@@ -10,7 +10,8 @@
  *      ulyah-media/axto-gpu/vid/<c>/<id>.mp4 ke R2 axto.io gpu/<c>/<id>.mp4 dan menandai `vid`,
  *   2. mengantrekan karya lolos-mutu yang belum beranimasi ke ulyah-media/axto-gpu/video-jobs.json,
  *   3. mengosongkan antrean gambar lama ulyah (jobs.json) agar tidak ada lagi gambar tanpa pemeriksaan mutu.
- * Karya tampil di situs hanya bila lolos mutu DAN videonya sudah ada.
+ * Karya G- BARU tampil di situs bila lolos mutu DAN videonya sudah ada; karya G- LAMA tidak disentuh (tampil sebagai
+ * lukisan aslinya, diam).
  *
  * ENV: CLOUDFLARE_API_KEY, CLOUDFLARE_EMAIL, CLOUDFLARE_ACCOUNT_ID
  */

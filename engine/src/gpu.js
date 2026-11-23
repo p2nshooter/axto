@@ -17,8 +17,8 @@ export const NEGATIVE = 'text, letters, words, writing, calligraphy, arabic scri
 
 const attr = (m, k) => String(m.attributes.find((a) => a.trait_type === k)?.value ?? '').replace(/[^\p{L}\p{N} ,'-]/gu, ' ').trim();
 
-/** Versi mutu seri G-: hanya karya dengan cap `qa[id].v === QA_V` yang ada di seri (pemilik 24 Nov 2026: seri G- lama „sampah"
- * → „hapus total semua", „bikin ulang semua"). Lihat worker/src/gpu.js (lukis FLUX.2 + pemeriksa mutu). */
+/** Versi mutu seri G- baru: cap `qa[id].v === QA_V` dari pemeriksa mutu (worker/src/gpu.js: lukis FLUX.2 + periksa). Karya G-
+ * lama tanpa cap tetap ada dan tampil sebagai lukisan aslinya, diam (pemilik 24 Nov 2026). */
 export const QA_V = 2;
 
 /* Prompt v2. Kata seperti „masterpiece", „8k", „no text" DIHAPUS: model gambar malah menuliskannya sebagai huruf di lukisan
@@ -48,15 +48,6 @@ export function tambahSeri(doc, id, by, at = new Date().toISOString(), qa = unde
   d.by[id] = by;
   if (qa) d.qa[id] = qa;
   return d;
-}
-
-/** Buang karya dari seri (murni): id, nomor seri, penanda, cap mutu, video; nomor seri sisanya dirapatkan 1..n. */
-export function buangSeri(doc, buang) {
-  const b = new Set(buang);
-  const ids = (doc?.ids ?? []).filter((x) => !b.has(x));
-  const urut = [...ids].sort((x, y) => Number(doc.serial?.[x] ?? 0) - Number(doc.serial?.[y] ?? 0));
-  const sisa = (o) => Object.fromEntries(Object.entries(o ?? {}).filter(([k]) => !b.has(Number(k))));
-  return { ...doc, ids, serial: Object.fromEntries(urut.map((x, i) => [x, i + 1])), by: sisa(doc?.by), qa: sisa(doc?.qa), vid: sisa(doc?.vid) };
 }
 
 /**
