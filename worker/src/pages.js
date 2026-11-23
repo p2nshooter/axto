@@ -268,6 +268,8 @@ export function coinPage(lang, sale, paypalOn, a = {}) {
   <p class="lead">${id ? 'USDT (TRON), USDC (BSC), Bitcoin atau BNB (BSC) — diproses otomatis oleh NOWPayments. Koin masuk ke saldo Anda begitu pembayaran selesai; pencairan hanya ke alamat & mata uang yang Anda pakai membeli.' : 'USDT (TRON), USDC (BSC), Bitcoin or BNB (BSC) — processed automatically by NOWPayments. Coins reach your balance as soon as the payment finishes; cash-outs go only to the address & currency you bought with.'}</p>
   <div data-np="buy"><p class="muted">…</p></div>
   <p><button class="btn ghost" type="button" data-watch-axto>${id ? 'Tambahkan AXTO ke wallet' : 'Add AXTO to wallet'}</button></p></section>
+  <section class="np-buyback"><img src="/brand/axto-buyback-256.png" alt="AXTO Coin Buyback" width="128" height="128" loading="lazy"><div><h2>AXTO Coin Buyback</h2>
+  <p>${id ? 'Koin AXTO bisa Anda jual kembali ke axto.io kapan saja dari Portal member. Pembayaran otomatis lewat NOWPayments ke alamat & mata uang yang Anda pakai saat membeli; sebelum koin dirilis ke DEX nilainya dipotong 50%. Koin yang dibeli kembali masuk ke wallet buyback axto.io — tidak kembali ke stok presale.' : 'You can sell AXTO coins back to axto.io at any time from the Member portal. Payment is automatic through NOWPayments to the address & currency you bought with; before the coin is released to a DEX the value is reduced by 50%. Coins bought back go to the axto.io buyback wallet — they never return to the presale stock.'}</p></div></section>
   ${coinWalletBox(lang, a)}
   ${coinGuide(lang, a)}
   <p class="disclaimer">${esc(t.disclaimer)}</p></section>`;

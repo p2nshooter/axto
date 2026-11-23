@@ -188,10 +188,11 @@ test('cairkan: hanya ke alamat & mata uang pembelian, potong 50%, payout 2 fase 
   await C.ipn(fail, env);
   await C.ipn(await sign({ id: 'w-1', status: 'FAILED', unique_external_id: c2.cashout.id }), env);
   assert.equal((await C.account(env, W)).micro, '4000000');
-  // ringkasan admin: terjual 10, kembali ke stok presale 6 (yang 4 dikembalikan ke member)
+  // ringkasan admin: terjual 10 (presale tidak berkurang), buyback 6 (yang 4 dikembalikan ke member)
   const av = await C.adminView(env);
   assert.equal(av.totals.soldViaNowpayments, '10');
-  assert.equal(av.totals.returnedToPresale, '6');
+  assert.equal(av.totals.boughtBack, '6');
+  assert.equal(av.buyback.coins, '6');
   assert.equal(av.totals.heldByMembers, '4');
   assert.equal(av.ipnUrl, 'https://axto.io/api/nowpayments/ipn');
 });

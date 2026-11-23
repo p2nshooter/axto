@@ -1,0 +1,32 @@
+name: Saluran privat → R2 (blueprint & konfigurasi rahasia)
+
+# Repo ini publik: data penting (blueprint, alamat buyback & setelmen, wallet pemilik) hanya masuk sebagai SANDI
+# private/*.enc dan dibuka di sini langsung ke R2 privat. Kunci privat tidak pernah keluar dari bucket vault.
+on:
+  workflow_dispatch: {}
+  push:
+    branches: [main, ccr-9ef9a045-gmv4m2]
+    paths: ['private/**', 'ops/private-bundle.mjs', '.github/workflows/private-bundle.yml']
+
+concurrency:
+  group: private-bundle
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  bundle:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      CLOUDFLARE_API_KEY: ${{ secrets.CLOUDFLARE_API_KEY }}
+      CLOUDFLARE_EMAIL: ${{ secrets.CLOUDFLARE_EMAIL }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Kunci saluran & buka berkas tersegel ke R2 privat
+        run: node ops/private-bundle.mjs

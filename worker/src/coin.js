@@ -4,7 +4,8 @@
  *   nya tapi di potong 50% jika belum waktunya di release ke dex, seluruh member wajib menyetujui perjanjian saat melakukan
  *   pembelian" · „member yg ingin menjual akan di TF ke rekening/address yg di pakai saat member membeli tidak bisa ke
  *   rekening lain" · „coin axto yg di jual client masuk kembali address asalnya, catat history nya di portal admin, dan
- *   seluruh coin axto terpantau dari portal admin seluruhnya".
+ *   seluruh coin axto terpantau dari portal admin seluruhnya" · „Untuk buyback coin axto masuk nya ke address ini …
+ *   Jadi di presale jika sudah di beli tidak nambah" (alamat buyback hanya di R2 privat `private/config.json`).
  *
  * Aliran
  *   Beli:    member (masuk) memilih USD + mata uang + alamat wallet pengirimnya, menyetujui perjanjian → POST /v1/payment
@@ -12,7 +13,8 @@
  *            → status diperiksa ulang ke API (GET /v1/payment/{id}) → koin dikreditkan sekali (idempoten per pesanan).
  *   Cairkan: koin dipotong dari saldo, nilai USD = koin × harga presale; sebelum rilis DEX dipotong 50% → payout NOWPayments
  *            (/v1/auth → /v1/payout → /v1/payout/{batch}/verify dengan kode TOTP) HANYA ke alamat & mata uang yang dipakai
- *            member saat membeli. Koin yang dicairkan kembali ke stok asal (presale). Gagal → koin dikembalikan ke member.
+ *            member saat membeli. Koin yang dicairkan dibeli kembali (buyback) dan masuk ke wallet buyback axto.io —
+ *            stok presale tidak bertambah lagi. Gagal → koin dikembalikan ke member.
  *   Pantau:  setiap gerak koin = satu peristiwa di log append-only `log/coin/…`; portal admin menjumlahkannya.
  *
  * Penyimpanan: R2 saja (aturan pemilik). Kunci API/IPN/kredensial payout hanya rahasia worker (dari GitHub Secrets saat
@@ -55,7 +57,7 @@ export function validAddress(cur, a) {
 }
 
 // ---------------------------------------------------------------- perjanjian (wajib disetujui saat membeli)
-export const AGREEMENT_V = '2026-11-23';
+export const AGREEMENT_V = '2026-11-23.2';
 export const AGREEMENT = {
   id: [
     'Koin AXTO adalah token utilitas untuk transaksi NFT di axto.io, bukan produk investasi; nilainya tidak dijamin dan tidak ada janji kenaikan harga.',
@@ -64,7 +66,7 @@ export const AGREEMENT = {
     'Pencairan (penjualan kembali koin ke axto.io) HANYA dibayarkan ke alamat dan mata uang yang Anda pakai saat membeli. Tidak bisa ke alamat, wallet, atau rekening lain.',
     'Pencairan sebelum koin AXTO dirilis ke DEX dipotong 50% dari nilainya pada harga presale. Setelah rilis DEX tidak ada potongan.',
     'Nilai pencairan dihitung dalam USD lalu dikonversi NOWPayments ke mata uang pembelian pada kurs saat pencairan; biaya jaringan dipotong dari jumlah yang dikirim. Minimal pencairan $20.',
-    'Koin yang dicairkan kembali ke stok asalnya di axto.io. Bila payout gagal, koin dikembalikan utuh ke saldo Anda.',
+    'Koin yang dicairkan dibeli kembali oleh axto.io (buyback) dan masuk ke wallet buyback axto.io; stok presale tidak bertambah. Bila payout gagal, koin dikembalikan utuh ke saldo Anda.',
     'Semua transaksi tercatat (alamat, jumlah, waktu, hash transaksi). axto.io dapat menahan transaksi yang terindikasi penipuan atau melanggar hukum.',
   ],
   en: [
@@ -74,7 +76,7 @@ export const AGREEMENT = {
     'A cash-out (selling coins back to axto.io) is paid ONLY to the address and currency you used to buy. It cannot go to any other address, wallet or bank account.',
     'A cash-out before the AXTO coin is released to a DEX is reduced by 50% of its value at the presale price. After the DEX release there is no reduction.',
     'The cash-out value is calculated in USD and converted by NOWPayments into the purchase currency at the rate of the moment; network fees are deducted from the amount sent. Minimum cash-out $20.',
-    'Coins you cash out return to their original stock at axto.io. If a payout fails, the coins are returned to your balance in full.',
+    'Coins you cash out are bought back by axto.io (buyback) and go to the axto.io buyback wallet; the presale stock does not grow back. If a payout fails, the coins are returned to your balance in full.',
     'Every transaction is recorded (addresses, amounts, times, transaction hashes). axto.io may hold transactions that indicate fraud or break the law.',
   ],
 };
@@ -368,7 +370,7 @@ export async function requestCashout(env, wallet, b) {
   if (q.payoutCents < LIMITS.minCashoutUsd * 100) return { error: 'minimum', minUsd: LIMITS.minCashoutUsd, ...q };
   const id = `${Date.now().toString(36)}${hex(crypto.getRandomValues(new Uint8Array(5)))}`;
   try {
-    await adjust(env, wallet, -micro, { ev: 'cashout', out: id, cur: dest.cur, to: dest.addr, ...q, returnsTo: 'presale' });
+    await adjust(env, wallet, -micro, { ev: 'cashout', out: id, cur: dest.cur, to: dest.addr, ...q, coinsTo: 'buyback' });
   } catch (e) {
     return { error: e.message === 'balance' ? 'balance' : 'retry' };
   }
@@ -515,9 +517,9 @@ export async function adminView(env) {
   const outDocs = await read(outs.slice(-300));
   let held = 0n;
   for (const a of accounts) held += BigInt(a.micro);
-  // log peristiwa 60 hari terakhir: total terjual, kembali ke stok, nilai
+  // log peristiwa 60 hari terakhir: total terjual (presale), dibeli kembali (buyback), nilai
   let sold = 0n;
-  let returned = 0n;
+  let returned = 0n; // ke wallet buyback
   let usdIn = 0;
   let usdOut = 0;
   const events = [];
@@ -533,6 +535,7 @@ export async function adminView(env) {
       if (events.length < 300) events.push({ ...e, coins: fmtCoins(BigInt(e.micro ?? '0') < 0n ? -BigInt(e.micro) : BigInt(e.micro ?? '0')), sign: BigInt(e.micro ?? '0') < 0n ? '-' : '+' });
     }
   }
+  const priv = (await readJSON(env.STORE, 'private/config.json').catch(() => null)) ?? {};
   let np_ = null;
   try {
     const [status, coins, balance] = await Promise.all([
@@ -547,7 +550,10 @@ export async function adminView(env) {
     cfg: { ...cfg, priceUsd: cfg.priceCents / 100, penaltyPct: cfg.dexReleased ? 0 : PENALTY_BEFORE_DEX, agreementV: AGREEMENT_V },
     ipnUrl: `${env.BASE_URL || 'https://axto.io'}${IPN_PATH}`,
     ready: { api: !!env.NOWPAYMENTS_API_KEY, ipn: !!env.NOWPAYMENTS_IPN_SECRET, payout: payoutReady(env) },
-    totals: { members: accounts.length, heldByMembers: fmtCoins(held), soldViaNowpayments: fmtCoins(sold), returnedToPresale: fmtCoins(returned), usdIn: usdIn / 100, usdPaidOut: usdOut / 100, queue: queue.length },
+    totals: { members: accounts.length, heldByMembers: fmtCoins(held), soldViaNowpayments: fmtCoins(sold), boughtBack: fmtCoins(returned), usdIn: usdIn / 100, usdPaidOut: usdOut / 100, queue: queue.length },
+    // alamat privat (R2 private/config.json, tidak pernah di repo): wallet buyback & alamat setelmen NOWPayments
+    buyback: { address: priv.buyback ?? null, coins: fmtCoins(returned) },
+    settlement: priv.nowpaymentsSettlement ?? null,
     orders: orderDocs.map((o) => ({ ...publicOrder(o), wallet: o.wallet, country: o.country })).reverse(),
     cashouts: outDocs.map((o) => ({ ...publicCashout(o), wallet: o.wallet, lastError: o.lastError ?? null })).reverse(),
     events,
