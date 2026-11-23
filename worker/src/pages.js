@@ -162,7 +162,7 @@ export function collectionPage(lang, c, o) {
   const pub = !COLLECTIONS[c].exclusive;
   // harga di kartu: eksklusif = $1 + sisa edisi (dari 10); publik = harga tetap OpenSea + jumlah edisi
   const tag = (it) => (pub ? `${it.usd ? `<span class="pr">$${fmt(it.usd, lang)}</span>` : ''}${it.ed ? `<span class="ed">${it.ed}×</span>` : ''}` : `<span class="pr">$1</span><span class="ed${it.left === 0 ? ' out' : ''}">${it.left ?? EXCLUSIVE_SUPPLY}/${EXCLUSIVE_SUPPLY}</span>`);
-  const tile = (it) => `<li data-id="${it.id}" data-tier="${it.tier}"${it.gpu ? ' class="g"' : ''}><a href="${nftPath(lang, c, it.id)}"><img src="${it.gpu ? `/gpu/${c}/${it.id}.png` : img(c, it.id)}" alt="${esc(it.name)}" loading="lazy" width="300" height="300"><span class="id">${it.gpu ? `G-${fmt(it.g, lang)}` : `#${fmt(it.id, lang)}`}</span><span class="nm">${esc(it.name)}</span><span class="tr t${it.tier}">${esc(TIER_NAMES[lang][it.tier])}</span>${tag(it)}</a></li>`;
+  const tile = (it) => `<li data-id="${it.id}" data-tier="${it.tier}"${it.gpu ? ` class="g" data-g="${it.g}"` : ''}><a href="${nftPath(lang, c, it.id)}${it.gpu ? '?v=g' : ''}"><img src="${it.gpu ? `/gpu/${c}/${it.id}.png` : img(c, it.id)}" alt="${esc(it.name)}" loading="lazy" width="300" height="300"><span class="id">${it.gpu ? `G-${fmt(it.g, lang)}` : `#${fmt(it.id, lang)}`}</span><span class="nm">${esc(it.name)}</span><span class="tr t${it.tier}">${esc(TIER_NAMES[lang][it.tier])}</span>${tag(it)}</a></li>`;
   const crumbs = o.crumbs ? `<nav class="crumbs" aria-label="breadcrumb">${o.crumbs.map(([n, h], i) => (i < o.crumbs.length - 1 ? `<a href="${h}">${esc(n)}</a>` : `<span aria-current="page">${esc(n)}</span>`)).join(' › ')}</nav>` : '';
   const gpuChip = !/model$/.test(c) ? `<a href="/${lang}/c/${c}?maker=gpu"${o.maker === 'gpu' ? ' aria-current="true"' : ''} class="gchip">${esc(t.opensea.gpu)} <small>${fmt(o.gpuCount ?? 0, lang)}</small></a>` : '';
   const exChips = !pub && gpuChip ? `<nav class="chips" aria-label="G-"><a href="/${lang}/c/${c}"${o.maker !== 'gpu' ? ' aria-current="true"' : ''}>${esc(lang === 'id' ? 'Semua' : 'All')} <small>${fmt(COLLECTIONS[c].max, lang)}</small></a>${gpuChip}</nav>` : '';
@@ -187,7 +187,7 @@ export function collectionPage(lang, c, o) {
   ${o.first.items.length || gpuNote ? '' : `<p class="empty">${esc(L.none)}</p>`}
   <p class="xmore"><a class="btn ghost" href="/${lang}/c/${c}?${qs({ from: String(o.first.next ?? o.from) })}" data-more>${esc(L.more)}</a></p>
   <div class="peek" hidden role="dialog" aria-modal="true" aria-label="${esc(L.peek)}">
-    <div class="peek-in"><div class="peek-stage"><iframe title="${esc(L.peek)}" allow="autoplay; fullscreen" sandbox="allow-scripts allow-same-origin"></iframe></div>
+    <div class="peek-in"><div class="peek-stage"><iframe title="${esc(L.peek)}" allow="autoplay; fullscreen" sandbox="allow-scripts allow-same-origin"></iframe><img class="peek-g" alt="" width="768" height="768" hidden></div>
     <p class="peek-name"></p>
     <p class="peek-nav"><button type="button" class="btn" data-peek="prev" aria-label="${esc(L.prev)}">←</button><a class="btn gold" data-peek="detail" href="#">${esc(L.detail)}</a><button type="button" class="btn" data-peek="next" aria-label="${esc(L.next)}">→</button><button type="button" class="btn ghost" data-peek="close" aria-label="${esc(L.close)}">✕</button></p></div>
   </div>
@@ -206,6 +206,17 @@ function buyBox(lang, c, id, meta, opensea, info) {
 }
 
 /** Karya eksklusif: kotak toko ($1/edisi, koin AXTO) + listing pasar member untuk karya ini. */
+/** Panggung karya: seri G- yang dibuka dari kartu G- menampilkan lukisan GPU yang SAMA dengan kartunya (pemilik, 23 Nov
+ * 2026: „Series G- semuanya dari luar bagus, saat di klik ga bagus dalamnya"); tab untuk berpindah ke animasi asli. */
+function stageHtml(lang, c, id, meta, info) {
+  const play = `<iframe src="/play/${c}/${id}" title="${esc(meta.name)}" loading="lazy" allow="autoplay; fullscreen" sandbox="allow-scripts allow-same-origin"></iframe>`;
+  if (!info?.gpuSerial) return `<div class="stage">${play}</div>`;
+  const g = Boolean(info.gpuFirst);
+  const gl = `G-${fmt(info.gpuSerial, lang)}`;
+  const tabs = `<nav class="stagetabs" aria-label="${esc(lang === 'id' ? 'Versi karya' : 'Artwork version')}"><a href="?v=g"${g ? ' aria-current="true"' : ''}>${esc(gl)} · ${esc(lang === 'id' ? 'Lukisan GPU' : 'GPU painting')}</a><a href="?v=a"${g ? '' : ' aria-current="true"'}>${esc(lang === 'id' ? 'Animasi asli' : 'Original animation')}</a></nav>`;
+  return `<div class="stage${g ? ' gstage' : ''}">${g ? `<img src="/gpu/${c}/${id}.png" alt="${esc(meta.name)} — ${esc(gl)}" width="768" height="768" decoding="async"><span class="gbadge">${esc(gl)}</span>` : play}</div>${tabs}`;
+}
+
 export function nftPage(lang, c, id, meta, attrsId, opensea = '', info = null) {
   if (!COLLECTIONS[c].exclusive) return nftPublicPage(lang, c, id, meta, attrsId, opensea, info);
   const t = T[lang];
@@ -218,13 +229,13 @@ export function nftPage(lang, c, id, meta, attrsId, opensea = '', info = null) {
   const opts = Array.from({ length: st.left }, (_, i) => `<option value="${i + 1}">${i + 1}</option>`).join('');
   const lrow = (l) => `<li data-lid="${esc(l.lid)}" data-mode="${esc(l.mode)}" data-left="${l.left}"><b>${esc(m.modes[l.mode] ?? l.mode)}</b> · ${fmt(l.left, lang)} ${esc(m.left)} · ${esc(l.mode === 'auction' ? `${m.top}: ${l.top?.micro ?? '—'} AXTO (${m.start} ${l.start})` : l.mode === 'offer' ? `${m.min}: ${l.min ?? '0,01'} AXTO` : `${m.price}: ${l.price} AXTO`)} · ${esc(m.seller)} ${esc(l.seller)}${l.mode === 'auction' ? ` · ${esc(m.endsIn)} <time data-countdown="${l.endsAt}"></time>` : ''} <span class="mk-act"></span></li>`;
   return `<section class="nft">
-  <div class="stage"><iframe src="/play/${c}/${id}" title="${esc(meta.name)}" loading="lazy" allow="autoplay; fullscreen" sandbox="allow-scripts allow-same-origin"></iframe></div>
+  ${stageHtml(lang, c, id, meta, info)}
   <div class="info">
     ${crumbs}
     <p class="kindline">${badge(lang, c, true)}</p>
     <h1>${esc(meta.name)}</h1>
     <p class="meta">${esc(t.nft.rarity)}: ${esc(TIER_NAMES[lang][TIER_NAMES.en.indexOf(rarity)] ?? rarity)} · ${EXCLUSIVE_SUPPLY} ${esc(t.nft.editionOf)}</p>
-    ${info.gpuSerial ? `<figure class="gpuv"><img src="/gpu/${c}/${id}.png" alt="${esc(meta.name)} — G-${info.gpuSerial}" width="768" height="768" loading="lazy"><figcaption><b>G-${fmt(info.gpuSerial, lang)}</b> · ${esc(lang === 'id' ? 'Versi GPU — dilukis GPU dari DNA karya ini' : 'GPU version — painted by GPU from this work’s DNA')}${info.gpuBy ? ` · ${esc(GPU_NAME[info.gpuBy] ?? info.gpuBy)}` : ''}</figcaption></figure>` : ''}
+    ${info.gpuSerial && !info.gpuFirst ? `<figure class="gpuv"><img src="/gpu/${c}/${id}.png" alt="${esc(meta.name)} — G-${info.gpuSerial}" width="768" height="768" loading="lazy"><figcaption><b>G-${fmt(info.gpuSerial, lang)}</b> · ${esc(lang === 'id' ? 'Versi GPU — dilukis GPU dari DNA karya ini' : 'GPU version — painted by GPU from this work’s DNA')}${info.gpuBy ? ` · ${esc(GPU_NAME[info.gpuBy] ?? info.gpuBy)}` : ''}</figcaption></figure>` : ''}
     <div class="buybox shopbox" data-mk="shop" data-c="${c}" data-id="${id}" data-left="${st.left}">
       <p class="price"><span>${esc(x.price)}</span><b>$1</b><small>${esc(info.priceCoins)} AXTO · ${esc(x.left)}: ${st.left}/${EXCLUSIVE_SUPPLY}</small></p>
       ${st.left > 0 ? `<p class="bidrow"><label>${esc(x.qty)} <select name="qty">${opts}</select></label> <button class="btn gold big" type="button" data-mk-buy>${esc(x.buy)}</button></p>` : `<p class="status">${esc(x.soldOut)}</p>`}
@@ -248,13 +259,13 @@ function nftPublicPage(lang, c, id, meta, attrs, opensea, info) {
   const crumbs = `<nav class="crumbs" aria-label="breadcrumb">${info.crumbs.map(([n, h]) => `<a href="${h}">${esc(n)}</a>`).join(' › ')}</nav>`;
   const rel = info.related.length ? `<h2>${esc(lang === 'id' ? 'Karya lain di galeri ini' : 'More from this gallery')}</h2><ul class="lots rel">${info.related.map((it) => `<li><a href="${nftPath(lang, c, it.id)}"><img src="${img(c, it.id)}" alt="${esc(it.name)}" loading="lazy" width="300" height="300"><span class="id">#${fmt(it.id, lang)}</span><span class="pr">$${fmt(it.usd, lang)}</span></a></li>`).join('')}</ul>` : '';
   return `<section class="nft">
-  <div class="stage"><iframe src="/play/${c}/${id}" title="${esc(meta.name)}" loading="lazy" allow="autoplay; fullscreen" sandbox="allow-scripts allow-same-origin"></iframe></div>
+  ${stageHtml(lang, c, id, meta, info)}
   <div class="info">
     ${crumbs}
     <p class="kindline">${badge(lang, c, true)}</p>
     <h1>${esc(meta.name)}</h1>
     <p class="meta">${esc(t.nft.rarity)}: ${esc(TIER_NAMES[lang][TIER_NAMES.en.indexOf(rarity)] ?? rarity)} · ${info.ed} ${esc(t.nft.editionOf)} · ${lang === 'id' ? 'Galeri' : 'Gallery'}: <a class="link" href="${info.galleryHref}">${esc(info.galleryName)}</a></p>
-    ${info.gpuSerial ? `<figure class="gpuv"><img src="/gpu/${c}/${id}.png" alt="${esc(meta.name)} — G-${info.gpuSerial}" width="768" height="768" loading="lazy"><figcaption><b>G-${fmt(info.gpuSerial, lang)}</b> · ${esc(lang === 'id' ? 'Versi GPU — dilukis GPU dari DNA karya ini' : 'GPU version — painted by GPU from this work’s DNA')}${info.gpuBy ? ` · ${esc(GPU_NAME[info.gpuBy] ?? info.gpuBy)}` : ''}</figcaption></figure>` : ''}
+    ${info.gpuSerial && !info.gpuFirst ? `<figure class="gpuv"><img src="/gpu/${c}/${id}.png" alt="${esc(meta.name)} — G-${info.gpuSerial}" width="768" height="768" loading="lazy"><figcaption><b>G-${fmt(info.gpuSerial, lang)}</b> · ${esc(lang === 'id' ? 'Versi GPU — dilukis GPU dari DNA karya ini' : 'GPU version — painted by GPU from this work’s DNA')}${info.gpuBy ? ` · ${esc(GPU_NAME[info.gpuBy] ?? info.gpuBy)}` : ''}</figcaption></figure>` : ''}
     ${buyBox(lang, c, id, meta, opensea, info)}
     <h2>${esc(t.nft.traits)}</h2>
     <dl class="traits">${attrs.map((a) => `<div><dt>${esc(a.trait_type)}</dt><dd>${esc(a.value)}</dd></div>`).join('')}</dl>
