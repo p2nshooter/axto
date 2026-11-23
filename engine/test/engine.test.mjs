@@ -47,20 +47,31 @@ test('deterministik: tokenId sama → DNA & metadata sama', () => {
   assert.deepEqual(metadata('stamp', 9), metadata('stamp', 9));
 });
 
-test('tier = label kelangkaan (5 tingkat, distribusi wajar); harga mulai $1 untuk semua', () => {
+test('tier = label kelangkaan (5 tingkat); harga tetap & edisi menurut kelangkaan (keputusan akhir 23 Nov 2026)', async () => {
+  const { BANDS, edition } = await import('../src/editions.js');
   const cnt = [0, 0, 0, 0, 0];
   for (let i = 1; i <= 20000; i += 1) cnt[dna('stamp', i).tier.rank] += 1;
   assert.ok(cnt[0] > cnt[4] * 5, JSON.stringify(cnt));
   assert.ok(cnt.every((n) => n > 0), JSON.stringify(cnt));
-  // #44: publik dijual harga tetap per tier di OpenSea; eksklusif dilelang koin AXTO mulai $1 di axto.io
-  for (const [c, id] of [['time', 7], ['stamp', 9_999_999], ['quran', 10_000_000], ['model', 3]]) {
+  // OpenSea: harga tetap $1-$10.000 & edisi 1-10 dari tier (makin langka makin sedikit & makin mahal)
+  for (const [c, id] of [['time', 7], ['stamp', 9_999_999], ['quran', 10_000_000], ['model', 3], ['hadith', 42]]) {
     const d = dna(c, id);
-    const price = metadata(c, id).attributes.find((a) => a.trait_type === 'Price (USD)');
-    assert.equal(price.value, String([10, 25, 75, 250, 1000][d.tier.rank]), c);
+    const b = BANDS[d.tier.rank];
+    const e = edition(c, id);
+    const attrs = metadata(c, id).attributes;
+    assert.equal(attrs.find((a) => a.trait_type === 'Price (USD)').value, String(e.priceUsd), c);
+    assert.equal(attrs.find((a) => a.trait_type === 'Edition Size').value, e.supply, c);
+    assert.ok(b.price.includes(e.priceUsd), `${c} harga ${e.priceUsd} di luar tier ${b.name}`);
+    assert.ok(e.supply >= b.supply[1] && e.supply <= b.supply[0], `${c} edisi ${e.supply} di luar tier ${b.name}`);
   }
-  for (const [c, id] of [['ex-time', 10_000], ['ex-quran', 1], ['ex-model', 77]]) {
-    const price = metadata(c, id).attributes.find((a) => a.trait_type === 'Starting Price (USD)');
-    assert.equal(price.value, '1', c);
+  assert.equal(BANDS[0].price[0], 1);
+  assert.equal(BANDS[4].price.at(-1), 10_000);
+  assert.deepEqual(BANDS[4].supply, [1, 1]);
+  // eksklusif: harga tetap $1, 10 edisi
+  for (const [c, id] of [['ex-time', 10_000], ['ex-quran', 1], ['ex-model', 77], ['ex-hadith', 5]]) {
+    const attrs = metadata(c, id).attributes;
+    assert.equal(attrs.find((a) => a.trait_type === 'Price (USD)').value, '1', c);
+    assert.equal(attrs.find((a) => a.trait_type === 'Edition Size').value, 10, c);
   }
 });
 

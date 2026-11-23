@@ -22,7 +22,7 @@ export async function withCfg(env) {
   }
   const c = cache.cfg;
   if (!c) return env;
-  const out = { ...env, CHAIN_ID: String(c.chainId), BASE_RPC: NETWORKS[c.chainId]?.rpc ?? env.BASE_RPC, AUCTION_HOUSE: c.auctionHouse, AXTO_TOKEN: c.token, AXTO_SALE: c.sale, USDC: c.usdc };
+  const out = { ...env, CHAIN_ID: String(c.chainId), BASE_RPC: NETWORKS[c.chainId]?.rpc ?? env.BASE_RPC, AUCTION_HOUSE: c.auctionHouse ?? '', AXTO_TOKEN: c.token, AXTO_SALE: c.sale ?? '', USDC: c.usdc, STANDARD: c.standard ?? 'erc721', RELEASED: JSON.stringify(c.released ?? {}) };
   // lelang langsung jalan begitu kontrak aktif (perintah pemilik #38): genesis dari cfg bila wrangler tidak menetapkan
   if (!Number(env.GENESIS_MS) && c.genesis) out.GENESIS_MS = String(c.genesis);
   for (const k of COL_KEYS) out[colVar(k)] = c.collections?.[k] ?? '';
@@ -36,7 +36,9 @@ export async function saveContracts(env, admin, body) {
   if (!net) return { ok: false, error: 'chain' };
   // vesting/lock opsional: sejak perintah #39 seluruh koin di wallet koin pemilik (dibagi sendiri)
   const keys = COL_KEYS.filter((k) => !LATE_KEYS.includes(k) || body.collections?.[k]);
-  const all = [body.token, body.sale, body.auctionHouse, ...(body.vesting ? [body.vesting] : []), ...(body.lock ? [body.lock] : []), ...keys.map((k) => body.collections?.[k])];
+  // desain akhir 23 Nov 2026 (ERC-1155 edisi): hanya token + 10 koleksi; AuctionHouse/AxtoSale tidak lagi dideploy
+  const editions = body.standard === 'erc1155';
+  const all = [body.token, ...(editions ? [] : [body.sale, body.auctionHouse]), ...(body.vesting ? [body.vesting] : []), ...(body.lock ? [body.lock] : []), ...keys.map((k) => body.collections?.[k])];
   if (!all.every(isAddress)) return { ok: false, error: 'address' };
   const rpc = async (method, params) => {
     const r = await fetch(net.rpc, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }) });
@@ -47,7 +49,7 @@ export async function saveContracts(env, admin, body) {
     if (!code || code === '0x') return { ok: false, error: `no_code ${a}` };
   }
   // owner(): NFT (AuctionHouse + koleksi) = wallet admin; koin (Token + Sale) = wallet koin
-  const owners = [[body.auctionHouse, admin], ...keys.map((k) => [body.collections[k], admin]), [body.token, env.COIN_WALLET], [body.sale, env.COIN_WALLET]];
+  const owners = [...(editions ? [] : [[body.auctionHouse, admin], [body.sale, env.COIN_WALLET]]), ...keys.map((k) => [body.collections[k], admin]), [body.token, env.COIN_WALLET]];
   for (const [a, want] of owners) {
     const o = await ethCall(net.rpc, a, '0x8da5cb5b');
     if (`0x${o.slice(-40)}`.toLowerCase() !== String(want).toLowerCase()) return { ok: false, error: `owner ${a}` };
@@ -55,7 +57,8 @@ export async function saveContracts(env, admin, body) {
   const prev = await readJSON(env.STORE, 'cfg/active.json').catch(() => null);
   // ronde pertama: segel saat ini juga, live 1 jam kemudian (lelang 72 jam mulai $1) — tidak diubah bila disimpan ulang
   const genesis = prev?.chainId === chainId && prev?.genesis ? prev.genesis : Math.ceil((Date.now() + 65 * 60_000) / 60_000) * 60_000;
-  const cfg = { chainId, token: body.token, sale: body.sale, auctionHouse: body.auctionHouse, store: isAddress(body.store) ? body.store : null, vesting: body.vesting ?? null, lock: body.lock ?? null, usdc: net.usdc, collections: Object.fromEntries(keys.map((k) => [k, body.collections[k]])), genesis, savedAt: Date.now(), by: admin };
+  const released = Object.fromEntries(Object.entries(body.released ?? {}).filter(([k, v]) => COL_KEYS.includes(k) && Number.isSafeInteger(v) && v >= 0));
+  const cfg = { chainId, standard: editions ? 'erc1155' : 'erc721', released, token: body.token, sale: editions ? null : body.sale, auctionHouse: editions ? null : body.auctionHouse, store: isAddress(body.store) ? body.store : null, vesting: body.vesting ?? null, lock: body.lock ?? null, usdc: net.usdc, collections: Object.fromEntries(keys.map((k) => [k, body.collections[k]])), genesis, savedAt: Date.now(), by: admin };
   await putJSON(env.STORE, `cfg/contracts-${chainId}.json`, cfg);
   await putJSON(env.STORE, 'cfg/active.json', cfg);
   await appendLog(env.STORE, 'admin', { ev: 'contracts', chainId, by: admin });

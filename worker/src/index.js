@@ -6,6 +6,7 @@
 import { dna } from '../../engine/src/dna.js';
 import { metadata, contractMetadata, renderCtx, animatedSvg, renderPlayerLive, attributesId, attributesFor, hadithBlurb, browse, browseList, listFacets, seriesKey, seriesOptions, quranRef } from '../../engine/src/metadata.js';
 import { showcaseIds, SHOWCASE_KEYS, priceUsd } from '../../engine/src/showcase.js';
+import { edition, designOf } from '../../engine/src/editions.js';
 import { hadithRef } from '../../engine/src/render/hadith.js';
 import { collectionSeo, seriesSeo, surahSeo, hubSeo, breadcrumb, itemList, seriesLabel, surahInfo, BREAD } from './seo.js';
 import { COLLECTIONS, sha256Hex } from '../../engine/src/core.js';
@@ -136,6 +137,20 @@ async function api(request, env, ctx, url) {
     const [c, id] = [m[1], Number(m[2])];
     if (!validToken(c, id)) return json({ error: 'not_found' }, 404);
     return cached(request, ctx, async () => json(metadata(c, id, env.BASE_URL), 200, { 'cache-control': IMMUTABLE, 'access-control-allow-origin': '*' }));
+  }
+  // metadata kontrak edisi ERC-1155 (uri = /api/edition/<koleksi>/<id>): koleksi OpenSea → id = urutan rilis k, karyanya
+  // designOf(k); eksklusif → id = karya. Edisi & harga dari engine/src/editions.js (sama dengan kontrak & listing).
+  m = /^\/api\/edition\/([a-z-]+)\/(\d+)$/.exec(p);
+  if (m && COLLECTIONS[m[1]]) {
+    const [c, n] = [m[1], Number(m[2])];
+    const ex = COLLECTIONS[c].exclusive;
+    if (!Number.isSafeInteger(n) || n < 1 || n > COLLECTIONS[c].max) return json({ error: 'not_found' }, 404);
+    const design = ex ? n : designOf(c, n);
+    const e = edition(c, design);
+    return cached(request, ctx, async () => {
+      const meta = metadata(c, design, env.BASE_URL);
+      return json({ ...meta, external_url: `${env.BASE_URL}/en/nft/${c}/${design}`, properties: { design, edition_size: e.supply, price_usd: e.priceUsd, tier: e.tier } }, 200, { 'cache-control': IMMUTABLE, 'access-control-allow-origin': '*' });
+    });
   }
   m = /^\/api\/contract\/([a-z-]+)$/.exec(p);
   if (m && COLLECTIONS[m[1]]) return json(contractMetadata(m[1], env.BASE_URL), 200, { 'cache-control': IMMUTABLE, 'access-control-allow-origin': '*' });
@@ -288,7 +303,7 @@ async function api(request, env, ctx, url) {
     const b = await readBody(request, 8192);
     const r = await saveContracts(env, s.wallet, b);
     if (r.ok) {
-      try { await vault(env, 'setConfig', { chainId: r.cfg.chainId, auctionHouse: r.cfg.auctionHouse, sale: r.cfg.sale, usdc: r.cfg.usdc, rpc: NETWORKS[r.cfg.chainId].rpc }); } catch (e) { r.vault = String(e.message); }
+      try { await vault(env, 'setConfig', { chainId: r.cfg.chainId, standard: r.cfg.standard, auctionHouse: r.cfg.auctionHouse, sale: r.cfg.sale, usdc: r.cfg.usdc, rpc: NETWORKS[r.cfg.chainId].rpc }); } catch (e) { r.vault = String(e.message); }
     }
     return json(r, r.ok ? 200 : 400);
   }
@@ -378,7 +393,7 @@ async function api(request, env, ctx, url) {
     if (!(await engineAuth(request, env, body))) return json({ error: 'auth' }, 401);
     const r = await saveContracts(env, env.ADMIN_WALLET, JSON.parse(body));
     if (r.ok) {
-      try { await vault(env, 'setConfig', { chainId: r.cfg.chainId, auctionHouse: r.cfg.auctionHouse, sale: r.cfg.sale, usdc: r.cfg.usdc, rpc: NETWORKS[r.cfg.chainId].rpc }); } catch (e) { r.vault = String(e.message); }
+      try { await vault(env, 'setConfig', { chainId: r.cfg.chainId, standard: r.cfg.standard, auctionHouse: r.cfg.auctionHouse, sale: r.cfg.sale, usdc: r.cfg.usdc, rpc: NETWORKS[r.cfg.chainId].rpc }); } catch (e) { r.vault = String(e.message); }
     }
     return json(r, r.ok ? 200 : 400);
   }
@@ -393,12 +408,29 @@ async function api(request, env, ctx, url) {
 }
 
 /** Tautan OpenSea untuk karya publik bila kontrak koleksi sudah aktif. */
+/** Kontrak edisi: karya → token id OpenSea (urutan rilis k), untuk karya yang sudah dirilis. Peta dibuat sekali per isolate. */
+const RELEASE_MAP = new Map();
+function tokenIdOf(env, c, design) {
+  if (env.STANDARD !== 'erc1155') return design;
+  const released = Number(JSON.parse(env.RELEASED || '{}')[c] ?? 0);
+  let hit = RELEASE_MAP.get(c);
+  if (!hit || hit.n !== released) {
+    const map = new Map();
+    for (let k = 1; k <= released; k += 1) map.set(designOf(c, k), k);
+    hit = { n: released, map };
+    RELEASE_MAP.set(c, hit);
+  }
+  return hit.map.get(design) ?? null;
+}
+
 function openseaUrl(env, c, id) {
   if (COLLECTIONS[c]?.exclusive) return '';
   const addr = env[`COLLECTION_${c.replace('-', '_').toUpperCase()}`];
   const net = NETWORKS[Number(env.CHAIN_ID)];
   if (!addr || !net) return '';
-  return `${Number(env.CHAIN_ID) === 8453 ? 'https://opensea.io' : 'https://testnets.opensea.io'}/assets/${net.opensea}/${addr}/${id}`;
+  const tokenId = tokenIdOf(env, c, id);
+  if (tokenId === null) return '';
+  return `${Number(env.CHAIN_ID) === 8453 ? 'https://opensea.io' : 'https://testnets.opensea.io'}/assets/${net.opensea}/${addr}/${tokenId}`;
 }
 
 async function svg(request, env, ctx, c, id, origin) {
