@@ -48,7 +48,7 @@ before(async () => {
   chainId = (await provider.getNetwork()).chainId;
   usdc = await deploy('MockUSDC');
   feed = await deploy('MockFeed', 2000n * 10n ** 8n);
-  token = await deploy('AxtoToken', owner.address, [owner.address], [E(10_000_000)]); // di tes: semua ke owner
+  token = await deploy('AxtoToken', owner.address, [owner.address], [E(100_000_000)], []); // di tes: semua ke owner
   sale = await deploy('AxtoSale', owner.address, await token.getAddress(), await usdc.getAddress(), await feed.getAddress(), treasury.address, signerW.address, owner.address);
   house = await deploy('AxtoAuctionHouse', owner.address, treasury.address, signerW.address, [await usdc.getAddress(), await token.getAddress()], await token.getAddress(), BANK);
   col = await deploy('AxtoCollection', { name: 'AXTO Time', symbol: 'AXTIME', maxSupply: 2_000_000, owner: owner.address, royaltyReceiver: treasury.address, baseURI: 'https://axto.io/api/meta/time/', contractURI: 'https://axto.io/api/contract/time', custody: owner.address, premint: 2_000_000, operator: await house.getAddress(), signer: ethers.ZeroAddress });
@@ -64,12 +64,12 @@ before(async () => {
   for (const w of [alice, bob, carol]) await (await usdc.mint(w.address, U(10_000))).wait();
 });
 
-test('koin: supply 10 jt tetap; presale menjual lewat allowance 2 jt dari wallet presale', async () => {
-  assert.equal(await token.totalSupply(), E(10_000_000));
+test('koin: supply 100 jt tetap; presale menjual lewat allowance 20 jt dari wallet presale', async () => {
+  assert.equal(await token.totalSupply(), E(100_000_000));
   // di tes ini pemilik memindahkan sendiri 3 jt (vesting) & 2 jt (kunci) dari walletnya
-  assert.equal(await token.balanceOf(owner.address), E(5_000_000));
+  assert.equal(await token.balanceOf(owner.address), E(95_000_000));
   assert.equal(await token.balanceOf(await sale.getAddress()), 0n);
-  assert.equal(await token.allowance(owner.address, await sale.getAddress()), E(2_000_000));
+  assert.equal(await token.allowance(owner.address, await sale.getAddress()), E(20_000_000));
   assert.equal(token.interface.getFunction('mint'), null);
   assert.equal(token.interface.getFunction('burn'), null);
 });

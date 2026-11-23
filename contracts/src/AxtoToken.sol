@@ -11,26 +11,30 @@ interface IAxtoSaleSold {
 
 /**
  * @title AXTO
- * @notice Koin AXTO: 10.000.000 dicetak sekali saat deploy langsung ke alamat-alamat pemilik (perintah #41):
- *  presale 2 jt · vesting/listing DEX 3 jt · hold 5 tahun 3 jt · bank (jatah owner) 2 jt. Presale menjual dari wallet
- *  presale lewat allowance; bank juga menerima komisi 10% marketplace yang dibayar AXTO (AxtoAuctionHouse.feeWallet).
+ * @notice Koin AXTO: 100.000.000 dicetak sekali saat deploy langsung ke alamat-alamat pemilik (perintah #41; suplai
+ *  diubah pemilik 23 Nov 2026 „Supply axto coin ubah jadi 100jt … dengan pembagian persen yg sama"):
+ *  presale 20 jt · vesting/listing DEX 30 jt · hold 5 tahun 30 jt · bank (jatah owner) 20 jt. Presale dijual axto.io
+ *  lewat NOWPayments (pembukuan di axto.io); koin yang dibeli kembali (buyback) masuk ke wallet buyback pemilik.
  *  Tidak ada mint tambahan, burn, pajak transfer, maupun blacklist.
  *  Sebelum `enableTrading` transfer antar-pengguna dikunci; yang boleh hanya transfer yang melibatkan alamat
  *  tepercaya (Sale, AuctionHouse, Vesting, Lock, treasury, owner). `enableTrading` satu arah — tidak bisa dimatikan
- *  lagi — dan hanya bisa setelah presale 2.000.000 AXTO habis atau 365 hari sejak deploy.
+ *  lagi — dan hanya bisa setelah presale ditutup (habis 20.000.000 AXTO / ditutup pemilik) atau 365 hari sejak deploy.
  */
 /// @dev Ownable satu langkah: deployer sistem membagi koin lalu langsung menyerahkan owner ke wallet koin (perintah #31).
 contract AxtoToken is ERC20, ERC20Permit, Ownable {
-    uint256 public constant TOTAL_SUPPLY = 10_000_000 ether;
-    uint256 public constant PRESALE_TARGET = 2_000_000 ether;
+    uint256 public constant TOTAL_SUPPLY = 100_000_000 ether;
+    uint256 public constant PRESALE_TARGET = 20_000_000 ether;
     uint256 public immutable deployedAt;
 
     bool public tradingEnabled;
+    /// @notice Presale axto.io (NOWPayments) dinyatakan selesai oleh pemilik — satu arah.
+    bool public presaleClosed;
     uint256 public tradingEnabledAt;
     address public sale;
     mapping(address => bool) public trusted;
 
     event TradingEnabled(uint256 at);
+    event PresaleClosed(uint256 at);
     event TrustedUpdated(address account, bool trusted);
     event SaleSet(address sale);
 
@@ -38,9 +42,9 @@ contract AxtoToken is ERC20, ERC20Permit, Ownable {
     error TradingConditionsNotMet();
 
     /// @notice Pembagian langsung saat deploy ke alamat-alamat milik pemilik (perintah #41): presale, vesting/listing DEX,
-    ///  hold 5 tahun, bank (jatah owner). Jumlah harus tepat 10.000.000; semua penerima tepercaya (boleh saling kirim
-    ///  sebelum listing DEX).
-    constructor(address owner_, address[] memory to, uint256[] memory amounts) ERC20("AXTO", "AXTO") ERC20Permit("AXTO") Ownable(owner_) {
+    ///  hold 5 tahun, bank (jatah owner). Jumlah harus tepat 100.000.000; semua penerima tepercaya (boleh saling kirim
+    ///  sebelum listing DEX). `extraTrusted`: wallet pemilik lain tanpa jatah awal (mis. wallet buyback).
+    constructor(address owner_, address[] memory to, uint256[] memory amounts, address[] memory extraTrusted) ERC20("AXTO", "AXTO") ERC20Permit("AXTO") Ownable(owner_) {
         require(to.length == amounts.length && to.length > 0, "alloc");
         deployedAt = block.timestamp;
         trusted[owner_] = true;
@@ -52,6 +56,17 @@ contract AxtoToken is ERC20, ERC20Permit, Ownable {
             sum += amounts[i];
         }
         require(sum == TOTAL_SUPPLY, "total");
+        for (uint256 i; i < extraTrusted.length; ++i) {
+            require(extraTrusted[i] != address(0), "trusted");
+            trusted[extraTrusted[i]] = true;
+        }
+    }
+
+    /// @notice Presale axto.io (dijual lewat NOWPayments, dibukukan di axto.io) selesai — membuka jalan `enableTrading`.
+    function closePresale() external onlyOwner {
+        require(!presaleClosed, "closed");
+        presaleClosed = true;
+        emit PresaleClosed(block.timestamp);
     }
 
     /// @notice Daftarkan kontrak resmi. Hanya berpengaruh sebelum trading dibuka.
@@ -75,7 +90,7 @@ contract AxtoToken is ERC20, ERC20Permit, Ownable {
 
     function enableTrading() external onlyOwner {
         require(!tradingEnabled, "enabled");
-        bool soldOut = sale != address(0) && IAxtoSaleSold(sale).sold() >= PRESALE_TARGET;
+        bool soldOut = presaleClosed || (sale != address(0) && IAxtoSaleSold(sale).sold() >= PRESALE_TARGET);
         if (!soldOut && block.timestamp < deployedAt + 365 days) revert TradingConditionsNotMet();
         tradingEnabled = true;
         tradingEnabledAt = block.timestamp;
