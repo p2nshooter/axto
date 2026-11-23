@@ -9,7 +9,7 @@ const IMG = Buffer.alloc(40_000, 7);
 const mkIO = () => {
   const files = {};
   const bytes = {};
-  return { files, bytes, getText: (k) => files[k] ?? null, putText: (k, v) => { files[k] = v; }, putBytes: (k, b, t) => { bytes[k] = t; }, copy: (a, b) => { bytes[b] = 'image/png'; } };
+  return { files, bytes, getText: (k) => files[k] ?? null, putText: (k, v) => { files[k] = v; }, putBytes: (k, b, t) => { bytes[k] = t; }, copy: (a, b, t = 'image/png') => { bytes[b] = t; } };
 };
 const res = (status, body, type) => new Response(body, { status, headers: type ? { 'content-type': type } : {} });
 const ENV = { CLOUDFLARE_ACCOUNT_ID: 'acc', CLOUDFLARE_API_KEY: 'k', CLOUDFLARE_EMAIL: 'e@x' };
@@ -69,4 +69,22 @@ test('putaran berikutnya: hasil AI Horde & ulyah.com masuk dengan nomor seri lan
   assert.equal(st.by[q3], 'huggingface-ulyah');
   assert.equal(io.bytes[`axto-nft-data/gpu/quran/${q2}.png`], 'image/webp');
   assert.equal(r.hordePending, 0);
+});
+
+test('video GPU: hasil video disalin & ditandai vid; karya G- tanpa video masuk antrean (bukan bertanda situs lain)', async () => {
+  const io = mkIO();
+  const [a, b, c2] = showcaseIds('time').ids;
+  io.files['axto-nft-data/os/gpu-time.json'] = JSON.stringify({ ids: [a, b, c2], serial: { [a]: 1, [b]: 2, [c2]: 3 }, by: { [a]: 'cloudflare-workers-ai', [b]: 'cloudflare-workers-ai', [c2]: 'pollinations' } });
+  io.files['ulyah-media/axto-gpu/video-done.json'] = JSON.stringify({ done: { [`time:${a}`]: { at: 'x', bytes: 1, space: 's' } } });
+  const r = await run({ io, fetchImpl: async () => new Response('down', { status: 503 }), env: {}, log: () => {}, perCol: 1, max: { direct: 0, horde: 0 }, pause: async () => {} });
+  assert.equal(io.bytes[`axto-nft-data/gpu/time/${a}.mp4`], 'video/mp4');
+  const st = JSON.parse(io.files['axto-nft-data/os/gpu-time.json']);
+  assert.deepEqual(st.vid, { [a]: true });
+  assert.deepEqual(st.serial, { [a]: 1, [b]: 2, [c2]: 3 }, 'nomor seri tetap');
+  const jobs = JSON.parse(io.files['ulyah-media/axto-gpu/video-jobs.json']).jobs.filter((j) => j.c === 'time');
+  assert.deepEqual(jobs.map((j) => j.id), [b], 'hanya karya bersih yang belum beranimasi');
+  assert.equal(jobs[0].img, `https://axto.io/gpu/time/${b}.png?v=b`);
+  assert.match(jobs[0].prompt, /clock hands rotate/);
+  assert.match(jobs[0].prompt, /no text/);
+  assert.equal(r.beranimasi.time, 1);
 });

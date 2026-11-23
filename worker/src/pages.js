@@ -212,7 +212,7 @@ function stageHtml(lang, c, id, meta, info) {
   if (!info?.gpuSerial) return `<div class="stage">${play}</div>`;
   const g = Boolean(info.gpuFirst);
   const gl = `G-${fmt(info.gpuSerial, lang)}`;
-  const tabs = `<nav class="stagetabs" aria-label="${esc(lang === 'id' ? 'Versi karya' : 'Artwork version')}"><a href="?v=g"${g ? ' aria-current="true"' : ''}>${esc(gl)} · ${esc(lang === 'id' ? 'Lukisan GPU hidup' : 'Living GPU painting')}</a><a href="?v=a"${g ? '' : ' aria-current="true"'}>${esc(lang === 'id' ? 'Animasi asli' : 'Original animation')}</a></nav>`;
+  const tabs = `<nav class="stagetabs" aria-label="${esc(lang === 'id' ? 'Versi karya' : 'Artwork version')}"><a href="?v=g"${g ? ' aria-current="true"' : ''}>${esc(gl)} · ${esc(lang === 'id' ? 'Animasi GPU' : 'GPU animation')}</a><a href="?v=a"${g ? '' : ' aria-current="true"'}>${esc(lang === 'id' ? 'Animasi asli' : 'Original animation')}</a></nav>`;
   const hidup = `<iframe src="/gplay/${c}/${id}" title="${esc(meta.name)} — ${esc(gl)}" loading="lazy" allow="fullscreen" sandbox="allow-scripts allow-same-origin"></iframe>`;
   return `<div class="stage${g ? ' gstage' : ''}">${g ? hidup : play}</div>${tabs}`;
 }

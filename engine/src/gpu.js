@@ -32,10 +32,23 @@ export function promptFor(key, id) {
 
 /** Tambah karya ke dokumen seri G- koleksi (murni): nomor seri berikutnya, tidak dobel. Mengembalikan undefined bila sudah ada. */
 export function tambahSeri(doc, id, by, at = new Date().toISOString()) {
-  const d = { ids: [...(doc?.ids ?? [])], serial: { ...(doc?.serial ?? {}) }, by: { ...(doc?.by ?? {}) }, at };
+  const d = { ...(doc ?? {}), ids: [...(doc?.ids ?? [])], serial: { ...(doc?.serial ?? {}) }, by: { ...(doc?.by ?? {}) }, at }; // kolom lain (vid) ikut
   if (d.ids.includes(id)) return undefined;
   d.ids.push(id);
   d.serial[id] = Math.max(0, ...Object.values(d.serial).map(Number)) + 1;
   d.by[id] = by;
   return d;
+}
+
+/**
+ * Prompt GERAK untuk GPU gambar→video (pemilik, 24 Nov 2026: „Series G- wajib sudah dengan animasi saat produksi, jd 100% di
+ * buatkan GPU"). Gerak dibuat GPU dari lukisan G- itu sendiri; tanpa teks, tanpa orang.
+ */
+export function gerakFor(key, id) {
+  const c = key.replace(/^ex-/, '');
+  const akhir = 'smooth seamless loop, cinematic, high detail, no text, no letters, no people';
+  if (c === 'time') return `the watch comes alive: the clock hands rotate smoothly around the dial, the second hand sweeps, gemstones sparkle and glint, light glides across the polished metal, slow camera push-in, ${akhir}`;
+  if (c === 'stamp') return `the vintage postage stamp comes alive: the engraved scene inside moves gently, soft light sweeps across the paper and perforated edges, subtle parallax, slow camera drift, ${akhir}`;
+  if (c === 'quran' || c === 'hadith') return `the illuminated manuscript ornament comes alive: gold leaf shimmers, arabesque patterns glow and pulse softly, light rays drift across the frame, slow camera push-in, the central panel stays empty, ${akhir}`;
+  throw new Error(`koleksi ${key} tidak dianimasikan GPU`);
 }

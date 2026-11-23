@@ -37,10 +37,12 @@ test('player G- Jam & Prangko tidak pernah memuat teks Arab/ayat — teks Arab h
   const { dna } = await import('../../engine/src/dna.js');
   const AYAT = { ar: 'بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ', surah: 1, ayah: 1 }; // sengaja diberikan: tetap tidak boleh tampil
   for (const c of ['time', 'ex-time', 'stamp', 'ex-stamp']) {
-    const html = gpuPlayer(dna(c, 5), metadata(c, 5, 'https://axto.io'), AYAT, { img: `/gpu/${c}/5.png?v=b`, g: 1, ref: 'x' });
+    const html = gpuPlayer(dna(c, 5), metadata(c, 5, 'https://axto.io'), AYAT, { img: `/gpu/${c}/5.png?v=b`, video: `/gpu/${c}/5.mp4`, g: 1, ref: 'x' });
     assert.doesNotMatch(html, /[؀-ۿ]/, `${c}: tidak boleh ada huruf Arab`);
     assert.doesNotMatch(html, /id="ar"|Amiri/, c);
   }
-  assert.match(gpuPlayer(dna('time', 5), metadata('time', 5, 'https://axto.io'), {}, { img: 'x', g: 1 }), /id="hh"[\s\S]*id="mm"[\s\S]*id="ss"/, 'jam: jarum jam, menit, detik');
-  for (const c of ['hadith', 'ex-quran']) assert.match(gpuPlayer(dna(c, 5), metadata(c, 5, 'https://axto.io'), AYAT, { img: 'x', g: 1, ref: 'r' }), /بِسْمِ/, c);
+  const jam = gpuPlayer(dna('time', 5), metadata('time', 5, 'https://axto.io'), {}, { img: '/gpu/time/5.png?v=b', video: '/gpu/time/5.mp4', g: 1 });
+  assert.match(jam, /<video src="\/gpu\/time\/5\.mp4" poster="\/gpu\/time\/5\.png\?v=b" autoplay muted loop playsinline/, 'animasi = video buatan GPU');
+  assert.doesNotMatch(jam, /@keyframes|requestAnimationFrame|animation:/, 'tanpa animasi tiruan di peramban (100% GPU)');
+  for (const c of ['hadith', 'ex-quran']) assert.match(gpuPlayer(dna(c, 5), metadata(c, 5, 'https://axto.io'), AYAT, { img: 'x', video: 'v', g: 1, ref: 'r' }), /بِسْمِ/, c);
 });

@@ -20,7 +20,7 @@ import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { GPU_KEYS, candidates, NEGATIVE, promptFor, tambahSeri } from '../engine/src/gpu.js';
+import { GPU_KEYS, candidates, NEGATIVE, promptFor, tambahSeri, gerakFor } from '../engine/src/gpu.js';
 export { GPU_KEYS, candidates, NEGATIVE, promptFor };
 const QUEUE_PER_COL = Number(process.env.QUEUE_PER_COL || 24);
 const UA = 'axto-gpu/1.0 (+https://axto.io)';
@@ -84,7 +84,7 @@ export function realIO() {
     getText: (bk) => { const f = join(tmp, 'g'); try { wr(['get', bk, '--file', f]); return readFileSync(f, 'utf8'); } catch { return null; } },
     putText: (bk, text) => { const f = join(tmp, 'p'); writeFileSync(f, text); wr(['put', bk, '--file', f, '--content-type', 'application/json']); },
     putBytes: (bk, bytes, type) => { const f = join(tmp, 'b'); writeFileSync(f, bytes); wr(['put', bk, '--file', f, '--content-type', type, '--cache-control', 'public, max-age=31536000, immutable']); },
-    copy: (from, to) => { const f = join(tmp, 'c'); wr(['get', from, '--file', f]); wr(['put', to, '--file', f, '--content-type', 'image/png', '--cache-control', 'public, max-age=31536000, immutable']); },
+    copy: (from, to, type = 'image/png') => { const f = join(tmp, 'c'); wr(['get', from, '--file', f]); wr(['put', to, '--file', f, '--content-type', type, '--cache-control', 'public, max-age=31536000, immutable']); },
   };
 }
 
@@ -178,18 +178,43 @@ export async function run({ io = realIO(), fetchImpl = fetch, env = process.env,
   const ulyahJobs = queue.slice(qi, qi + perCol * GPU_KEYS.length).map((j) => ({ ...j, prompt: promptFor(j.c, j.id) }));
   io.putText('ulyah-media/axto-gpu/jobs.json', JSON.stringify({ at: new Date().toISOString(), jobs: ulyahJobs }));
   io.putText('axto-nft-data/os/gpu-horde.json', JSON.stringify({ at: new Date().toISOString(), pending: keep }));
+  // f) VIDEO GPU (pemilik 24 Nov 2026: seri G- wajib sudah beranimasi saat produksi, 100% dibuat GPU): video yang sudah
+  // dirender kunci GPU ulyah.com disalin ke R2 axto.io dan ditandai vid; karya G- yang belum beranimasi masuk antrean video.
+  const vdone = parse(io.getText('ulyah-media/axto-gpu/video-done.json'), { done: {} });
+  const vidBaru = Object.fromEntries(GPU_KEYS.map((c) => [c, []]));
+  for (const k of Object.keys(vdone.done ?? {})) {
+    const [c, s] = k.split(':');
+    const id = Number(s);
+    if (!GPU_KEYS.includes(c) || !have(c, id) || st[c].vid?.[id]) continue;
+    try { io.copy(`ulyah-media/axto-gpu/vid/${c}/${id}.mp4`, `axto-nft-data/gpu/${c}/${id}.mp4`, 'video/mp4'); vidBaru[c].push(id); dirty.add(c); bump('video-gpu'); } catch { /* putaran berikutnya */ }
+  }
+  const videoJobs = [];
+  for (let i = 0; videoJobs.length < 48; i += 1) {
+    let any = false;
+    for (const c of GPU_KEYS) {
+      const belum = st[c].ids.filter((id) => !st[c].vid?.[id] && !vidBaru[c].includes(id) && st[c].by?.[id] !== 'pollinations');
+      if (belum[i] === undefined) continue;
+      any = true;
+      videoJobs.push({ c, id: belum[i], img: `https://axto.io/gpu/${c}/${belum[i]}.png?v=b`, prompt: gerakFor(c, belum[i]) });
+    }
+    if (!any) break;
+  }
+  io.putText('ulyah-media/axto-gpu/video-jobs.json', JSON.stringify({ at: new Date().toISOString(), jobs: videoJobs }));
+
   // Worker axto.io juga menambah seri G- tiap 5 menit (Cron Trigger + Workers AI). Agar tidak saling menimpa, dokumen
-  // dibaca ULANG tepat sebelum ditulis dan hanya karya baru putaran ini yang ditambahkan (nomor seri lanjutan terbaru).
+  // dibaca ULANG tepat sebelum ditulis dan hanya perubahan putaran ini yang ditambahkan (nomor seri lanjutan terbaru).
   for (const c of GPU_KEYS) {
     if (!dirty.has(c)) continue;
     let doc = parse(io.getText(`axto-nft-data/os/gpu-${c}.json`), { ids: [], serial: {}, by: {} });
     for (const x of baru[c]) doc = tambahSeri(doc, x.id, x.by) ?? doc;
+    if (vidBaru[c].length) doc = { ...doc, vid: { ...(doc.vid ?? {}), ...Object.fromEntries(vidBaru[c].filter((id) => doc.ids.includes(id)).map((id) => [id, true])) } };
     st[c] = doc;
     io.putText(`axto-nft-data/os/gpu-${c}.json`, JSON.stringify(doc));
   }
   const summary = Object.fromEntries(GPU_KEYS.map((c) => [c, st[c].ids.length]));
-  log(`Seri G-: ${JSON.stringify(summary)} · baru per GPU ${JSON.stringify(made)} · AI Horde menunggu ${keep.length} · antrean ulyah ${ulyahJobs.length}${P.why ? ` · alasan gagal ${JSON.stringify(P.why)}` : ''}`);
-  return { summary, made, hordePending: keep.length, ulyahQueued: ulyahJobs.length, why: P.why ?? {} };
+  const beranimasi = Object.fromEntries(GPU_KEYS.map((c) => [c, Object.keys(st[c].vid ?? {}).length]));
+  log(`Seri G-: ${JSON.stringify(summary)} · beranimasi ${JSON.stringify(beranimasi)} · baru per GPU ${JSON.stringify(made)} · antrean video ${videoJobs.length} · AI Horde menunggu ${keep.length} · antrean ulyah ${ulyahJobs.length}${P.why ? ` · alasan gagal ${JSON.stringify(P.why)}` : ''}`);
+  return { summary, made, beranimasi, videoQueued: videoJobs.length, hordePending: keep.length, ulyahQueued: ulyahJobs.length, why: P.why ?? {} };
 }
 
 if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).href) {

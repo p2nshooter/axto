@@ -68,10 +68,13 @@ async function gpuSet(env, c) {
   try { doc = await readJSON(env.STORE, `os/gpu-${c}.json`); } catch { doc = null; }
   // Karya yang menunggu dilukis ulang (gambar bertanda situs lain) TIDAK ditampilkan sampai gambarnya bersih —
   // nomor seri G- tetap (src/gpu.js melukis ulang dengan nomor yang sama).
-  const tampil = (x) => !GPUP.PERLU_ULANG.has(String(doc?.by?.[x] ?? ''));
-  const ids = Array.isArray(doc?.ids) ? doc.ids.filter((x) => Number.isSafeInteger(x) && x >= 1 && x <= COLLECTIONS[c].max && tampil(x)) : [];
+  // Seri G- WAJIB sudah beranimasi GPU saat tampil (pemilik 24 Nov 2026: „100% di buatkan GPU"): hanya karya yang videonya
+  // sudah dibuat GPU (doc.vid) yang muncul; gambar bersih tanpa video hanya bahan GPU video (route /gpu/*.png).
+  const bersihFn = (x) => !GPUP.PERLU_ULANG.has(String(doc?.by?.[x] ?? ''));
+  const semua = Array.isArray(doc?.ids) ? doc.ids.filter((x) => Number.isSafeInteger(x) && x >= 1 && x <= COLLECTIONS[c].max && bersihFn(x)) : [];
+  const ids = semua.filter((x) => doc?.vid?.[x] === true);
   const serial = Object.fromEntries(ids.map((x) => [x, doc.serial?.[x]]));
-  const v = { at: Date.now(), ids, serial, by: {} };
+  const v = { at: Date.now(), ids, serial, bersih: new Set(semua), by: {} };
   GPU.set(c, v);
   return v;
 }
@@ -487,7 +490,7 @@ async function svg(request, env, ctx, c, id, origin) {
   });
 }
 
-/** Player hidup seri G- (lukisan GPU + jarum jam / cap pos / teks Arab asli, bergerak di peramban). */
+/** Player seri G-: video buatan GPU dari lukisan G- (+ teks Arab asli diam pada koleksi kaligrafi). */
 async function gpuPlay(env, c, id, origin) {
   const gs = await gpuSet(env, c);
   if (!gs.ids.includes(id)) return new Response('not found', { status: 404 });
@@ -500,7 +503,7 @@ async function gpuPlay(env, c, id, origin) {
     if (d.kind === 'quran' && ctx.surah) ref = ctx.ayah ? `${ctx.surahLt ?? ''} · ${ctx.surah}:${ctx.ayah}` : `${ctx.surahLt ?? ''}`;
     if (d.kind === 'hadith') { const hr = hadithRef(d); ref = `${hr.nameId} · No. ${hr.number}`; }
   }
-  const html = gpuPlayer(d, meta, ctx, { img: `/gpu/${c}/${id}.png?v=b`, g: Number(gs.serial[id] ?? 0), ref });
+  const html = gpuPlayer(d, meta, ctx, { img: `/gpu/${c}/${id}.png?v=b`, video: `/gpu/${c}/${id}.mp4`, g: Number(gs.serial[id] ?? 0), ref });
   return new Response(html, { headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'public, max-age=300', 'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer' } });
 }
 
@@ -718,11 +721,31 @@ export default {
       if (m && validToken(m[1], Number(m[2]))) return await svg(request, env, ctx, m[1], Number(m[2]), url.origin);
       m = /^\/gpu\/([a-z-]+)\/(\d+)\.png$/.exec(p);
       if (m && validToken(m[1], Number(m[2]))) {
-        // hanya karya seri G- yang tampil (karya bertanda situs lain disembunyikan sampai dilukis ulang)
-        if (!(await gpuSet(env, m[1])).ids.includes(Number(m[2]))) return new Response('not found', { status: 404 });
+        // gambar bersih saja (karya bertanda situs lain disembunyikan sampai dilukis ulang); bahan video GPU
+        if (!(await gpuSet(env, m[1])).bersih.has(Number(m[2]))) return new Response('not found', { status: 404 });
         const o = await env.STORE.get(`gpu/${m[1]}/${m[2]}.png`);
         if (!o) return new Response('not found', { status: 404 });
         return new Response(o.body, { headers: { 'content-type': o.httpMetadata?.contentType ?? 'image/png', 'cache-control': 'public, max-age=86400, s-maxage=31536000, immutable', 'x-content-type-options': 'nosniff' } });
+      }
+      m = /^\/gpu\/([a-z-]+)\/(\d+)\.mp4$/.exec(p);
+      if (m && validToken(m[1], Number(m[2]))) {
+        // video seri G- buatan GPU — dukung Range agar peramban bisa memutar & melompat
+        if (!(await gpuSet(env, m[1])).ids.includes(Number(m[2]))) return new Response('not found', { status: 404 });
+        const key = `gpu/${m[1]}/${m[2]}.mp4`;
+        const rg = /^bytes=(\d*)-(\d*)$/.exec(request.headers.get('range') ?? '');
+        const head = await env.STORE.head(key);
+        if (!head) return new Response('not found', { status: 404 });
+        const size = head.size;
+        const H = { 'content-type': 'video/mp4', 'accept-ranges': 'bytes', 'cache-control': 'public, max-age=86400, immutable', 'x-content-type-options': 'nosniff' };
+        if (rg && (rg[1] || rg[2])) {
+          const start = rg[1] ? Number(rg[1]) : Math.max(0, size - Number(rg[2]));
+          const end = rg[1] && rg[2] ? Math.min(size - 1, Number(rg[2])) : size - 1;
+          if (start >= size || start > end) return new Response(null, { status: 416, headers: { 'content-range': `bytes */${size}` } });
+          const o = await env.STORE.get(key, { range: { offset: start, length: end - start + 1 } });
+          return new Response(o.body, { status: 206, headers: { ...H, 'content-range': `bytes ${start}-${end}/${size}`, 'content-length': String(end - start + 1) } });
+        }
+        const o = await env.STORE.get(key);
+        return new Response(o.body, { headers: { ...H, 'content-length': String(size) } });
       }
       m = /^\/gplay\/([a-z-]+)\/(\d+)$/.exec(p);
       if (m && validToken(m[1], Number(m[2]))) return await gpuPlay(env, m[1], Number(m[2]), url.origin);
