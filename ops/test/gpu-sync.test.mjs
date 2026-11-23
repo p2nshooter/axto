@@ -25,7 +25,7 @@ test('GPU gratis bergiliran: Workers AI & Pollinations merender, gagal → pinda
   let cf = 0;
   let pol = 0;
   const fetchImpl = async (url) => {
-    if (url.includes('/ai/run/')) { cf += 1; return cf % 3 === 0 ? res(429, 'limit') : res(200, JSON.stringify({ result: { image: IMG.toString('base64') } }), 'application/json'); }
+    if (url.endsWith('/internal/gpu/render')) { cf += 1; return cf % 3 === 0 ? res(502, JSON.stringify({ error: 'ai' }), 'application/json') : res(200, JSON.stringify({ ok: true, type: 'image/jpeg' }), 'application/json'); }
     if (url.includes('pollinations')) { pol += 1; return res(200, IMG, 'image/jpeg'); }
     if (url.includes('/generate/async')) return res(202, JSON.stringify({ id: `h${Math.random()}` }), 'application/json');
     return res(404, 'x');
@@ -37,7 +37,7 @@ test('GPU gratis bergiliran: Workers AI & Pollinations merender, gagal → pinda
     const st = JSON.parse(io.files[`axto-nft-data/os/gpu-${c}.json`]);
     assert.equal(st.ids.length, 2, c);
     assert.deepEqual(Object.values(st.serial).sort(), [1, 2]);
-    for (const id of st.ids) assert.ok(io.bytes[`axto-nft-data/gpu/${c}/${id}.png`]);
+    for (const id of st.ids) assert.ok(st.by[id] === 'cloudflare-workers-ai' || io.bytes[`axto-nft-data/gpu/${c}/${id}.png`], 'gambar tersimpan (Workers AI menyimpan sendiri di worker)');
   }
   assert.equal(r.hordePending, 2);
   assert.ok(r.ulyahQueued > 0);

@@ -16,6 +16,7 @@
  * ENV: CLOUDFLARE_API_KEY, CLOUDFLARE_EMAIL, CLOUDFLARE_ACCOUNT_ID · [GPU_BUDGET_MIN] · [QUEUE_PER_COL]
  */
 import { readFileSync, writeFileSync, mkdtempSync } from 'node:fs';
+import { createHmac } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -47,21 +48,19 @@ const isImage = (type, bytes) => /^image\/(png|jpeg|webp)/.test(type || '') && b
 /** Penyedia GPU gratis. Masing-masing: render(job) → {bytes, type} | null. */
 export function providers({ fetchImpl = fetch, env = process.env } = {}) {
   const list = [];
-  if (env.CLOUDFLARE_ACCOUNT_ID && env.CLOUDFLARE_API_KEY && env.CLOUDFLARE_EMAIL) {
+  // Workers AI lewat worker axto.io (binding AI): kunci HMAC engine = secret atau turunan CLOUDFLARE_API_KEY
+  const hk = env.ENGINE_HMAC_KEY || (env.CLOUDFLARE_API_KEY ? createHmac('sha256', env.CLOUDFLARE_API_KEY).update('axto:ENGINE_HMAC_KEY').digest('hex') : '');
+  if (hk) {
     list.push({
       name: 'cloudflare-workers-ai',
       async render(job) {
-        const r = await fetchImpl(`https://api.cloudflare.com/client/v4/accounts/${env.CLOUDFLARE_ACCOUNT_ID}/ai/run/@cf/black-forest-labs/flux-1-schnell`, {
-          method: 'POST',
-          headers: { 'X-Auth-Email': env.CLOUDFLARE_EMAIL, 'X-Auth-Key': env.CLOUDFLARE_API_KEY, 'content-type': 'application/json' },
-          body: JSON.stringify({ prompt: job.prompt, steps: 6, seed: job.id % 2_147_483_647 }),
-        });
-        if (!r.ok) return null;
+        const body = JSON.stringify({ c: job.c, id: job.id, prompt: job.prompt });
+        const ts = String(Date.now());
+        const sig = createHmac('sha256', hk).update(`${ts}.${body}`).digest('hex');
+        const r = await fetchImpl(`${env.AXTO_API || 'https://axto.io'}/internal/gpu/render`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-axto-ts': ts, 'x-axto-sig': sig }, body });
         const j = await r.json().catch(() => null);
-        const b64 = j?.result?.image;
-        if (!b64) return null;
-        const bytes = Buffer.from(b64, 'base64');
-        return isImage('image/jpeg', bytes) ? { bytes, type: 'image/jpeg' } : null;
+        if (!r.ok || !j?.ok) { list.why ??= {}; list.why[this.name] = `HTTP ${r.status} ${j?.error ?? ''} ${j?.detail ?? ''}`.trim().slice(0, 160); return null; }
+        return { stored: true, type: j.type };
       },
     });
   }
@@ -69,8 +68,9 @@ export function providers({ fetchImpl = fetch, env = process.env } = {}) {
     name: 'pollinations',
     async render(job) {
       const u = `https://image.pollinations.ai/prompt/${encodeURIComponent(job.prompt)}?width=768&height=768&seed=${job.id % 1_000_000_000}&model=flux&nologo=true&negative_prompt=${encodeURIComponent(NEGATIVE)}`;
-      const r = await fetchImpl(u, { headers: { 'user-agent': UA } });
-      if (!r.ok) return null;
+      let r = await fetchImpl(u, { headers: { 'user-agent': UA } });
+      if (r.status === 429) { await (env.__pause ?? ((ms) => new Promise((res) => setTimeout(res, ms))))(20_000); r = await fetchImpl(u, { headers: { 'user-agent': UA } }); }
+      if (!r.ok) { list.why ??= {}; list.why[this.name] = `HTTP ${r.status}`; return null; }
       const type = r.headers.get('content-type') ?? '';
       const bytes = Buffer.from(await r.arrayBuffer());
       return isImage(type, bytes) ? { bytes, type: type.split(';')[0] } : null;
@@ -185,10 +185,10 @@ export async function run({ io = realIO(), fetchImpl = fetch, env = process.env,
       const p = live[(qi + t) % live.length];
       let out = null;
       try { out = await p.render(job); } catch { out = null; }
-      if (out) { io.putBytes(`axto-nft-data/gpu/${job.c}/${job.id}.png`, out.bytes, out.type); add(job.c, job.id, p.name); bump(p.name); strikes[p.name] = 0; ok = true; direct += 1; }
+      if (out) { if (!out.stored) io.putBytes(`axto-nft-data/gpu/${job.c}/${job.id}.png`, out.bytes, out.type); add(job.c, job.id, p.name); bump(p.name); strikes[p.name] = 0; ok = true; direct += 1; }
       else strikes[p.name] += 1;
     }
-    await pause(1200); // sopan pada GPU terbuka
+    await pause(6000); // sopan pada GPU terbuka (batas laju anonim)
   }
 
   // e) sisanya: kirim ke AI Horde (beberapa) dan antrean kunci GPU ulyah.com
@@ -206,8 +206,8 @@ export async function run({ io = realIO(), fetchImpl = fetch, env = process.env,
   io.putText('axto-nft-data/os/gpu-horde.json', JSON.stringify({ at: new Date().toISOString(), pending: keep }));
   for (const c of GPU_KEYS) if (dirty.has(c) || !st[c].at) { st[c].at = new Date().toISOString(); io.putText(`axto-nft-data/os/gpu-${c}.json`, JSON.stringify(st[c])); }
   const summary = Object.fromEntries(GPU_KEYS.map((c) => [c, st[c].ids.length]));
-  log(`Seri G-: ${JSON.stringify(summary)} · baru per GPU ${JSON.stringify(made)} · AI Horde menunggu ${keep.length} · antrean ulyah ${ulyahJobs.length}`);
-  return { summary, made, hordePending: keep.length, ulyahQueued: ulyahJobs.length };
+  log(`Seri G-: ${JSON.stringify(summary)} · baru per GPU ${JSON.stringify(made)} · AI Horde menunggu ${keep.length} · antrean ulyah ${ulyahJobs.length}${P.why ? ` · alasan gagal ${JSON.stringify(P.why)}` : ''}`);
+  return { summary, made, hordePending: keep.length, ulyahQueued: ulyahJobs.length, why: P.why ?? {} };
 }
 
 if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).href) {

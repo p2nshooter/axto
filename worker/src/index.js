@@ -422,6 +422,20 @@ async function api(request, env, ctx, url) {
     }
     return json(r, r.ok ? 200 : 400);
   }
+  // Seri G-: Workers AI (binding AI, jatah gratis akun Cloudflare) melukis satu karya; dipanggil ops/gpu-sync.mjs.
+  if (p === '/internal/gpu/render' && method === 'POST') {
+    const body = await request.text();
+    if (!(await engineAuth(request, env, body))) return json({ error: 'auth' }, 401);
+    const b = JSON.parse(body);
+    if (!['time', 'stamp', 'quran', 'hadith'].includes(b.c) || !validToken(b.c, Number(b.id)) || typeof b.prompt !== 'string' || b.prompt.length > 900 || !/no text/.test(b.prompt)) return json({ error: 'input' }, 400);
+    try {
+      const out = await env.AI.run('@cf/black-forest-labs/flux-1-schnell', { prompt: b.prompt, steps: 6, seed: Number(b.id) % 2_147_483_647 });
+      const bytes = Uint8Array.from(atob(out?.image ?? ''), (ch) => ch.charCodeAt(0));
+      if (bytes.byteLength < 15_000) return json({ error: 'empty' }, 502);
+      await env.STORE.put(`gpu/${b.c}/${Number(b.id)}.png`, bytes, { httpMetadata: { contentType: 'image/jpeg', cacheControl: 'public, max-age=31536000, immutable' } });
+      return json({ ok: true, type: 'image/jpeg', bytes: bytes.byteLength });
+    } catch (e) { return json({ error: 'ai', detail: String(e?.message ?? e).slice(0, 200) }, 502); }
+  }
   if (p === '/internal/engine/commit' && method === 'POST') {
     const body = await request.text();
     if (!(await engineAuth(request, env, body))) return json({ error: 'auth' }, 401);
