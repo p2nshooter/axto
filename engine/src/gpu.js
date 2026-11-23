@@ -17,27 +17,46 @@ export const NEGATIVE = 'text, letters, words, writing, calligraphy, arabic scri
 
 const attr = (m, k) => String(m.attributes.find((a) => a.trait_type === k)?.value ?? '').replace(/[^\p{L}\p{N} ,'-]/gu, ' ').trim();
 
+/** Versi mutu seri G-: hanya karya dengan cap `qa[id].v === QA_V` yang ada di seri (pemilik 24 Nov 2026: seri G- lama „sampah"
+ * → „hapus total semua", „bikin ulang semua"). Lihat worker/src/gpu.js (lukis FLUX.2 + pemeriksa mutu). */
+export const QA_V = 2;
+
+/* Prompt v2. Kata seperti „masterpiece", „8k", „no text" DIHAPUS: model gambar malah menuliskannya sebagai huruf di lukisan
+ * (G-22 „8k GIAL MAASTERENDE"). Model gambar tidak paham kalimat negatif, jadi semua permintaan ditulis positif: simetris,
+ * di tengah, tampak depan, permukaan polos. Atribut yang mengundang tulisan (angka jam, tahun prangko, gaya kaligrafi) tidak dipakai. */
+const GAYA = 'perfectly symmetrical composition, centered, straight-on front view, studio product photography, soft cinematic lighting, rich color, highly detailed, sharp focus';
+
 /** Deskripsi untuk GPU dari DNA karya — tanpa teks, tanpa sosok manusia. */
 export function promptFor(key, id) {
   const m = metadata(key, id);
-  const a = (k) => attr(m, k);
+  const a = (k) => attr(m, k).toLowerCase();
   const c = key.replace(/^ex-/, '');
-  const base = 'masterpiece collectible digital artwork, ultra detailed, cinematic lighting, rich color, 8k, no text, no letters, no watermark';
-  if (c === 'time') return `luxury fantasy timepiece sculpture, ${a('Form')} shape, ${a('Theme')} theme, ${a('Digits')} style dial glow, ${a('Gems')} gemstones, ${a('Backdrop')} background, ${base}`;
-  if (c === 'stamp') return `vintage postage stamp of the imaginary ${a('Realm')}, ${a('Series')} theme featuring a ${a('Subject')}, ${a('Frame')} shaped stamp with perforated edges, engraved intaglio illustration, ${a('Palette')} ink palette, year ${a('Year')}, ${base}`;
-  if (c === 'quran') return `ornate islamic manuscript illumination, ${a('Illumination')} ornament, ${a('Composition')} composition, ${a('Material')} and gold leaf, ${a('Background')} background, ${a('Frame')}, empty central panel, arabesque and geometric patterns, ${base}`;
-  if (c === 'hadith') return `ornate islamic manuscript illumination, ${a('Illumination')} ornament, ${a('Composition')} composition, ${a('Material')} inlay, ${a('Background')} paper, ${a('Frame')}, empty central cartouche, arabesque and geometric patterns, ${base}`;
+  const bingkai = () => (/borderless/.test(a('Frame')) ? 'a borderless page' : `${a('Frame')} border`);
+  if (c === 'time') return `a luxurious ${a('Theme')} themed collectible table clock sculpture, a perfectly round dial in the exact center of the image with a clean plain face, slim elegant hour and minute hands, simple stick hour markers, polished case set with ${a('Gems')}, ${a('Backdrop')} backdrop, ${GAYA}`;
+  if (c === 'stamp') return `a single vintage postage stamp lying flat, seen from directly above, ${a('Frame')} shape with crisp perforated edges, an engraved intaglio illustration of a ${a('Subject')} for a ${a('Series')} theme, ${a('Palette')} ink on cream paper with plain blank margins, resting on dark velvet, ${GAYA}`;
+  if (c === 'quran') return `an ornate islamic illuminated manuscript page, ${a('Illumination')} ornament in ${a('Material')} and gold leaf on a ${a('Background')} ground, ${bingkai()}, a large smooth plain cream parchment panel in the exact center of the page left completely empty, arabesque and geometric patterns around the panel, ${GAYA}`;
+  if (c === 'hadith') return `an ornate islamic illuminated manuscript page, ${a('Illumination')} ornament with ${a('Material')} inlay on a ${a('Background')} ground, ${bingkai()}, a large smooth plain cream parchment cartouche in the exact center left completely empty, arabesque and geometric patterns around it, ${GAYA}`;
   throw new Error(`koleksi ${key} tidak diproduksi GPU`);
 }
 
 /** Tambah karya ke dokumen seri G- koleksi (murni): nomor seri berikutnya, tidak dobel. Mengembalikan undefined bila sudah ada. */
-export function tambahSeri(doc, id, by, at = new Date().toISOString()) {
-  const d = { ...(doc ?? {}), ids: [...(doc?.ids ?? [])], serial: { ...(doc?.serial ?? {}) }, by: { ...(doc?.by ?? {}) }, at }; // kolom lain (vid) ikut
+export function tambahSeri(doc, id, by, at = new Date().toISOString(), qa = undefined) {
+  const d = { ...(doc ?? {}), ids: [...(doc?.ids ?? [])], serial: { ...(doc?.serial ?? {}) }, by: { ...(doc?.by ?? {}) }, qa: { ...(doc?.qa ?? {}) }, at }; // kolom lain (vid) ikut
   if (d.ids.includes(id)) return undefined;
   d.ids.push(id);
   d.serial[id] = Math.max(0, ...Object.values(d.serial).map(Number)) + 1;
   d.by[id] = by;
+  if (qa) d.qa[id] = qa;
   return d;
+}
+
+/** Buang karya dari seri (murni): id, nomor seri, penanda, cap mutu, video; nomor seri sisanya dirapatkan 1..n. */
+export function buangSeri(doc, buang) {
+  const b = new Set(buang);
+  const ids = (doc?.ids ?? []).filter((x) => !b.has(x));
+  const urut = [...ids].sort((x, y) => Number(doc.serial?.[x] ?? 0) - Number(doc.serial?.[y] ?? 0));
+  const sisa = (o) => Object.fromEntries(Object.entries(o ?? {}).filter(([k]) => !b.has(Number(k))));
+  return { ...doc, ids, serial: Object.fromEntries(urut.map((x, i) => [x, i + 1])), by: sisa(doc?.by), qa: sisa(doc?.qa), vid: sisa(doc?.vid) };
 }
 
 /**
@@ -46,9 +65,9 @@ export function tambahSeri(doc, id, by, at = new Date().toISOString()) {
  */
 export function gerakFor(key, id) {
   const c = key.replace(/^ex-/, '');
-  const akhir = 'smooth seamless loop, cinematic, high detail, no text, no letters, no people';
-  if (c === 'time') return `the watch comes alive: the clock hands rotate smoothly around the dial, the second hand sweeps, gemstones sparkle and glint, light glides across the polished metal, slow camera push-in, ${akhir}`;
-  if (c === 'stamp') return `the vintage postage stamp comes alive: the engraved scene inside moves gently, soft light sweeps across the paper and perforated edges, subtle parallax, slow camera drift, ${akhir}`;
-  if (c === 'quran' || c === 'hadith') return `the illuminated manuscript ornament comes alive: gold leaf shimmers, arabesque patterns glow and pulse softly, light rays drift across the frame, slow camera push-in, the central panel stays empty, ${akhir}`;
+  const akhir = 'locked-off static camera, no zoom, no camera movement, the object stays exactly centered and in place, smooth seamless loop, high detail';
+  if (c === 'time') return `the clock comes alive: the hour and minute hands rotate smoothly around the center of the dial, gemstones sparkle and glint, soft light glides across the polished case, ${akhir}`;
+  if (c === 'stamp') return `the vintage postage stamp comes alive: the engraved scene inside moves gently, soft light sweeps across the paper and perforated edges, ${akhir}`;
+  if (c === 'quran' || c === 'hadith') return `the illuminated manuscript ornament comes alive: gold leaf shimmers, arabesque patterns glow and pulse softly, light glints travel along the border, the central panel stays plain, empty and perfectly still, ${akhir}`;
   throw new Error(`koleksi ${key} tidak dianimasikan GPU`);
 }

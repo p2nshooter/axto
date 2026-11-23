@@ -29,6 +29,7 @@ import { vault } from './vault.js';
 import * as COIN from './coin.js';
 import * as SHOP from './shop.js';
 import * as GPUP from './gpu.js';
+import { QA_V, promptFor as gpuPrompt } from '../../engine/src/gpu.js';
 import { hadithItem, translateHadith } from './translate.js';
 
 export { Ledger };
@@ -66,15 +67,15 @@ async function gpuSet(env, c) {
   if (hit && Date.now() - hit.at < 120_000) return hit;
   let doc = null;
   try { doc = await readJSON(env.STORE, `os/gpu-${c}.json`); } catch { doc = null; }
-  // Karya yang menunggu dilukis ulang (gambar bertanda situs lain) TIDAK ditampilkan sampai gambarnya bersih —
-  // nomor seri G- tetap (src/gpu.js melukis ulang dengan nomor yang sama).
-  // Seri G- WAJIB sudah beranimasi GPU saat tampil (pemilik 24 Nov 2026: „100% di buatkan GPU"): hanya karya yang videonya
-  // sudah dibuat GPU (doc.vid) yang muncul; gambar bersih tanpa video hanya bahan GPU video (route /gpu/*.png).
-  const bersihFn = (x) => !GPUP.PERLU_ULANG.has(String(doc?.by?.[x] ?? ''));
-  const semua = Array.isArray(doc?.ids) ? doc.ids.filter((x) => Number.isSafeInteger(x) && x >= 1 && x <= COLLECTIONS[c].max && bersihFn(x)) : [];
+  // Seri G- dibuat ulang (pemilik 24 Nov 2026: „hapus total semua", „bikin ulang semua"): hanya karya yang lolos pemeriksa mutu
+  // (cap qa versi QA_V, src/gpu.js) yang ada; dan karya TAMPIL hanya setelah videonya dibuat GPU (doc.vid) — „hasil NFT 100%
+  // sudah keluar dengan animasi". Gambar lolos-mutu tanpa video hanya bahan GPU video (route /gpu/*.png).
+  const lolos = (x) => doc?.qa?.[x]?.v === QA_V;
+  const semua = Array.isArray(doc?.ids) ? doc.ids.filter((x) => Number.isSafeInteger(x) && x >= 1 && x <= COLLECTIONS[c].max && lolos(x)) : [];
   const ids = semua.filter((x) => doc?.vid?.[x] === true);
   const serial = Object.fromEntries(ids.map((x) => [x, doc.serial?.[x]]));
-  const v = { at: Date.now(), ids, serial, bersih: new Set(semua), by: {} };
+  const qa = Object.fromEntries(semua.map((x) => [x, doc.qa[x]]));
+  const v = { at: Date.now(), ids, serial, bersih: new Set(semua), qa, by: {} };
   GPU.set(c, v);
   return v;
 }
@@ -435,16 +436,16 @@ async function api(request, env, ctx, url) {
     }
     return json(r, r.ok ? 200 : 400);
   }
-  // Seri G-: Workers AI (binding AI, jatah gratis akun Cloudflare) melukis satu karya; dipanggil ops/gpu-sync.mjs.
-  if (p === '/internal/gpu/render' && method === 'POST') {
+  // Pratinjau seri G- (ops/gpu-pratinjau.mjs): lukis + periksa mutu TANPA disimpan, untuk melihat hasil sebelum produksi.
+  if (p === '/internal/gpu/pratinjau' && method === 'POST') {
     const body = await request.text();
     if (!(await engineAuth(request, env, body))) return json({ error: 'auth' }, 401);
     const b = JSON.parse(body);
-    if (!['time', 'stamp', 'quran', 'hadith', 'ex-time', 'ex-stamp', 'ex-quran', 'ex-hadith'].includes(b.c) || !validToken(b.c, Number(b.id)) || typeof b.prompt !== 'string' || b.prompt.length > 900 || !/no text/.test(b.prompt)) return json({ error: 'input' }, 400);
-    // jatah gratis Workers AI yang sama dengan cron worker (tanpa penyebaran waktu: sisa jatah hari ini boleh dipakai)
-    const r = await GPUP.lukisGratis(env, b.c, Number(b.id), b.prompt, { rata: false });
-    if (r.ok) return json({ ok: true, type: 'image/jpeg', bytes: r.bytes });
-    return json({ error: r.alasan === 'jatah' ? 'jatah' : 'ai', detail: String(r.alasan).slice(0, 200) }, r.alasan === 'jatah' ? 429 : 502);
+    if (!['time', 'stamp', 'quran', 'hadith', 'ex-time', 'ex-stamp', 'ex-quran', 'ex-hadith'].includes(b.c) || !validToken(b.c, Number(b.id))) return json({ error: 'input' }, 400);
+    const prompt = gpuPrompt(b.c, Number(b.id));
+    const r = await GPUP.lukisGratis(env, b.c, Number(b.id), prompt, { rata: false, simpan: false });
+    if (!r.gambar) return json({ error: r.alasan === 'jatah' ? 'jatah' : 'ai', detail: String(r.alasan).slice(0, 300) }, r.alasan === 'jatah' ? 429 : 502);
+    return json({ ok: r.ok, alasan: r.alasan, qa: r.qa, model: r.model, type: r.type, prompt, klein: r.alasanKlein ?? '', image: btoa(Array.from(new Uint8Array(r.gambar), (x) => String.fromCharCode(x)).join('')) });
   }
   if (p === '/internal/engine/commit' && method === 'POST') {
     const body = await request.text();
@@ -503,7 +504,7 @@ async function gpuPlay(env, c, id, origin) {
     if (d.kind === 'quran' && ctx.surah) ref = ctx.ayah ? `${ctx.surahLt ?? ''} · ${ctx.surah}:${ctx.ayah}` : `${ctx.surahLt ?? ''}`;
     if (d.kind === 'hadith') { const hr = hadithRef(d); ref = `${hr.nameId} · No. ${hr.number}`; }
   }
-  const html = gpuPlayer(d, meta, ctx, { img: `/gpu/${c}/${id}.png?v=b`, video: `/gpu/${c}/${id}.mp4`, g: Number(gs.serial[id] ?? 0), ref });
+  const html = gpuPlayer(d, meta, ctx, { img: `/gpu/${c}/${id}.png?v=${QA_V}`, video: `/gpu/${c}/${id}.mp4?v=${QA_V}`, g: Number(gs.serial[id] ?? 0), ref, qa: gs.qa[id] ?? null });
   return new Response(html, { headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'public, max-age=300', 'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer' } });
 }
 
@@ -721,7 +722,7 @@ export default {
       if (m && validToken(m[1], Number(m[2]))) return await svg(request, env, ctx, m[1], Number(m[2]), url.origin);
       m = /^\/gpu\/([a-z-]+)\/(\d+)\.png$/.exec(p);
       if (m && validToken(m[1], Number(m[2]))) {
-        // gambar bersih saja (karya bertanda situs lain disembunyikan sampai dilukis ulang); bahan video GPU
+        // gambar lolos-mutu saja (bahan video GPU & poster)
         if (!(await gpuSet(env, m[1])).bersih.has(Number(m[2]))) return new Response('not found', { status: 404 });
         const o = await env.STORE.get(`gpu/${m[1]}/${m[2]}.png`);
         if (!o) return new Response('not found', { status: 404 });

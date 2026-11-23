@@ -1,8 +1,9 @@
-// Seri G- 24 jam di worker: Cron Trigger + Workers AI dalam jatah gratis harian, seri berurutan & tidak dobel (R2 CAS).
+// Seri G- dibuat ulang (pemilik 24 Nov 2026: „hapus total semua", „bikin ulang semua"): reset sekali, FLUX.2 + pemeriksa
+// mutu, hanya karya lolos yang masuk seri, jatah gratis harian disebar 24 jam (R2 CAS, tidak dobel).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { gpuTick, ambilJatah, lukisGratis } from '../src/gpu.js';
-import { candidates } from '../../engine/src/gpu.js';
+import { gpuTick, ambilJatah, lukisGratis, putusan, resetSekali, RESET, MODEL, MODEL_QA, MODEL_CADANGAN } from '../src/gpu.js';
+import { candidates, QA_V } from '../../engine/src/gpu.js';
 
 function fakeR2() {
   const m = new Map();
@@ -17,63 +18,130 @@ function fakeR2() {
       m.set(k, { body: typeof body === 'string' ? body : `<${body.byteLength} byte>`, etag: `e${++n}` });
       return { etag: `e${n}` };
     },
+    async delete(k) { for (const x of [].concat(k)) m.delete(x); },
+    async list({ prefix }) { return { objects: [...m.keys()].filter((k) => k.startsWith(prefix)).map((key) => ({ key })), truncated: false }; },
   };
 }
-const GAMBAR = Buffer.alloc(30_000, 9).toString('base64');
-const envDengan = (ai) => ({ STORE: fakeR2(), AI: { run: ai }, GPU_HARIAN: '48' });
+const PNG = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47]), Buffer.alloc(30_000, 9)]).toString('base64');
+const BAGUS = { text: false, symmetric: true, deformed: false, subject: true, quality: 9, panel: [0.3, 0.32, 0.7, 0.68], tone: 'light' };
 const JAM = (h, mnt = 0) => Date.UTC(2026, 10, 24, h, mnt);
+/** Workers AI tiruan: FLUX.2 klein (multipart) melukis, Gemma 4 memeriksa dengan jawaban `nilai()`. */
+function aiTiruan(nilai = () => BAGUS) {
+  const log = [];
+  return {
+    log,
+    async run(model, inp) {
+      log.push(model);
+      if (model === MODEL) { assert.ok(inp.multipart?.body && /multipart\/form-data/.test(inp.multipart.contentType)); return { image: PNG }; }
+      if (model === MODEL_QA) {
+        const [t, im] = inp.messages[0].content;
+        assert.match(t.text, /ONLY one JSON object/);
+        assert.match(im.image_url.url, /^data:image\/png;base64,/);
+        return { response: `\`\`\`json\n${JSON.stringify(nilai())}\n\`\`\`` };
+      }
+      throw new Error(`model tak terduga ${model}`);
+    },
+  };
+}
+const envDengan = (ai) => ({ STORE: fakeR2(), AI: ai, GPU_HARIAN: '36' });
 
-test('tick cron melukis satu karya, koleksi paling sedikit dulu, nomor seri lanjut & tidak dobel', async () => {
-  let panggil = 0;
-  const env = envDengan(async (model, inp) => { panggil += 1; assert.match(inp.prompt, /no text/); return { image: GAMBAR }; });
-  const t = JAM(23, 55); // jatah hari ini hampir seluruhnya terbuka
-  const hasil = [];
-  for (let i = 0; i < 10; i += 1) hasil.push((await gpuTick(env, { now: t + i * 1000 })).dibuat);
-  assert.equal(panggil, 10);
-  const perKoleksi = {};
-  for (const h of hasil) perKoleksi[h.c] = (perKoleksi[h.c] ?? 0) + 1;
-  assert.ok(Object.keys(perKoleksi).length === 8, 'bergiliran ke 8 koleksi');
-  for (const c of Object.keys(perKoleksi)) {
-    const doc = JSON.parse(env.STORE.m.get(`os/gpu-${c}.json`).body);
-    assert.equal(new Set(doc.ids).size, doc.ids.length);
-    assert.deepEqual(Object.values(doc.serial).sort((a, b) => a - b), doc.ids.map((_, i) => i + 1));
-    assert.deepEqual(doc.ids, candidates(c).slice(0, doc.ids.length), 'urutan kandidat tetap');
-    for (const id of doc.ids) assert.ok(env.STORE.m.has(`gpu/${c}/${id}.png`));
-  }
+test('reset sekali: semua seri G- lama dihapus total (berkas & daftar), JSON lama diarsipkan, seri mulai dari G-1', async () => {
+  const env = envDengan(aiTiruan());
+  const [a, b] = candidates('quran');
+  env.STORE.m.set('os/gpu-quran.json', { body: JSON.stringify({ ids: [a, b], serial: { [a]: 1, [b]: 2 }, by: {} }), etag: 'x' });
+  env.STORE.m.set(`gpu/quran/${a}.png`, { body: 'lama', etag: 'y' });
+  env.STORE.m.set(`gpu/quran/${b}.png`, { body: 'lama', etag: 'z' });
+  env.STORE.m.set('os/gpu-horde.json', { body: '{}', etag: 'h' });
+  const r = await resetSekali(env, JAM(1));
+  assert.deepEqual(r.quran, { karya: 2, berkas: 2 });
+  assert.equal(env.STORE.m.has(`gpu/quran/${a}.png`), false);
+  assert.equal(env.STORE.m.has('os/gpu-horde.json'), false);
+  assert.deepEqual(JSON.parse(env.STORE.m.get('os/gpu-quran.json').body).ids, []);
+  assert.deepEqual(JSON.parse(env.STORE.m.get('os/gpu-arsip/2026-11-24/gpu-quran.json').body).ids, [a, b]);
+  assert.ok(env.STORE.m.has(RESET));
+  env.STORE.m.set(`gpu/quran/${a}.png`, { body: 'baru', etag: 'q' });
+  assert.equal(await resetSekali(env, JAM(2)), false, 'hanya sekali — karya baru tidak ikut terhapus');
+  assert.ok(env.STORE.m.has(`gpu/quran/${a}.png`));
 });
 
-test('jatah gratis disebar 24 jam: pagi buta hanya sedikit, tidak pernah melewati batas harian', async () => {
+test('tick: FLUX.2 melukis, pemeriksa meloloskan → seri G-1.. bergiliran 8 koleksi, cap mutu & panel tersimpan', async () => {
+  const ai = aiTiruan();
+  const env = envDengan(ai);
+  const hasil = [];
+  for (let i = 0; i < 8; i += 1) hasil.push((await gpuTick(env, { now: JAM(23, 55) + i * 1000 })).dibuat);
+  assert.equal(new Set(hasil.map((h) => h.c)).size, 8, 'bergiliran ke 8 koleksi');
+  for (const h of hasil) assert.equal(h.g, 1);
+  const q = JSON.parse(env.STORE.m.get('os/gpu-quran.json').body);
+  const id = candidates('quran')[0];
+  assert.deepEqual(q.ids, [id]);
+  assert.deepEqual(q.qa[id], { v: QA_V, nilai: 9, model: MODEL, panel: [0.3, 0.32, 0.7, 0.68], nada: 'terang' });
+  assert.ok(env.STORE.m.has(`gpu/quran/${id}.png`));
+  assert.equal(ai.log.filter((x) => x === MODEL).length, 8);
+  assert.equal(ai.log.filter((x) => x === MODEL_QA).length, 8, 'setiap lukisan diperiksa');
+});
+
+test('lukisan bertulisan / tidak simetris DITOLAK: tidak disimpan, tidak masuk seri, kandidat dicoba ulang lalu dilewati setelah 3×', async () => {
+  const env = envDengan(aiTiruan(() => ({ ...BAGUS, text: true, symmetric: false })));
+  const t = JAM(23, 55);
+  await resetSekali(env, t);
+  for (const c of ['time', 'stamp', 'hadith', 'ex-time', 'ex-stamp', 'ex-quran', 'ex-hadith']) env.STORE.m.set(`os/gpu-${c}.json`, { body: JSON.stringify({ ids: [1, 2], serial: { 1: 1, 2: 2 }, by: {}, qa: { 1: { v: QA_V }, 2: { v: QA_V } } }), etag: c });
+  const id = candidates('quran')[0];
+  for (let i = 0; i < 3; i += 1) assert.match((await gpuTick(env, { now: t + i })).alasan, /mutu: tulisan, tidak simetris/);
+  const q = JSON.parse(env.STORE.m.get('os/gpu-quran.json').body);
+  assert.deepEqual(q.ids, []);
+  assert.equal(q.gagal[id], 3);
+  assert.equal(env.STORE.m.has(`gpu/quran/${id}.png`), false, 'lukisan gagal tidak pernah disimpan');
+  env.AI = aiTiruan();
+  const r = await gpuTick(env, { now: t + 10 });
+  assert.equal(r.dibuat.id, candidates('quran')[1], 'kandidat yang gagal 3× dilewati');
+});
+
+test('karya tanpa cap mutu (ditambah proses lama) dibuang dari seri & R2 setiap putaran; nomor seri dirapatkan', async () => {
+  const env = envDengan(aiTiruan());
+  const t = JAM(23, 55);
+  await resetSekali(env, t);
+  const [a, b, c] = candidates('stamp');
+  env.STORE.m.set('os/gpu-stamp.json', { body: JSON.stringify({ ids: [a, b, c], serial: { [a]: 1, [b]: 2, [c]: 3 }, by: {}, qa: { [b]: { v: QA_V, nilai: 9 } }, vid: { [a]: true } }), etag: 's' });
+  env.STORE.m.set(`gpu/stamp/${a}.png`, { body: 'x', etag: '1' });
+  await gpuTick(env, { now: t });
+  const doc = JSON.parse(env.STORE.m.get('os/gpu-stamp.json').body);
+  assert.ok(!doc.ids.includes(a) && !doc.ids.includes(c));
+  assert.equal(doc.serial[b], 1);
+  assert.deepEqual(doc.vid, {});
+  assert.equal(env.STORE.m.has(`gpu/stamp/${a}.png`), false);
+});
+
+test('putusan pemeriksa: panel Qur\'an wajib ada, cukup besar & di tengah; nilai < 8 ditolak', () => {
+  assert.equal(putusan('quran', BAGUS).lolos, true);
+  assert.deepEqual(putusan('quran', { ...BAGUS, panel: null }).alasan, ['panel']);
+  assert.deepEqual(putusan('ex-hadith', { ...BAGUS, panel: [0, 0, 0.3, 0.3] }).alasan, ['panel']);
+  assert.deepEqual(putusan('time', { ...BAGUS, quality: 7 }).alasan, ['nilai 7']);
+  assert.equal(putusan('time', { ...BAGUS, panel: null }).lolos, true, 'jam tidak butuh panel');
+  assert.deepEqual(putusan('stamp', {}).alasan, ['tulisan', 'tidak simetris', 'cacat', 'subjek', 'nilai ?']);
+});
+
+test('jatah gratis disebar 24 jam & tidak pernah melewati batas harian', async () => {
   const s = fakeR2();
   let dapat = 0;
-  for (let i = 0; i < 10; i += 1) if (await ambilJatah(s, { now: JAM(0, 10) + i, cap: 48 })) dapat += 1;
+  for (let i = 0; i < 10; i += 1) if (await ambilJatah(s, { now: JAM(0, 10) + i, cap: 36 })) dapat += 1;
   assert.equal(dapat, 1, 'pukul 00.10 baru 1 jatah terbuka');
   let total = dapat;
-  for (let mnt = 15; mnt < 1440; mnt += 5) if (await ambilJatah(s, { now: JAM(0) + mnt * 60_000, cap: 48 })) total += 1;
-  assert.equal(total, 48, 'sehari tepat 48 karya, merata');
+  for (let mnt = 15; mnt < 1440; mnt += 5) if (await ambilJatah(s, { now: JAM(0) + mnt * 60_000, cap: 36 })) total += 1;
+  assert.equal(total, 36);
 });
 
-test('alokasi gratis Workers AI habis (4006) → berhenti sampai esok, tidak pernah berbayar', async () => {
-  const env = envDengan(async () => { throw new Error('4006: you have used up your daily free allocation of 10,000 neurons'); });
-  const r = await lukisGratis(env, 'time', candidates('time')[0], 'x no text', { now: JAM(12), rata: false });
+test('alokasi gratis Workers AI habis (4006) → berhenti sampai esok, tidak pernah berbayar; klein menolak → cadangan FLUX.1', async () => {
+  const env = envDengan({ async run() { throw new Error('4006: you have used up your daily free allocation of 10,000 neurons'); } });
+  const r = await lukisGratis(env, 'time', candidates('time')[0], 'x', { now: JAM(12), rata: false });
   assert.equal(r.ok, false);
-  const ai2 = { n: 0 };
-  env.AI.run = async () => { ai2.n += 1; return { image: GAMBAR }; };
-  const r2 = await lukisGratis(env, 'time', candidates('time')[1], 'x no text', { now: JAM(13), rata: false });
-  assert.equal(r2.alasan, 'jatah');
-  assert.equal(ai2.n, 0, 'tidak memanggil Workers AI lagi hari itu');
-  const besok = await lukisGratis(env, 'time', candidates('time')[1], 'x no text', { now: JAM(12) + 86_400_000, rata: false });
+  let n = 0;
+  env.AI = { async run() { n += 1; return { image: PNG }; } };
+  assert.equal((await lukisGratis(env, 'time', candidates('time')[1], 'x', { now: JAM(13), rata: false })).alasan, 'jatah');
+  assert.equal(n, 0, 'tidak memanggil Workers AI lagi hari itu');
+  const dipakai = [];
+  env.AI = { async run(model) { dipakai.push(model); if (model === MODEL) throw new Error('5006: input tidak dikenal'); if (model === MODEL_QA) return { response: JSON.stringify(BAGUS) }; return { image: PNG }; } };
+  const besok = await lukisGratis(env, 'time', candidates('time')[1], 'x', { now: JAM(12) + 86_400_000, rata: false });
   assert.equal(besok.ok, true);
-});
-
-test('karya bertanda situs lain dilukis ulang lebih dulu dengan nomor seri G- yang sama', async () => {
-  const env = envDengan(async () => ({ image: GAMBAR }));
-  const [a, b] = candidates('stamp');
-  env.STORE.m.set('os/gpu-stamp.json', { body: JSON.stringify({ ids: [a, b], serial: { [a]: 1, [b]: 2 }, by: { [a]: 'cloudflare-workers-ai', [b]: 'pollinations' } }), etag: 'x1' });
-  const r = await gpuTick(env, { now: JAM(23, 55) });
-  assert.deepEqual(r.dibuat, { c: 'stamp', id: b, g: 2, ulang: true });
-  const doc = JSON.parse(env.STORE.m.get('os/gpu-stamp.json').body);
-  assert.deepEqual(doc.ids, [a, b]);
-  assert.equal(doc.serial[b], 2);
-  assert.equal(doc.by[b], 'cloudflare-workers-ai');
-  assert.ok(env.STORE.m.has(`gpu/stamp/${b}.png`));
+  assert.deepEqual(dipakai, [MODEL, MODEL_CADANGAN, MODEL_QA]);
+  assert.match(besok.alasanKlein, /5006/);
 });

@@ -1,0 +1,45 @@
+name: Pratinjau seri G-
+
+# Pemilik 24 Nov 2026: „ini series G- sampah semua" · „bikin ulang semua". Melukis + memeriksa beberapa karya TANPA
+# disimpan, hasilnya diunggah sebagai artefak agar bisa dilihat sebelum produksi dinyatakan beres.
+on:
+  workflow_dispatch:
+    inputs:
+      koleksi:
+        description: Koleksi (dipisah koma)
+        default: time,stamp,quran,hadith
+      jumlah:
+        description: Karya per koleksi (1-4)
+        default: '2'
+      mulai:
+        description: Urutan kandidat awal
+        default: '40'
+
+concurrency:
+  group: gpu-pratinjau
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  pratinjau:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      CLOUDFLARE_API_KEY: ${{ secrets.CLOUDFLARE_API_KEY }}
+      PRATINJAU_KOLEKSI: ${{ inputs.koleksi }}
+      PRATINJAU_JUMLAH: ${{ inputs.jumlah }}
+      PRATINJAU_MULAI: ${{ inputs.mulai }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Lukis + periksa (tanpa disimpan)
+        run: node ops/gpu-pratinjau.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pratinjau-g
+          path: pratinjau/
+          retention-days: 7
