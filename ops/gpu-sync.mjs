@@ -20,35 +20,12 @@ import { createHmac } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { metadata } from '../engine/src/metadata.js';
-import { showcaseIds } from '../engine/src/showcase.js';
 
-export const GPU_KEYS = ['time', 'stamp', 'quran', 'hadith', 'ex-time', 'ex-stamp', 'ex-quran', 'ex-hadith'];
-/** Urutan karya kandidat: etalase acak (publik) atau permutasi tetap 1..10.000 (eksklusif, langkah prima → semua karya terjangkau). */
-export function candidates(c) {
-  if (!c.startsWith('ex-')) return showcaseIds(c).ids;
-  const n = 10_000;
-  return Array.from({ length: n }, (_, k) => ((k * 7919) % n) + 1);
-}
+import { GPU_KEYS, candidates, NEGATIVE, promptFor, tambahSeri } from '../engine/src/gpu.js';
+export { GPU_KEYS, candidates, NEGATIVE, promptFor };
 const QUEUE_PER_COL = Number(process.env.QUEUE_PER_COL || 24);
-export const NEGATIVE = 'text, letters, words, writing, calligraphy, arabic script, numbers, watermark, signature, logo, person, face, blurry, lowres, deformed';
 const UA = 'axto-gpu/1.0 (+https://axto.io)';
 const HORDE = 'https://aihorde.net/api/v2';
-
-const attr = (m, k) => String(m.attributes.find((a) => a.trait_type === k)?.value ?? '').replace(/[^\p{L}\p{N} ,'-]/gu, ' ').trim();
-
-/** Deskripsi untuk GPU dari DNA karya — tanpa teks, tanpa sosok manusia. */
-export function promptFor(key, id) {
-  const m = metadata(key, id);
-  const a = (k) => attr(m, k);
-  const c = key.replace(/^ex-/, '');
-  const base = 'masterpiece collectible digital artwork, ultra detailed, cinematic lighting, rich color, 8k, no text, no letters, no watermark';
-  if (c === 'time') return `luxury fantasy timepiece sculpture, ${a('Form')} shape, ${a('Theme')} theme, ${a('Digits')} style dial glow, ${a('Gems')} gemstones, ${a('Backdrop')} background, ${base}`;
-  if (c === 'stamp') return `vintage postage stamp of the imaginary ${a('Realm')}, ${a('Series')} theme featuring a ${a('Subject')}, ${a('Frame')} shaped stamp with perforated edges, engraved intaglio illustration, ${a('Palette')} ink palette, year ${a('Year')}, ${base}`;
-  if (c === 'quran') return `ornate islamic manuscript illumination, ${a('Illumination')} ornament, ${a('Composition')} composition, ${a('Material')} and gold leaf, ${a('Background')} background, ${a('Frame')}, empty central panel, arabesque and geometric patterns, ${base}`;
-  if (c === 'hadith') return `ornate islamic manuscript illumination, ${a('Illumination')} ornament, ${a('Composition')} composition, ${a('Material')} inlay, ${a('Background')} paper, ${a('Frame')}, empty central cartouche, arabesque and geometric patterns, ${base}`;
-  throw new Error(`koleksi ${key} tidak diproduksi GPU`);
-}
 
 const isImage = (type, bytes) => /^image\/(png|jpeg|webp)/.test(type || '') && bytes.byteLength > 15_000;
 
@@ -134,12 +111,14 @@ export async function run({ io = realIO(), fetchImpl = fetch, env = process.env,
   }
   const have = (c, id) => st[c].ids.includes(id);
   const dirty = new Set();
+  const baru = Object.fromEntries(GPU_KEYS.map((c) => [c, []]));
   const add = (c, id, by) => {
     if (have(c, id)) return false;
     const next = Math.max(0, ...Object.values(st[c].serial).map(Number)) + 1;
     st[c].ids.push(id);
     st[c].serial[id] = next;
     st[c].by[id] = by;
+    baru[c].push({ id, by });
     dirty.add(c);
     return true;
   };
@@ -211,7 +190,15 @@ export async function run({ io = realIO(), fetchImpl = fetch, env = process.env,
   const ulyahJobs = queue.slice(qi, qi + perCol * GPU_KEYS.length).map((j) => ({ ...j, prompt: promptFor(j.c, j.id) }));
   io.putText('ulyah-media/axto-gpu/jobs.json', JSON.stringify({ at: new Date().toISOString(), jobs: ulyahJobs }));
   io.putText('axto-nft-data/os/gpu-horde.json', JSON.stringify({ at: new Date().toISOString(), pending: keep }));
-  for (const c of GPU_KEYS) if (dirty.has(c) || !st[c].at) { st[c].at = new Date().toISOString(); io.putText(`axto-nft-data/os/gpu-${c}.json`, JSON.stringify(st[c])); }
+  // Worker axto.io juga menambah seri G- tiap 5 menit (Cron Trigger + Workers AI). Agar tidak saling menimpa, dokumen
+  // dibaca ULANG tepat sebelum ditulis dan hanya karya baru putaran ini yang ditambahkan (nomor seri lanjutan terbaru).
+  for (const c of GPU_KEYS) {
+    if (!dirty.has(c)) continue;
+    let doc = parse(io.getText(`axto-nft-data/os/gpu-${c}.json`), { ids: [], serial: {}, by: {} });
+    for (const x of baru[c]) doc = tambahSeri(doc, x.id, x.by) ?? doc;
+    st[c] = doc;
+    io.putText(`axto-nft-data/os/gpu-${c}.json`, JSON.stringify(doc));
+  }
   const summary = Object.fromEntries(GPU_KEYS.map((c) => [c, st[c].ids.length]));
   log(`Seri G-: ${JSON.stringify(summary)} · baru per GPU ${JSON.stringify(made)} · AI Horde menunggu ${keep.length} · antrean ulyah ${ulyahJobs.length}${P.why ? ` · alasan gagal ${JSON.stringify(P.why)}` : ''}`);
   return { summary, made, hordePending: keep.length, ulyahQueued: ulyahJobs.length, why: P.why ?? {} };

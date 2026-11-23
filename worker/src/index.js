@@ -27,6 +27,7 @@ import { withCfg, saveContracts, NETWORKS } from './config.js';
 import { vault } from './vault.js';
 import * as COIN from './coin.js';
 import * as SHOP from './shop.js';
+import * as GPUP from './gpu.js';
 import { hadithItem, translateHadith } from './translate.js';
 
 export { Ledger };
@@ -432,13 +433,10 @@ async function api(request, env, ctx, url) {
     if (!(await engineAuth(request, env, body))) return json({ error: 'auth' }, 401);
     const b = JSON.parse(body);
     if (!['time', 'stamp', 'quran', 'hadith', 'ex-time', 'ex-stamp', 'ex-quran', 'ex-hadith'].includes(b.c) || !validToken(b.c, Number(b.id)) || typeof b.prompt !== 'string' || b.prompt.length > 900 || !/no text/.test(b.prompt)) return json({ error: 'input' }, 400);
-    try {
-      const out = await env.AI.run('@cf/black-forest-labs/flux-1-schnell', { prompt: b.prompt, steps: 6 }); // FLUX schnell tidak menerima seed
-      const bytes = Uint8Array.from(atob(out?.image ?? ''), (ch) => ch.charCodeAt(0));
-      if (bytes.byteLength < 15_000) return json({ error: 'empty' }, 502);
-      await env.STORE.put(`gpu/${b.c}/${Number(b.id)}.png`, bytes, { httpMetadata: { contentType: 'image/jpeg', cacheControl: 'public, max-age=31536000, immutable' } });
-      return json({ ok: true, type: 'image/jpeg', bytes: bytes.byteLength });
-    } catch (e) { return json({ error: 'ai', detail: String(e?.message ?? e).slice(0, 200) }, 502); }
+    // jatah gratis Workers AI yang sama dengan cron worker (tanpa penyebaran waktu: sisa jatah hari ini boleh dipakai)
+    const r = await GPUP.lukisGratis(env, b.c, Number(b.id), b.prompt, { rata: false });
+    if (r.ok) return json({ ok: true, type: 'image/jpeg', bytes: r.bytes });
+    return json({ error: r.alasan === 'jatah' ? 'jatah' : 'ai', detail: String(r.alasan).slice(0, 200) }, r.alasan === 'jatah' ? 429 : 502);
   }
   if (p === '/internal/engine/commit' && method === 'POST') {
     const body = await request.text();
@@ -733,6 +731,8 @@ export default {
     ctx.waitUntil(SHOP.settleDue(e2).catch((e) => appendLog(env.STORE, 'error', { path: 'cron:settle', e: String(e?.message ?? e).slice(0, 300) })));
     ctx.waitUntil(SHOP.recover(e2, colAddrOf(e2), EX_NAMES).catch((e) => appendLog(env.STORE, 'error', { path: 'cron:recover', e: String(e?.message ?? e).slice(0, 300) })));
     ctx.waitUntil(COIN.processCashouts(env).catch((e) => appendLog(env.STORE, 'error', { path: 'cron:cashout', e: String(e?.message ?? e).slice(0, 300) })));
+    // seri G- 24 jam: satu karya per tick bila jatah gratis harian terbuka (lihat src/gpu.js)
+    ctx.waitUntil(GPUP.gpuTick(env).catch((e) => appendLog(env.STORE, 'error', { path: 'cron:gpu', e: String(e?.message ?? e).slice(0, 300) })));
   },
 };
 
