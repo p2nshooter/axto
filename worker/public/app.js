@@ -136,6 +136,7 @@ if (ex) {
   const fmtN = (n) => Number(n).toLocaleString(lang === 'id' ? 'id-ID' : 'en-US');
   const sync = () => {
     const q = new URLSearchParams({ from: String(st.from), view: st.view });
+    if (ex.dataset.maker) q.set('maker', ex.dataset.maker); // mode seri G- tetap setelah dimuat ulang
     if (st.tier !== '') q.set('tier', st.tier);
     if (st.series) q.set('series', st.series);
     history.replaceState(null, '', `${location.pathname}?${q}`);
@@ -145,11 +146,11 @@ if (ex) {
     li.dataset.id = String(it.id);
     li.dataset.tier = String(it.tier);
     const a = document.createElement('a');
-    a.href = `/${lang}/nft/${c}/${it.id}`;
+    a.href = `/${lang}/nft/${c}/${it.id}${it.gpu ? '?v=g' : ''}`;
     const im = document.createElement('img');
     Object.assign(im, { src: it.gpu ? `/gpu/${c}/${it.id}.png` : `/img/${c}/${it.id}.svg?v=9`, alt: it.name, loading: 'lazy', width: 300, height: 300 });
     const id = document.createElement('span'); id.className = 'id'; id.textContent = it.gpu ? `G-${fmtN(it.g)}` : `#${fmtN(it.id)}`;
-    if (it.gpu) li.classList.add('g');
+    if (it.gpu) { li.classList.add('g'); li.dataset.g = String(it.g); }
     const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = it.name;
     const tr = document.createElement('span'); tr.className = `tr t${it.tier}`; tr.textContent = I.tiers?.[it.tier] ?? '';
     a.append(im, id, nm, tr);
@@ -200,6 +201,7 @@ if (ex) {
   // pratinjau cepat: ketuk karya → player besar; geser/tekan panah untuk karya berikutnya
   const pk = $('.peek', ex);
   const fr = $('iframe', pk);
+  const gim = $('.peek-g', pk);
   const nameEl = $('.peek-name', pk);
   const det = $('[data-peek="detail"]', pk);
   let cur = null;
@@ -208,16 +210,20 @@ if (ex) {
     if (!li) return;
     cur = li;
     const id = li.dataset.id;
-    fr.src = `/play/${c}/${id}`;
-    nameEl.textContent = li.querySelector('.nm')?.textContent ?? `#${id}`;
-    det.href = `/${lang}/nft/${c}/${id}`;
+    // seri G-: pratinjau = lukisan GPU yang sama dengan kartunya (bukan animasi prosedural yang bentuknya lain)
+    const g = li.classList.contains('g');
+    if (g) { fr.src = 'about:blank'; fr.hidden = true; gim.hidden = false; gim.src = `/gpu/${c}/${id}.png`; gim.alt = li.querySelector('.nm')?.textContent ?? ''; }
+    else { gim.hidden = true; gim.removeAttribute('src'); fr.hidden = false; fr.src = `/play/${c}/${id}`; }
+    const nm = li.querySelector('.nm')?.textContent ?? `#${id}`;
+    nameEl.textContent = g ? `G-${fmtN(li.dataset.g || li.querySelector('.id')?.textContent?.replace(/\D/g, '') || 0)} · ${nm}` : nm;
+    det.href = `/${lang}/nft/${c}/${id}${g ? '?v=g' : ''}`;
     pk.hidden = false;
     document.documentElement.classList.add('peeking');
     const all = items();
     if (all.indexOf(li) > all.length - 6) load(false);
   };
   const step = (d) => { const all = items(); const i = all.indexOf(cur); show(all[Math.max(0, Math.min(all.length - 1, i + d))]); };
-  const close = () => { pk.hidden = true; fr.src = 'about:blank'; document.documentElement.classList.remove('peeking'); cur?.querySelector('a')?.focus(); };
+  const close = () => { pk.hidden = true; fr.src = 'about:blank'; gim.hidden = true; gim.removeAttribute('src'); document.documentElement.classList.remove('peeking'); cur?.querySelector('a')?.focus(); };
   grid.addEventListener('click', (e) => {
     const a = e.target.closest('a');
     if (!a || e.metaKey || e.ctrlKey || e.shiftKey) return;
