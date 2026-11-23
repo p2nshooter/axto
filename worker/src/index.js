@@ -433,7 +433,7 @@ async function api(request, env, ctx, url) {
     const b = JSON.parse(body);
     if (!['time', 'stamp', 'quran', 'hadith', 'ex-time', 'ex-stamp', 'ex-quran', 'ex-hadith'].includes(b.c) || !validToken(b.c, Number(b.id)) || typeof b.prompt !== 'string' || b.prompt.length > 900 || !/no text/.test(b.prompt)) return json({ error: 'input' }, 400);
     try {
-      const out = await env.AI.run('@cf/black-forest-labs/flux-1-schnell', { prompt: b.prompt, steps: 6, seed: Number(b.id) % 2_147_483_647 });
+      const out = await env.AI.run('@cf/black-forest-labs/flux-1-schnell', { prompt: b.prompt, steps: 6 }); // FLUX schnell tidak menerima seed
       const bytes = Uint8Array.from(atob(out?.image ?? ''), (ch) => ch.charCodeAt(0));
       if (bytes.byteLength < 15_000) return json({ error: 'empty' }, 502);
       await env.STORE.put(`gpu/${b.c}/${Number(b.id)}.png`, bytes, { httpMetadata: { contentType: 'image/jpeg', cacheControl: 'public, max-age=31536000, immutable' } });
