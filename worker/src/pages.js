@@ -377,6 +377,7 @@ export function adminPage(lang, ok) {
   const id = lang === 'id';
   if (!ok) return `<section class="page"><h1>${esc(t.title)}</h1><p>${esc(t.denied)}</p></section>`;
   return `<section class="page"><h1>${esc(t.title)}</h1>
+  <details class="bp" data-mk="blueprint"><summary>${id ? 'Blueprint (rahasia perusahaan — hanya dari R2 privat)' : 'Blueprint (company secret — from private R2 only)'}</summary><pre class="bp-text">…</pre></details>
   <h2>${id ? 'Toko eksklusif & pasar member' : 'Exclusive shop & member market'}</h2>
   <div data-mk="admin" data-lang="${lang}"><p class="muted">…</p></div>
   <h2>${id ? 'Kontrak (deploy otomatis oleh sistem)' : 'Contracts (deployed automatically by the system)'}</h2>

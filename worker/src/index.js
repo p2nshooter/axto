@@ -381,6 +381,12 @@ async function api(request, env, ctx, url) {
     }
     return json({ ...h, history: hist, withdrawals: wd, listings: mine, contractsLive: Object.fromEntries(SHOP.EX_KEYS.map((c) => [c, !!colAddrOf(env)(c)])), chainId: Number(env.CHAIN_ID) }, 200, { 'cache-control': 'private, no-store' });
   }
+  // blueprint rahasia perusahaan: hanya dari R2 privat (saluran tersegel), hanya untuk wallet admin
+  if (p === '/api/admin/blueprint') {
+    if (!s?.admin) return json({ error: 'admin_only' }, 403);
+    const o = await env.STORE.get('private/blueprint.md');
+    return o ? new Response(o.body, { headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'private, no-store', 'x-content-type-options': 'nosniff' } }) : json({ error: 'not_found' }, 404);
+  }
   if (p === '/api/admin/shop') {
     if (!s?.admin) return json({ error: 'admin_only' }, 403);
     return json(await SHOP.adminView(env), 200, { 'cache-control': 'private, no-store' });

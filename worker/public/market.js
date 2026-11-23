@@ -207,6 +207,15 @@ async function withdraw(items, out) {
   setTimeout(render, 600);
 }
 
+// ---------------------------------------------------------------- 4a. portal admin: blueprint privat (teks biasa, tanpa HTML)
+const bp = $('[data-mk="blueprint"]');
+if (bp) bp.addEventListener('toggle', async () => {
+  if (!bp.open || bp.dataset.loaded) return;
+  const r = await fetch('/api/admin/blueprint', { credentials: 'same-origin' });
+  $('.bp-text', bp).textContent = r.ok ? await r.text() : (id_ ? 'Blueprint belum ada di R2 privat.' : 'Blueprint not in private R2 yet.');
+  bp.dataset.loaded = '1';
+});
+
 // ---------------------------------------------------------------- 4. portal admin: ringkasan toko & pasar
 const adm = $('[data-mk="admin"]');
 if (adm) {

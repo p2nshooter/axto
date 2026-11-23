@@ -1,14 +1,17 @@
 # AXTO — axto.io
 
-Museum digital 1/1 yang hidup: 4 koleksi publik × 2.000.000 (jam, prangko, kaligrafi Al-Qur'an, model) + 3 × 50.000
-edisi eksklusif. Lelang 72 jam **mulai $1 tanpa kecuali**, royalti jual kembali 10%, koin AXTO (10 jt, tanpa burn).
+Museum digital hidup di jaringan Base dengan tiga pasar terpisah: **Eksklusif** (toko axto.io, $1 per edisi dengan koin
+AXTO, 10 edisi per karya), **Pasar Member** (jual-beli antar member: harga tetap, lelang, penawaran; fee 10%) dan
+**OpenSea** (koleksi publik, edisi 1–10, harga tetap $1–$10.000 menurut kelangkaan). Royalti 10% untuk setiap penjualan
+ulang. Seri **G-** dilukis GPU gratis/terbuka dari DNA karya.
 
-| Folder | Isi | Tes |
+| Folder | Isi | Uji |
 |---|---|---|
-| `docs/BLUEPRINT.md` | Rancangan lengkap + status (§18) + runbook (§19) | — |
-| `engine/` | DNA bijektif, renderer SVG/player, QA, logika lelang; produksi tiap jam (`.github/workflows/engine.yml`) | `npm test` |
-| `contracts/` | AxtoCollection (ERC-721C, 2981), AuctionHouse (EIP-712), Token, Sale, Vesting, Lock + `scripts/deploy.mjs` | `node scripts/compile.mjs && node --test test/*.test.mjs` |
-| `worker/` | axto-web: situs ID/EN, SEO, AdSense 3 akun, SIWE, Ledger DO (R2), marketplace eksklusif, PayPal relay | `npm test`, `npm run check` |
+| `engine/` | DNA karya, renderer SVG/player, edisi & harga (`src/editions.js`), produksi tiap jam | `npm test` |
+| `contracts/` | `AxtoToken` (100 jt) + `AxtoEditions` (ERC-1155, royalti 10% ditegakkan), deploy otomatis | `npm test` |
+| `worker/` | axto-web: situs ID/EN, SEO, toko eksklusif, pasar member, WD, hadiah, koin NOWPayments | `npm test`, `npm run check` |
+| `market/` | listing OpenSea harga tetap otomatis (wallet toko sistem) | `npm test` |
+| `ops/` | saluran privat tersegel, seri G- (GPU) | `node --test ops/test/*.mjs` |
 
-Penyimpanan: **R2 saja** (tidak pernah D1); KV hanya cache pendek. Kunci signer & PayPal hanya di vault privat
-(repo `coinaxto`, worker `axto-vault` tanpa URL publik).
+Penyimpanan: **R2 saja** (tidak pernah D1); KV hanya cache pendek. Kunci signer hanya di vault privat; data perusahaan
+hanya lewat saluran tersegel ke R2 privat.

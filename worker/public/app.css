@@ -176,3 +176,5 @@ input.sm{width:5.5em}.btn.sm{padding:5px 12px;font-size:.88em}
 .xgrid li.g a{box-shadow:0 0 0 2px #2a5a52}.xgrid li.g .id{background:#0d2a20;color:#9be3c4}
 .gpuv{margin:12px 0;border:1px solid #2a5a52;border-radius:12px;overflow:hidden;background:#000}.gpuv img{width:100%;height:auto;display:block}
 .gpuv figcaption{padding:8px 12px;font-size:.9em;color:#9be3c4;background:#0d2a20}
+
+.bp{margin:12px 0;border:1px solid var(--line);border-radius:12px;padding:10px 14px;background:var(--panel)}.bp-text{white-space:pre-wrap;word-break:break-word;max-height:70vh;overflow:auto;font-size:.88em;line-height:1.5}
