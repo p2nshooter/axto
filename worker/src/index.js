@@ -77,7 +77,7 @@ function assetProvider(env, origin) {
 }
 
 /** Versi render: naikkan saat tampilan karya berubah → cache tepi lama otomatis tidak terpakai. */
-const RENDER_V = '10';
+const RENDER_V = '11';
 async function cached(request, ctx, make) {
   const cache = caches.default;
   const u = new URL(request.url);
@@ -149,6 +149,24 @@ async function api(request, env, ctx, url) {
     return json(browse(m[1], { from: Number(q.get('from') ?? 1) | 0, n, tier: Number.isInteger(tier) && tier >= 0 && tier <= 4 ? tier : null, series: String(q.get('series') ?? '').slice(0, 32), produced }), 200, { 'cache-control': 'public, max-age=60' });
   }
   // #49: mesin penerjemah hadits (terjemahan penerjemah bila ada, selain itu Workers AI), cache tepi 30 hari
+  // Terjemah Al-Qur'an tepercaya dalam bahasa pengunjung (QuranEnc → R2, engine/bin/import-quran-tr.mjs) — pemilik,
+  // 22 Nov 2026: „Klo Al-quran mah jgn di terjemah sembarangan … Berlaku jg untu axto.io". Tidak ada terjemahan
+  // mesin di sini: bahasa tanpa terjemahan tepercaya menjawab 404 dan player tetap pada terjemah Kemenag.
+  if (p === '/api/quran/tr') {
+    const l = String(url.searchParams.get('l') ?? '').toLowerCase();
+    const s = Number(url.searchParams.get('s'));
+    const kind = url.searchParams.get('k') === 'mukhtasar' ? 'mukhtasar' : 'tr';
+    if (!/^[a-z]{2}$/.test(l) || !Number.isInteger(s) || s < 1 || s > 114) return json({ error: 'params' }, 400);
+    const [meta, file] = await Promise.all([env.STORE.get(`quran/${kind}/${l}/meta.json`), env.STORE.get(`quran/${kind}/${l}/${s}.json`)]);
+    if (!meta || !file) return json({ error: 'none' }, 404, { 'cache-control': 'public, max-age=3600' });
+    const m = await meta.json();
+    const f = await file.json();
+    return json(
+      { lang: l, kind, credit: `${m.title} · ${m.source} v${m.version}`, url: m.url, ayat: f.ayat },
+      200,
+      { 'cache-control': 'public, max-age=86400' },
+    );
+  }
   if (p === '/api/hadith/tr') {
     const q = url.searchParams;
     const to = String(q.get('to') ?? '').toLowerCase().slice(0, 3);

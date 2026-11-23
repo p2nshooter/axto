@@ -1,0 +1,42 @@
+name: Terjemah Al-Qur'an Tepercaya (QuranEnc → R2)
+
+# Pemilik, 22 Nov 2026: „Klo Al-quran mah jgn di terjemah sembarangan, cari langsung tafsir2 dari setiap negara …
+# yg tafsirnya sholeh" — „Berlaku jg untu axto.io". Satu terjemahan tinjauan per bahasa pengunjung + Al-Mukhtashar,
+# disimpan apa adanya di R2 (engine/bin/import-quran-tr.mjs); mingguan, karena QuranEnc meminta versi terbaru diikuti.
+on:
+  workflow_dispatch:
+    inputs:
+      langs:
+        description: "Bahasa (kosong = semua)"
+        required: false
+        default: ""
+      force:
+        description: "Impor ulang walau versi sama"
+        required: false
+        type: boolean
+        default: false
+  schedule:
+    - cron: "41 4 * * 1"
+
+concurrency:
+  group: quran-tr
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Impor (dicek 114 surah / 6.236 ayat sebelum ditulis)
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_KEY: ${{ secrets.CLOUDFLARE_API_KEY }}
+          CLOUDFLARE_EMAIL: ${{ secrets.CLOUDFLARE_EMAIL }}
+        run: node engine/bin/import-quran-tr.mjs --langs="${{ inputs.langs }}" ${{ inputs.force && '--force' || '' }}
