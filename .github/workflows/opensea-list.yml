@@ -1,9 +1,9 @@
 name: Listing OpenSea otomatis (wallet toko)
 
-# Perintah pemilik #44/#45: seluruh NFT publik dijual otomatis di OpenSea dengan harga tetap per tier
-# (Classic $10 · Rare $25 · Epic $75 · Legendary $250 · Masterpiece $1000). Etalase axto.io (5.000 acak per jenis)
-# dilisting dulu dan diganti otomatis bila terjual; sisa koleksi bergulir. Hasil penjualan diteruskan ke treasury.
-# Sebelum kontrak aktif, skrip hanya menulis status „menunggu kontrak".
+# Desain akhir pemilik 23 Nov 2026: NFT publik dijual otomatis di OpenSea dengan HARGA TETAP (tanpa lelang), edisi 1-10
+# per karya, harga $1-$10.000 menurut kelangkaan (engine/src/editions.js). Stok dibaca dari saldo on-chain wallet toko;
+# karya habis keluar dari etalase axto.io; stok menipis -> rilis berikutnya otomatis. Hasil penjualan -> treasury (alamat
+# dari R2 privat). Sebelum kontrak edisi aktif, skrip hanya menulis status „menunggu kontrak".
 on:
   schedule:
     - cron: '41 * * * *'
@@ -33,7 +33,7 @@ jobs:
       - name: Pasang mesin listing
         working-directory: market
         run: npm ci --omit=dev --no-audit --no-fund || npm install --omit=dev --no-audit --no-fund --no-save
-      - name: Listing, deteksi penjualan, perbarui etalase, teruskan hasil ke treasury
+      - name: Baca stok on-chain, rilis bila menipis, listing harga tetap, perbarui etalase, teruskan hasil ke treasury
         working-directory: market
         env:
           CLOUDFLARE_API_KEY: ${{ secrets.CLOUDFLARE_API_KEY }}

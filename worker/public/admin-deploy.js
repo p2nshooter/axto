@@ -51,12 +51,19 @@ function openseaBox(s) {
   box.append(el('h2', id ? 'Penjualan OpenSea (wallet toko sistem)' : 'OpenSea sales (system store wallet)'));
   if (st.store) say(`${id ? 'Wallet toko' : 'Store wallet'}: ${st.store}`, 'meta');
   say(`${id ? 'Langkah' : 'Step'}: ${st.step ?? (id ? 'belum berjalan' : 'not started')}${st.at ? ` · ${new Date(st.at).toLocaleString()}` : ''}`);
-  if (st.listedTotal != null) say(`${id ? 'Listing terkirim' : 'Listings sent'}: ${Number(st.listedTotal).toLocaleString()} · ${id ? 'etalase terlisting' : 'showcase listed'}: ${JSON.stringify(st.showcase ?? {})} · ${id ? 'terjual' : 'sold'}: ${JSON.stringify(st.sold ?? {})}${st.ethUsd ? ` · ETH $${st.ethUsd}` : ''}`, 'meta');
+  if (st.listedTotal != null) say(`${id ? 'Listing harga tetap terkirim' : 'Fixed-price listings sent'}: ${Number(st.listedTotal).toLocaleString()}${st.ethUsd ? ` · ETH $${st.ethUsd}` : ''}`, 'meta');
+  // per koleksi: karya dirilis · masih tersedia · habis · edisi terjual (supply 1–10 per karya, harga tetap $1–$10.000)
+  for (const [c, x] of Object.entries(st.collections ?? {})) {
+    say(`${c}: ${id ? 'dirilis' : 'released'} ${Number(x.released).toLocaleString()} · ${id ? 'tersedia' : 'available'} ${Number(x.available).toLocaleString()} · ${id ? 'habis' : 'sold out'} ${Number(x.soldOut).toLocaleString()} · ${id ? 'edisi terjual' : 'editions sold'} ${Number(x.soldUnits).toLocaleString()} / ${Number(x.editions).toLocaleString()}`, 'meta');
+  }
+  for (const r of st.releases ?? []) say(`${id ? 'Rilis' : 'Release'} ${r.c} +${r.n} → ${r.to} · ${r.tx}`, 'muted');
+  if (st.release) say(st.release, 'muted');
+  if (st.sweep) say(st.sweep, 'muted');
   if (st.swept) say(`${id ? 'Terakhir diteruskan ke treasury' : 'Last forwarded to treasury'}: ${st.swept.eth} ETH`, 'ok');
   for (const e of st.errors ?? []) say(e, 'muted');
   // #48 zero hand admin: listing berjalan sendiri; tombol ini hanya untuk menjeda bila perlu (opsional)
   const paused = o.pause?.paused === true;
-  say(paused ? (id ? '⏸ Listing sedang dijeda.' : '⏸ Listing is paused.') : (id ? '▶ Otomatis: listing, etalase, deteksi penjualan & penerusan hasil ke treasury berjalan sendiri tiap jam.' : '▶ Automatic: listing, showcase, sale detection and forwarding to treasury run by themselves every hour.'), paused ? 'muted' : 'ok');
+  say(paused ? (id ? '⏸ Listing sedang dijeda.' : '⏸ Listing is paused.') : (id ? '▶ Otomatis: listing harga tetap, etalase, stok on-chain, rilis lanjutan & penerusan hasil ke treasury berjalan sendiri tiap jam.' : '▶ Automatic: fixed-price listing, showcase, on-chain stock, follow-up releases and forwarding to treasury run by themselves every hour.'), paused ? 'muted' : 'ok');
   const b = el('button', paused ? (id ? 'Lanjutkan listing' : 'Resume listing') : (id ? 'Jeda listing' : 'Pause listing'), paused ? 'btn gold' : 'btn ghost');
   b.type = 'button';
   b.addEventListener('click', async () => {
