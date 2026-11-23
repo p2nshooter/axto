@@ -31,3 +31,16 @@ test('halaman publik tidak pernah menyebut penyedia GPU (rahasia perusahaan)', (
     assert.doesNotMatch(html, /pollinations|workers ai|cloudflare|hugging ?face|ulyah|horde/i);
   }
 });
+
+test('player G- Jam & Prangko tidak pernah memuat teks Arab/ayat — teks Arab hanya di koleksi Al-Qur\'an & Hadits', async () => {
+  const { gpuPlayer } = await import('../../engine/src/render/gpu-player.js');
+  const { dna } = await import('../../engine/src/dna.js');
+  const AYAT = { ar: 'بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ', surah: 1, ayah: 1 }; // sengaja diberikan: tetap tidak boleh tampil
+  for (const c of ['time', 'ex-time', 'stamp', 'ex-stamp']) {
+    const html = gpuPlayer(dna(c, 5), metadata(c, 5, 'https://axto.io'), AYAT, { img: `/gpu/${c}/5.png?v=b`, g: 1, ref: 'x' });
+    assert.doesNotMatch(html, /[؀-ۿ]/, `${c}: tidak boleh ada huruf Arab`);
+    assert.doesNotMatch(html, /id="ar"|Amiri/, c);
+  }
+  assert.match(gpuPlayer(dna('time', 5), metadata('time', 5, 'https://axto.io'), {}, { img: 'x', g: 1 }), /id="hh"[\s\S]*id="mm"[\s\S]*id="ss"/, 'jam: jarum jam, menit, detik');
+  for (const c of ['hadith', 'ex-quran']) assert.match(gpuPlayer(dna(c, 5), metadata(c, 5, 'https://axto.io'), AYAT, { img: 'x', g: 1, ref: 'r' }), /بِسْمِ/, c);
+});
