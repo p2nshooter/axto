@@ -206,8 +206,12 @@ async function api(request, env, ctx, url) {
       if (gpu) r.items = gpuItems(gs, r.items);
       return json(r, 200, { 'cache-control': 'public, max-age=60' });
     }
-    // eksklusif: semua 10.000 karya tersedia di toko; kartu memuat $1 + sisa edisi
-    const r = browse(m[1], { from: Number(q.get('from') ?? 1) | 0, n, tier: Number.isInteger(tier) && tier >= 0 && tier <= 4 ? tier : null, series: String(q.get('series') ?? '').slice(0, 32), produced: COLLECTIONS[m[1]].max });
+    // eksklusif: semua 10.000 karya tersedia di toko; kartu memuat $1 + sisa edisi (mode G-: hanya karya yang dilukis GPU)
+    const exg = q.get('maker') === 'gpu' ? await gpuSet(env, m[1]) : null;
+    const r = exg
+      ? browseList(m[1], [...exg.ids].reverse(), { from: Number(q.get('from') ?? 1) | 0, n, tier: Number.isInteger(tier) && tier >= 0 && tier <= 4 ? tier : null, series: String(q.get('series') ?? '').slice(0, 32) })
+      : browse(m[1], { from: Number(q.get('from') ?? 1) | 0, n, tier: Number.isInteger(tier) && tier >= 0 && tier <= 4 ? tier : null, series: String(q.get('series') ?? '').slice(0, 32), produced: COLLECTIONS[m[1]].max });
+    if (exg) r.items = gpuItems(exg, r.items);
     const sold = await soldOf(env, m[1]);
     r.items = r.items.map((it) => ({ ...it, usd: 1, left: 10 - (sold[it.id] ?? 0) }));
     return json(r, 200, { 'cache-control': 'public, max-age=30' });
@@ -427,7 +431,7 @@ async function api(request, env, ctx, url) {
     const body = await request.text();
     if (!(await engineAuth(request, env, body))) return json({ error: 'auth' }, 401);
     const b = JSON.parse(body);
-    if (!['time', 'stamp', 'quran', 'hadith'].includes(b.c) || !validToken(b.c, Number(b.id)) || typeof b.prompt !== 'string' || b.prompt.length > 900 || !/no text/.test(b.prompt)) return json({ error: 'input' }, 400);
+    if (!['time', 'stamp', 'quran', 'hadith', 'ex-time', 'ex-stamp', 'ex-quran', 'ex-hadith'].includes(b.c) || !validToken(b.c, Number(b.id)) || typeof b.prompt !== 'string' || b.prompt.length > 900 || !/no text/.test(b.prompt)) return json({ error: 'input' }, 400);
     try {
       const out = await env.AI.run('@cf/black-forest-labs/flux-1-schnell', { prompt: b.prompt, steps: 6, seed: Number(b.id) % 2_147_483_647 });
       const bytes = Uint8Array.from(atob(out?.image ?? ''), (ch) => ch.charCodeAt(0));
@@ -581,14 +585,17 @@ async function html(request, env, ctx, url) {
     const tq = url.searchParams.get('tier');
     const tier = tq !== null && tq !== '' && /^[0-4]$/.test(tq) ? Number(tq) : null;
     const series = String(url.searchParams.get('series') ?? '').slice(0, 32);
-    const first = browse(c, { from, n: 60, tier, series, produced });
+    const maker = url.searchParams.get('maker') === 'gpu' && c !== 'ex-model' ? 'gpu' : '';
+    const gs = await gpuSet(env, c);
+    const first = maker ? browseList(c, [...gs.ids].reverse(), { from, n: 60, tier, series }) : browse(c, { from, n: 60, tier, series, produced });
+    if (maker) first.items = gpuItems(gs, first.items);
     const sold = await soldOf(env, c);
     first.items = first.items.map((it) => ({ ...it, usd: 1, left: 10 - (sold[it.id] ?? 0) }));
     const crumbs = [[BREAD[lang].home, `/${lang}`], [BREAD[lang].ex, `/${lang}/${PATHS.exclusive[lang]}`], [P.collName(lang, c), `/${lang}/c/${c}`]];
-    const filtered = url.searchParams.has('from') || tier !== null || !!series;
+    const filtered = url.searchParams.has('from') || tier !== null || !!series || !!maker;
     const name = P.collName(lang, c);
     const desc = lang === 'id' ? `${name}: ${produced.toLocaleString('id-ID')} karya eksklusif, masing-masing 10 edisi, harga tetap $1 per edisi dengan koin AXTO di axto.io.` : `${name}: ${produced.toLocaleString('en-US')} exclusive works, 10 editions each, a fixed $1 per edition in AXTO coin on axto.io.`;
-    return out({ page: 'home', rest: `/c/${c}`, title: `${name} — $1`, desc, noindex: filtered, jsonld: [breadcrumb(base, crumbs)], body: P.collectionPage(lang, c, { produced, from, tier, series, first, crumbs, view: url.searchParams.get('view') ?? 'mosaic' }) });
+    return out({ page: 'home', rest: `/c/${c}`, title: `${name} — $1`, desc, noindex: filtered, jsonld: [breadcrumb(base, crumbs)], body: P.collectionPage(lang, c, { produced: maker ? gs.ids.length : produced, from, tier, series, first, crumbs, view: url.searchParams.get('view') ?? 'mosaic', maker, gpuCount: gs.ids.length }) });
   }
   if (sub === 'nft' && validToken(parts[2], Number(parts[3]))) {
     const [c, id] = [parts[2], Number(parts[3])];
@@ -625,16 +632,18 @@ async function html(request, env, ctx, url) {
       if (L) listings.push(SHOP.publicListing(L));
     }
     const priceCoins = COIN.fmtCoins(await SHOP.editionMicro(env));
+    const exgs = await gpuSet(env, c);
     const crumbs = [[BREAD[lang].home, `/${lang}`], [BREAD[lang].ex, `/${lang}/${PATHS.exclusive[lang]}`], [P.collName(lang, c), `/${lang}/c/${c}`]];
     const product = { '@context': 'https://schema.org', '@type': 'Product', name: meta.name, image: meta.image, description: meta.description.slice(0, 300), sku: `${c}-${id}`, brand: { '@type': 'Brand', name: 'AXTO' }, offers: { '@type': 'Offer', priceCurrency: 'USD', price: 1, availability: stock.left > 0 ? 'https://schema.org/InStock' : 'https://schema.org/SoldOut', url: `${base}/${lang}/nft/${c}/${id}`, seller: { '@type': 'Organization', name: 'AXTO' } } };
-    return out({ page: 'home', rest: `/nft/${c}/${id}`, title: `${meta.name} — $1`, desc: `${meta.name}: ${lang === 'id' ? 'karya eksklusif, 10 edisi, $1 per edisi dengan koin AXTO di axto.io' : 'exclusive work, 10 editions, $1 per edition in AXTO coin on axto.io'}.`.slice(0, 160), image: meta.image, jsonld: [product, breadcrumb(base, [...crumbs, [meta.name, `/${lang}/nft/${c}/${id}`]])], body: P.nftPage(lang, c, id, meta, attributesFor(c, id, lang), '', { stock, listings, priceCoins, crumbs }), script: "const x=document.createElement('script');x.type='module';x.src='/market.js?v=1';document.head.append(x);" });
+    return out({ page: 'home', rest: `/nft/${c}/${id}`, title: `${meta.name} — $1`, desc: `${meta.name}: ${lang === 'id' ? 'karya eksklusif, 10 edisi, $1 per edisi dengan koin AXTO di axto.io' : 'exclusive work, 10 editions, $1 per edition in AXTO coin on axto.io'}.`.slice(0, 160), image: meta.image, jsonld: [product, breadcrumb(base, [...crumbs, [meta.name, `/${lang}/nft/${c}/${id}`]])], body: P.nftPage(lang, c, id, meta, attributesFor(c, id, lang), '', { stock, listings, priceCoins, crumbs, gpuSerial: exgs.serial[id] ? Number(exgs.serial[id]) : 0, gpuBy: exgs.by?.[id] ?? '' }), script: "const x=document.createElement('script');x.type='module';x.src='/market.js?v=1';document.head.append(x);" });
   }
   const key = pageFromSlug(sub);
   const mk = "const x=document.createElement('script');x.type='module';x.src='/market.js?v=1';document.head.append(x);";
   if (key === 'exclusive' && !parts[2]) {
     const sold = {};
-    for (const c of SHOP.EX_KEYS) sold[c] = Object.values(await soldOf(env, c)).reduce((a, b) => a + b, 0);
-    return out({ page: key, title: T[lang].exclusive.title, desc: T[lang].exclusive.lead.slice(0, 160), jsonld: [breadcrumb(base, [[BREAD[lang].home, `/${lang}`], [BREAD[lang].ex, `/${lang}/${PATHS.exclusive[lang]}`]])], body: P.exclusivePage(lang, { sold, priceCoins: COIN.fmtCoins(await SHOP.editionMicro(env)) }) });
+    const gpuEx = {};
+    for (const c of SHOP.EX_KEYS) { sold[c] = Object.values(await soldOf(env, c)).reduce((a, b) => a + b, 0); gpuEx[c] = (await gpuIds(env, c)).length; }
+    return out({ page: key, title: T[lang].exclusive.title, desc: T[lang].exclusive.lead.slice(0, 160), jsonld: [breadcrumb(base, [[BREAD[lang].home, `/${lang}`], [BREAD[lang].ex, `/${lang}/${PATHS.exclusive[lang]}`]])], body: P.exclusivePage(lang, { sold, gpu: gpuEx, priceCoins: COIN.fmtCoins(await SHOP.editionMicro(env)) }) });
   }
   if (key === 'market' && !parts[2]) {
     const q = url.searchParams;
@@ -688,8 +697,8 @@ export default {
       if (p.startsWith('/api/') || p.startsWith('/internal/') || p === '/tokenlist.json') return await api(request, env, ctx, url);
       let m = /^\/img\/([a-z-]+)\/(\d+)\.svg$/.exec(p);
       if (m && validToken(m[1], Number(m[2]))) return await svg(request, env, ctx, m[1], Number(m[2]), url.origin);
-      m = /^\/gpu\/([a-z]+)\/(\d+)\.png$/.exec(p);
-      if (m && validToken(m[1], Number(m[2])) && !COLLECTIONS[m[1]].exclusive) {
+      m = /^\/gpu\/([a-z-]+)\/(\d+)\.png$/.exec(p);
+      if (m && validToken(m[1], Number(m[2]))) {
         const o = await env.STORE.get(`gpu/${m[1]}/${m[2]}.png`);
         if (!o) return new Response('not found', { status: 404 });
         return new Response(o.body, { headers: { 'content-type': o.httpMetadata?.contentType ?? 'image/png', 'cache-control': 'public, max-age=86400, s-maxage=31536000, immutable', 'x-content-type-options': 'nosniff' } });

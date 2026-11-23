@@ -117,6 +117,7 @@ export function exclusivePage(lang, d) {
   ${storyBlock(lang, false)}
   <div class="grid3">${EXCL.map((c) => `<article class="card is-ex"><a class="art" href="/${lang}/c/${c}"><img src="${img(c, 1 + ((Date.now() >> 20) % COLLECTIONS[c].max))}" alt="${esc(collName(lang, c))}" loading="lazy" width="400" height="400"></a>
   <h3>${esc(collName(lang, c))}</h3><p class="meta">${fmt(COLLECTIONS[c].max, lang)} ${esc(x.works)} × ${EXCLUSIVE_SUPPLY} ${esc(x.editions)} · ${fmt(d.sold?.[c] ?? 0, lang)} / ${fmt(total(c), lang)} ${esc(x.sold)}</p>
+  ${c !== 'ex-model' ? `<p class="meta"><a class="link gchip-l" href="/${lang}/c/${c}?maker=gpu">${esc(t.opensea.gpu)} · ${fmt(d.gpu?.[c] ?? 0, lang)} ${esc(x.works)} →</a></p>` : ''}
   <a class="btn gold" href="/${lang}/c/${c}">${esc(t.collections.open)} →</a></article>`).join('')}</div>
   <p class="meta">${esc(x.custody)} <a class="link" href="${altPath('coin', lang)}#beli-koin">${esc(x.needCoins)} →</a> · <a class="link" href="${altPath('market', lang)}">${esc(t.nav.market)} →</a></p></section>`;
 }
@@ -163,7 +164,8 @@ export function collectionPage(lang, c, o) {
   const tag = (it) => (pub ? `${it.usd ? `<span class="pr">$${fmt(it.usd, lang)}</span>` : ''}${it.ed ? `<span class="ed">${it.ed}×</span>` : ''}` : `<span class="pr">$1</span><span class="ed${it.left === 0 ? ' out' : ''}">${it.left ?? EXCLUSIVE_SUPPLY}/${EXCLUSIVE_SUPPLY}</span>`);
   const tile = (it) => `<li data-id="${it.id}" data-tier="${it.tier}"${it.gpu ? ' class="g"' : ''}><a href="${nftPath(lang, c, it.id)}"><img src="${it.gpu ? `/gpu/${c}/${it.id}.png` : img(c, it.id)}" alt="${esc(it.name)}" loading="lazy" width="300" height="300"><span class="id">${it.gpu ? `G-${fmt(it.g, lang)}` : `#${fmt(it.id, lang)}`}</span><span class="nm">${esc(it.name)}</span><span class="tr t${it.tier}">${esc(TIER_NAMES[lang][it.tier])}</span>${tag(it)}</a></li>`;
   const crumbs = o.crumbs ? `<nav class="crumbs" aria-label="breadcrumb">${o.crumbs.map(([n, h], i) => (i < o.crumbs.length - 1 ? `<a href="${h}">${esc(n)}</a>` : `<span aria-current="page">${esc(n)}</span>`)).join(' › ')}</nav>` : '';
-  const gpuChip = pub && c !== 'model' ? `<a href="/${lang}/c/${c}?maker=gpu"${o.maker === 'gpu' ? ' aria-current="true"' : ''} class="gchip">${esc(t.opensea.gpu)} <small>${fmt(o.gpuCount ?? 0, lang)}</small></a>` : '';
+  const gpuChip = !/model$/.test(c) ? `<a href="/${lang}/c/${c}?maker=gpu"${o.maker === 'gpu' ? ' aria-current="true"' : ''} class="gchip">${esc(t.opensea.gpu)} <small>${fmt(o.gpuCount ?? 0, lang)}</small></a>` : '';
+  const exChips = !pub && gpuChip ? `<nav class="chips" aria-label="G-"><a href="/${lang}/c/${c}"${o.maker !== 'gpu' ? ' aria-current="true"' : ''}>${esc(lang === 'id' ? 'Semua' : 'All')} <small>${fmt(COLLECTIONS[c].max, lang)}</small></a>${gpuChip}</nav>` : '';
   const chips = pub && o.facets ? `<nav class="chips" aria-label="${esc(L.series)}"><a href="/${lang}/c/${c}"${!o.series && !o.surah && o.maker !== 'gpu' ? ' aria-current="true"' : ''}>${esc(lang === 'id' ? 'Semua' : 'All')} <small>${fmt(o.produced, lang)}</small></a>${gpuChip}${opts.filter(([k]) => o.facets.series[k]).map(([k]) => `<a href="/${lang}/c/${c}/${k}"${o.series === k && !o.surah ? ' aria-current="true"' : ''}>${esc(seriesLabel(c, k, lang))} <small>${fmt(o.facets.series[k], lang)}</small></a>`).join('')}</nav>` : '';
   const surahs = pub && c === 'quran' && o.facets ? `<details class="surahs"${o.surah ? ' open' : ''}><summary>${esc(lang === 'id' ? 'Telusuri per surah (114)' : 'Browse by surah (114)')}</summary><ol>${Object.keys(o.facets.surah).map(Number).sort((a, b) => a - b).map((n) => `<li><a href="/${lang}/c/quran/surah/${n}"${o.surah === n ? ' aria-current="true"' : ''}>${n}. ${esc(surahInfo(n)[2])} <small>${fmt(o.facets.surah[n], lang)}</small></a></li>`).join('')}</ol></details>` : '';
   // pub: status OpenSea jujur (belum aktif = pratinjau) + rentang edisi & harga per kelangkaan; eksklusif: $1 saja
@@ -173,7 +175,7 @@ export function collectionPage(lang, c, o) {
   const gpuNote = o.maker === 'gpu' && !o.first.items.length ? `<p class="empty">${esc(t.opensea.gpuNone)}</p>` : '';
   const qs = (extra) => new URLSearchParams({ ...(o.tier !== null ? { tier: String(o.tier) } : {}), ...(o.series ? { series: o.series } : {}), view, ...extra }).toString().replace(/&/g, '&amp;');
   return `<section class="page explorer" id="explorer" data-c="${c}" data-lang="${lang}" data-produced="${o.produced}" data-maker="${o.maker === 'gpu' ? 'gpu' : ''}" data-next="${o.first.next ?? ''}" data-from="${o.from}" data-surah="${o.surah || ''}">
-  ${crumbs}<h1>${esc(o.seo?.h1 ?? collName(lang, c))}</h1><p class="kindline">${badge(lang, c, true)}</p><p class="lead">${esc(o.seo?.intro ?? t.collections[base][1])}</p>${priceRow}${chips}${surahs}${gpuNote}
+  ${crumbs}<h1>${esc(o.seo?.h1 ?? collName(lang, c))}</h1><p class="kindline">${badge(lang, c, true)}</p><p class="lead">${esc(o.seo?.intro ?? t.collections[base][1])}</p>${priceRow}${chips}${exChips}${surahs}${gpuNote}
   <div class="xbar">
     <div class="views" role="group" aria-label="View">${['mosaic', 'gallery', 'list'].map((v, i) => `<button type="button" data-view="${v}"${v === view ? ' aria-pressed="true"' : ' aria-pressed="false"'}>${esc(L.views[i])}</button>`).join('')}</div>
     <label class="jump"><span>${esc(L.jump)}<output>${fmt(o.from, lang)}</output></span><input type="range" min="1" max="${Math.max(1, o.produced)}" step="1" value="${o.from}" aria-label="${esc(L.jump)}"></label>
@@ -222,6 +224,7 @@ export function nftPage(lang, c, id, meta, attrsId, opensea = '', info = null) {
     <p class="kindline">${badge(lang, c, true)}</p>
     <h1>${esc(meta.name)}</h1>
     <p class="meta">${esc(t.nft.rarity)}: ${esc(TIER_NAMES[lang][TIER_NAMES.en.indexOf(rarity)] ?? rarity)} · ${EXCLUSIVE_SUPPLY} ${esc(t.nft.editionOf)}</p>
+    ${info.gpuSerial ? `<figure class="gpuv"><img src="/gpu/${c}/${id}.png" alt="${esc(meta.name)} — G-${info.gpuSerial}" width="768" height="768" loading="lazy"><figcaption><b>G-${fmt(info.gpuSerial, lang)}</b> · ${esc(lang === 'id' ? 'Versi GPU — dilukis GPU dari DNA karya ini' : 'GPU version — painted by GPU from this work’s DNA')}${info.gpuBy ? ` · ${esc(GPU_NAME[info.gpuBy] ?? info.gpuBy)}` : ''}</figcaption></figure>` : ''}
     <div class="buybox shopbox" data-mk="shop" data-c="${c}" data-id="${id}" data-left="${st.left}">
       <p class="price"><span>${esc(x.price)}</span><b>$1</b><small>${esc(info.priceCoins)} AXTO · ${esc(x.left)}: ${st.left}/${EXCLUSIVE_SUPPLY}</small></p>
       ${st.left > 0 ? `<p class="bidrow"><label>${esc(x.qty)} <select name="qty">${opts}</select></label> <button class="btn gold big" type="button" data-mk-buy>${esc(x.buy)}</button></p>` : `<p class="status">${esc(x.soldOut)}</p>`}

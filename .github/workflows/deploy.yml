@@ -170,6 +170,7 @@ jobs:
             if [ -n "${!k}" ]; then printf '%s' "${!k}" | npx wrangler secret put "$k" --name axto-web >/dev/null && np="$np $k"; fi
           done
           echo "- NOWPayments di worker:${np:- (belum ada secret)}" >> "$GITHUB_STEP_SUMMARY"
+          echo "NOWPayments di worker (nama secret saja):${np:- belum ada}"
           echo "rahasia worker siap"
 
       - name: Pindahkan axto.io & www.axto.io ke worker axto-web

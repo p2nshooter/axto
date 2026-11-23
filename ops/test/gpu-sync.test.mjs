@@ -2,7 +2,7 @@
 // Tanpa jaringan: fetch & R2 tiruan. Nomor seri G- berurutan, tidak dobel, Figur Model tidak diproduksi.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { run, promptFor, GPU_KEYS } from '../gpu-sync.mjs';
+import { run, promptFor, GPU_KEYS, candidates } from '../gpu-sync.mjs';
 import { showcaseIds } from '../../engine/src/showcase.js';
 
 const IMG = Buffer.alloc(40_000, 7);
@@ -15,8 +15,11 @@ const res = (status, body, type) => new Response(body, { status, headers: type ?
 const ENV = { CLOUDFLARE_ACCOUNT_ID: 'acc', CLOUDFLARE_API_KEY: 'k', CLOUDFLARE_EMAIL: 'e@x' };
 
 test('deskripsi GPU: tanpa teks, Figur Model tidak diproduksi', () => {
-  assert.deepEqual(GPU_KEYS, ['time', 'stamp', 'quran', 'hadith']);
-  for (const c of GPU_KEYS) assert.match(promptFor(c, showcaseIds(c).ids[0]), /no text, no letters/);
+  assert.deepEqual(GPU_KEYS, ['time', 'stamp', 'quran', 'hadith', 'ex-time', 'ex-stamp', 'ex-quran', 'ex-hadith']);
+  assert.throws(() => promptFor('ex-model', 1));
+  const ex = candidates('ex-quran');
+  assert.equal(new Set(ex).size, 10_000, 'permutasi lengkap karya eksklusif');
+  for (const c of GPU_KEYS) assert.match(promptFor(c, candidates(c)[0]), /no text, no letters/);
   assert.throws(() => promptFor('model', 1));
 });
 
@@ -30,8 +33,8 @@ test('GPU gratis bergiliran: Workers AI & Pollinations merender, gagal → pinda
     if (url.includes('/generate/async')) return res(202, JSON.stringify({ id: `h${Math.random()}` }), 'application/json');
     return res(404, 'x');
   };
-  const r = await run({ io, fetchImpl, env: ENV, log: () => {}, perCol: 2, max: { direct: 8, horde: 2 }, pause: async () => {} });
-  assert.equal(Object.values(r.made).reduce((a, b) => a + b, 0), 8);
+  const r = await run({ io, fetchImpl, env: ENV, log: () => {}, perCol: 2, max: { direct: 16, horde: 2 }, pause: async () => {} });
+  assert.equal(Object.values(r.made).reduce((a, b) => a + b, 0), 16);
   assert.ok(r.made['cloudflare-workers-ai'] > 0 && r.made.pollinations > 0, JSON.stringify(r.made));
   for (const c of GPU_KEYS) {
     const st = JSON.parse(io.files[`axto-nft-data/os/gpu-${c}.json`]);

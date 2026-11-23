@@ -23,7 +23,13 @@ import { join } from 'node:path';
 import { metadata } from '../engine/src/metadata.js';
 import { showcaseIds } from '../engine/src/showcase.js';
 
-export const GPU_KEYS = ['time', 'stamp', 'quran', 'hadith'];
+export const GPU_KEYS = ['time', 'stamp', 'quran', 'hadith', 'ex-time', 'ex-stamp', 'ex-quran', 'ex-hadith'];
+/** Urutan karya kandidat: etalase acak (publik) atau permutasi tetap 1..10.000 (eksklusif, langkah prima → semua karya terjangkau). */
+export function candidates(c) {
+  if (!c.startsWith('ex-')) return showcaseIds(c).ids;
+  const n = 10_000;
+  return Array.from({ length: n }, (_, k) => ((k * 7919) % n) + 1);
+}
 const QUEUE_PER_COL = Number(process.env.QUEUE_PER_COL || 24);
 export const NEGATIVE = 'text, letters, words, writing, calligraphy, arabic script, numbers, watermark, signature, logo, person, face, blurry, lowres, deformed';
 const UA = 'axto-gpu/1.0 (+https://axto.io)';
@@ -32,15 +38,16 @@ const HORDE = 'https://aihorde.net/api/v2';
 const attr = (m, k) => String(m.attributes.find((a) => a.trait_type === k)?.value ?? '').replace(/[^\p{L}\p{N} ,'-]/gu, ' ').trim();
 
 /** Deskripsi untuk GPU dari DNA karya — tanpa teks, tanpa sosok manusia. */
-export function promptFor(c, id) {
-  const m = metadata(c, id);
+export function promptFor(key, id) {
+  const m = metadata(key, id);
   const a = (k) => attr(m, k);
+  const c = key.replace(/^ex-/, '');
   const base = 'masterpiece collectible digital artwork, ultra detailed, cinematic lighting, rich color, 8k, no text, no letters, no watermark';
   if (c === 'time') return `luxury fantasy timepiece sculpture, ${a('Form')} shape, ${a('Theme')} theme, ${a('Digits')} style dial glow, ${a('Gems')} gemstones, ${a('Backdrop')} background, ${base}`;
   if (c === 'stamp') return `vintage postage stamp of the imaginary ${a('Realm')}, ${a('Series')} theme featuring a ${a('Subject')}, ${a('Frame')} shaped stamp with perforated edges, engraved intaglio illustration, ${a('Palette')} ink palette, year ${a('Year')}, ${base}`;
   if (c === 'quran') return `ornate islamic manuscript illumination, ${a('Illumination')} ornament, ${a('Composition')} composition, ${a('Material')} and gold leaf, ${a('Background')} background, ${a('Frame')}, empty central panel, arabesque and geometric patterns, ${base}`;
   if (c === 'hadith') return `ornate islamic manuscript illumination, ${a('Illumination')} ornament, ${a('Composition')} composition, ${a('Material')} inlay, ${a('Background')} paper, ${a('Frame')}, empty central cartouche, arabesque and geometric patterns, ${base}`;
-  throw new Error(`koleksi ${c} tidak diproduksi GPU`);
+  throw new Error(`koleksi ${key} tidak diproduksi GPU`);
 }
 
 const isImage = (type, bytes) => /^image\/(png|jpeg|webp)/.test(type || '') && bytes.byteLength > 15_000;
@@ -163,7 +170,7 @@ export async function run({ io = realIO(), fetchImpl = fetch, env = process.env,
   // c) karya berikutnya (bergiliran antar koleksi)
   const failedUlyah = (c, id) => (done.failed?.[`${c}:${id}`] ?? 0) >= 3;
   const busy = new Set(keep.map((p) => `${p.c}:${p.id}`));
-  const lists = Object.fromEntries(GPU_KEYS.map((c) => [c, showcaseIds(c).ids.filter((id) => !have(c, id) && !busy.has(`${c}:${id}`) && !failedUlyah(c, id)).slice(0, perCol * 4)]));
+  const lists = Object.fromEntries(GPU_KEYS.map((c) => { const out = []; for (const id of candidates(c)) { if (out.length >= perCol * 4) break; if (!have(c, id) && !busy.has(`${c}:${id}`) && !failedUlyah(c, id)) out.push(id); } return [c, out]; }));
   const queue = [];
   for (let i = 0; queue.length < perCol * GPU_KEYS.length * 4; i += 1) {
     let any = false;
