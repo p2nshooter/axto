@@ -46,6 +46,7 @@ function fakeNP(state) {
     if (u.pathname === '/v1/payment/555001') return ok(state.payment);
     if (u.pathname === '/v1/estimate') return ok({ estimated_amount: Number(u.searchParams.get('amount')) * 1.0 });
     if (u.pathname === '/v1/payout/fee') return ok({ fee: 1 });
+    if (u.pathname === '/v1/balance') return state.balance ? ok(state.balance) : new Response('{}', { status: 404 });
     if (u.pathname === '/v1/auth') { state.auth = body; return ok({ token: 'jwt-token' }); }
     if (u.pathname === '/v1/payout' && init.method === 'POST') {
       assert.equal(init.headers.authorization, 'Bearer jwt-token');
@@ -162,6 +163,14 @@ test('cairkan: hanya ke alamat & mata uang pembelian, potong 50%, payout 2 fase 
   assert.equal(c.cashout.penaltyPct, 50);
   assert.equal(c.cashout.payoutUsd, 30);
   assert.equal((await C.account(env, W)).micro, '4000000');
+  // saldo NOWPayments belum cukup → MENUNGGU (tidak dibatalkan, koin member tetap tertahan), dicoba lagi tiap cron
+  state.balance = { usdttrc20: { amount: 10, pendingAmount: 0 } };
+  await C.processCashouts(env);
+  assert.equal(state.payouts, undefined);
+  assert.equal((await C.memberView(env, W)).cashouts[0].status, 'waiting_balance');
+  assert.equal((await C.account(env, W)).micro, '4000000', 'koin tidak dikembalikan, pencairan tetap antre');
+  // saldo terisi (dana pembelian member tersimpan di NOWPayments) → dibayar
+  state.balance = { usdttrc20: { amount: 500, pendingAmount: 0 } };
   // dua putaran berbarengan → satu payout saja
   await Promise.all([C.processCashouts(env), C.processCashouts(env)]);
   assert.equal(state.payouts, 1);

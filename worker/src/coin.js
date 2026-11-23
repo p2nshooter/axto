@@ -414,7 +414,7 @@ export async function processCashouts(env, max = 10) {
     }
     try {
       let rec = await readJSON(env.STORE, key);
-      if (!rec || !['queued', 'awaiting_payout_setup', 'retry', 'created'].includes(rec.status)) { await env.STORE.delete(o.key); continue; }
+      if (!rec || !['queued', 'awaiting_payout_setup', 'retry', 'created', 'waiting_balance'].includes(rec.status)) { await env.STORE.delete(o.key); continue; }
       if (!rec.np?.batchId) {
         const est = await np(env, '/v1/estimate', { query: { amount: rec.payoutCents / 100, currency_from: 'usd', currency_to: rec.code } });
         let amount = Number(est?.estimated_amount);
@@ -422,6 +422,15 @@ export async function processCashouts(env, max = 10) {
         const feeAmt = Number(fee?.fee ?? 0);
         amount = Math.floor((amount - (Number.isFinite(feeAmt) ? feeAmt : 0)) * 1e8) / 1e8;
         if (!(amount > 0)) throw Object.assign(new Error('amount_after_fee'), { status: 422 });
+        // Payout NOWPayments dibayar dari saldo akun NOWPayments (dana pembelian member yang disimpan di sana). Bila saldo
+        // mata uang ini belum cukup (mis. pembayaran diteruskan otomatis ke wallet setelmen), permintaan MENUNGGU — tidak
+        // pernah dibatalkan — dan dicoba lagi tiap cron sampai saldo cukup.
+        const bal = await np(env, '/v1/balance').catch(() => null);
+        const have = Number(bal?.[rec.code]?.amount ?? bal?.[rec.code.toLowerCase()]?.amount ?? NaN);
+        if (Number.isFinite(have) && have < amount + (Number.isFinite(feeAmt) ? feeAmt : 0)) {
+          await cas(env.STORE, key, (x) => (x.status === 'waiting_balance' ? undefined : { ...x, status: 'waiting_balance', lastError: `saldo NOWPayments ${rec.code} ${have} < ${amount}`, history: [...(x.history ?? []).slice(-30), { st: 'waiting_balance', at: Date.now() }] }), meta);
+          continue;
+        }
         const batch = await np(env, '/v1/payout', { method: 'POST', bearer: true, body: { ipn_callback_url: `${base}${IPN_PATH}`, withdrawals: [{ address: rec.addr, currency: rec.code, amount, unique_external_id: rec.id, ipn_callback_url: `${base}${IPN_PATH}` }] } });
         const batchId = String(batch?.id ?? batch?.batch_withdrawal_id ?? '');
         if (!batchId) throw new Error('batch_id');
@@ -436,8 +445,10 @@ export async function processCashouts(env, max = 10) {
     } catch (e) {
       const cur = await readJSON(env.STORE, key);
       const created = !!cur?.np?.batchId; // batch sudah ada: jangan pernah batal di sini, cukup verifikasi ulang nanti
-      const fatal = !created && e.status && e.status >= 400 && e.status < 500 && e.status !== 401 && e.status !== 429;
-      await cas(env.STORE, key, (x) => ({ ...x, status: fatal ? 'failed' : created ? 'created' : 'retry', lastError: String(e.detail ?? e.message).slice(0, 160), history: [...(x.history ?? []).slice(-30), { st: fatal ? 'failed' : 'retry', at: Date.now(), e: String(e.detail ?? e.message).slice(0, 120) }] }), meta);
+      // saldo kurang bukan kegagalan permanen: tunggu, jangan batalkan pencairan member
+      const lowBalance = /balance|insufficient|not enough|funds/i.test(String(e.detail ?? e.message ?? ''));
+      const fatal = !created && !lowBalance && e.status && e.status >= 400 && e.status < 500 && e.status !== 401 && e.status !== 429;
+      await cas(env.STORE, key, (x) => ({ ...x, status: fatal ? 'failed' : created ? 'created' : lowBalance ? 'waiting_balance' : 'retry', lastError: String(e.detail ?? e.message).slice(0, 160), history: [...(x.history ?? []).slice(-30), { st: fatal ? 'failed' : 'retry', at: Date.now(), e: String(e.detail ?? e.message).slice(0, 120) }] }), meta);
       if (fatal) { await refundCashout(env, id); await env.STORE.delete(o.key); }
     } finally {
       await env.STORE.delete(lock);
