@@ -157,7 +157,8 @@ async function main() {
     process.exit(1);
   }
   const raw = await getJson(`${API}/translations/list`);
-  const entries = (Array.isArray(raw) ? raw : raw.translations ?? []).filter((e) => e && typeof e.key === 'string');
+  // Kunci menjadi bagian path URL dan nama objek R2: hanya bentuk kunci QuranEnc yang diterima.
+  const entries = (Array.isArray(raw) ? raw : raw.translations ?? []).filter((e) => e && typeof e.key === 'string' && /^[a-z0-9_]{2,64}$/.test(e.key) && /^[a-z]{2,3}$/.test(String(e.language_iso_code)));
   const langs = String(args.langs ?? '').split(',').filter((l) => LANGS.includes(l));
   const report = [];
   let failed = 0;

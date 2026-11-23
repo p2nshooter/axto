@@ -39,4 +39,7 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_KEY: ${{ secrets.CLOUDFLARE_API_KEY }}
           CLOUDFLARE_EMAIL: ${{ secrets.CLOUDFLARE_EMAIL }}
-        run: node engine/bin/import-quran-tr.mjs --langs="${{ inputs.langs }}" ${{ inputs.force && '--force' || '' }}
+          # Input lewat variabel, tidak disisipkan ke teks skrip.
+          IN_LANGS: ${{ inputs.langs }}
+          IN_FORCE: ${{ inputs.force && '--force' || '' }}
+        run: node engine/bin/import-quran-tr.mjs --langs="$IN_LANGS" $IN_FORCE
