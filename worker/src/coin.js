@@ -236,17 +236,24 @@ export async function account(env, wallet) {
   return (await readJSON(env.STORE, acctKey(wallet))) ?? emptyAcct(wallet);
 }
 
-/** Tambah/kurangi saldo (mikro). Saldo tidak pernah negatif: debit lebih besar dari saldo → error 'balance'. */
-export async function adjust(env, wallet, deltaMicro, ev) {
+/**
+ * Tambah/kurangi saldo (mikro). Saldo tidak pernah negatif: debit lebih besar dari saldo → error 'balance'.
+ * `ref` (opsional) membuat perubahan idempoten: ref yang sama tidak pernah diterapkan dua kali (500 ref terakhir per akun) —
+ * dipakai toko eksklusif & pasar member agar langkah yang diulang setelah gangguan tidak mendebit/mengkredit ganda.
+ */
+export async function adjust(env, wallet, deltaMicro, ev, ref) {
   const d = BigInt(deltaMicro);
+  let applied = false;
   const a = await cas(env.STORE, acctKey(wallet), (cur) => {
     const x = cur ?? emptyAcct(wallet);
+    if (ref && (x.refs ?? []).includes(ref)) return undefined;
     const next = BigInt(x.micro) + d;
     if (next < 0n) throw new Error('balance');
-    return { ...x, micro: next.toString(), at: Date.now() };
+    applied = true;
+    return { ...x, micro: next.toString(), ...(ref ? { refs: [...(x.refs ?? []), ref].slice(-500) } : {}), at: Date.now() };
   });
-  if (ev) await appendLog(env.STORE, 'coin', { ...ev, wallet: wallet.toLowerCase(), micro: d.toString() });
-  return a;
+  if (ev && applied) await appendLog(env.STORE, 'coin', { ...ev, wallet: wallet.toLowerCase(), micro: d.toString(), ref });
+  return a ?? emptyAcct(wallet);
 }
 
 // ---------------------------------------------------------------- beli

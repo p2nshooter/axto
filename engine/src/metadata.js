@@ -137,7 +137,7 @@ function description(d, ref, base) {
   const c = collection(d.key);
   const cert = `${base}/en/verifikasi/${d.key}/${d.tokenId}`;
   const ed = editionOf(d.key, d.tokenId);
-  const edition = `limited edition of ${ed.supply}`;
+  const edition = `Limited edition of ${ed.supply}`;
   const en = {
     time: 'A living digital clock — it shows the real time wherever it is displayed. Choose your time zone in the player.',
     stamp: 'A digital postage stamp from an imaginary realm, engraved in vector so every detail stays sharp at any zoom.',
@@ -152,12 +152,12 @@ function description(d, ref, base) {
     model: 'Karya figur beranimasi dari seri model AXTO, dibuat dengan izin tertulis model.',
     hadith: 'Karya kaligrafi hadits bergerak. Teks Arab disalin tanpa perubahan dari kitab hadits di bawah dan bisa dibacakan dengan suara Arab; terjemahan mengikuti bahasa & negara Anda. Rujukan memakai penomoran hadits internasional. Token ini mewakili karya seni dan koleksinya, bukan hak atas hadits.',
   }[d.kind];
-  const only = c.exclusive ? '\n\nExclusive edition — sold only on axto.io. / Edisi eksklusif — hanya dijual di axto.io.' : '';
+  const only = c.exclusive ? '\n\nExclusive edition — first sold only at axto.io ($1, AXTO coin), made to be gifted and shared; once withdrawn it can be traded anywhere with a 10% royalty. / Edisi eksklusif — pertama kali hanya dijual di axto.io ($1, koin AXTO), cocok untuk hadiah & berbagi; setelah ditarik (WD) bisa diperdagangkan di mana pun dengan royalti 10%.' : '';
   const hr = d.kind === 'hadith' ? hadithRef(d) : null;
   const hadithLine = hr ? `\n\nReference: ${hr.nameEn} (${hr.nameAr}) — Hadith No. ${hr.number}${hr.book ? ` · Book ${hr.book.no}: ${hr.book.name}` : ''} · ${hr.author}` : '';
   const sale = c.exclusive ? 'Fixed price $1 at axto.io (AXTO coin) / Harga tetap $1 di axto.io (koin AXTO)' : `Fixed price $${ed.priceUsd} on OpenSea / Harga tetap $${ed.priceUsd} di OpenSea`;
-  if (d.kind === 'hadith') return `${en}${hadithLine}${c.exclusive ? '\n\nExclusive edition — sold only on axto.io.' : ''}\n\nGallery: ${GALLERY_KIND[d.kind]} · ${seriesName(d)} · Edition ${edition} · Rarity: ${d.tier.name} · ${c.exclusive ? 'Fixed price $1 at axto.io (AXTO coin)' : `Fixed price $${ed.priceUsd} on OpenSea`} · Certificate: ${cert}\n\n© AXTO (axto.io). The owner may display the artwork for personal and promotional use; copyright of the artwork remains with AXTO. Resale royalty 10%.`;
-  return `${en}\n\n${id}${only}\n\nGallery: ${GALLERY_KIND[d.kind]} · ${seriesName(d)} · Edition ${edition} · Rarity: ${d.tier.name} · ${sale} · Certificate: ${cert}\n\n© AXTO (axto.io). The owner may display the artwork for personal and promotional use; copyright of the artwork remains with AXTO. Resale royalty 10%.`;
+  if (d.kind === 'hadith') return `${en}${hadithLine}${c.exclusive ? '\n\nExclusive edition — first sold only at axto.io ($1, AXTO coin), made to be gifted and shared; once withdrawn it can be traded anywhere with a 10% royalty.' : ''}\n\nGallery: ${GALLERY_KIND[d.kind]} · ${seriesName(d)} · ${edition} · Rarity: ${d.tier.name} · ${c.exclusive ? 'Fixed price $1 at axto.io (AXTO coin)' : `Fixed price $${ed.priceUsd} on OpenSea`} · Certificate: ${cert}\n\n© AXTO (axto.io). The owner may display the artwork for personal and promotional use; copyright of the artwork remains with AXTO. Resale royalty 10%.`;
+  return `${en}\n\n${id}${only}\n\nGallery: ${GALLERY_KIND[d.kind]} · ${seriesName(d)} · ${edition} · Rarity: ${d.tier.name} · ${sale} · Certificate: ${cert}\n\n© AXTO (axto.io). The owner may display the artwork for personal and promotional use; copyright of the artwork remains with AXTO. Resale royalty 10%.`;
 }
 
 /** Metadata ERC-721 untuk tokenURI. */
@@ -210,7 +210,7 @@ export function contractMetadata(key, base = 'https://axto.io') {
   const name = `${c.exclusive ? 'AXTO Exclusive — ' : ''}${KIND_NAME[c.kind]}`;
   return {
     name,
-    description: `${name}: ${c.max.toLocaleString('en-US')} unique living artworks by AXTO. Every design is generated from a mathematically unique DNA — no duplicate designs, never reprinted — and issued as a limited edition of ${c.exclusive ? '10' : '1 to 10 (the rarer, the fewer)'}. ${c.exclusive ? 'Exclusive edition: fixed price $1 at axto.io in AXTO coin; members resell at axto.io by auction, offer or fixed price.' : `Browse by Gallery and Series${seriesOptions(key).length ? ` (${seriesOptions(key).map((x) => x[1]).join(', ')})` : ''}. Fixed price by rarity, from $1 (Classic) to $10,000 (Masterpiece).`} / ${KIND_NAME_ID[c.kind]}: ${c.max.toLocaleString('id-ID')} karya unik, edisi terbatas ${c.exclusive ? '10 per karya, harga tetap $1 di axto.io (koin AXTO).' : '1–10 per karya, harga tetap $1–$10.000 menurut kelangkaan; telusuri per Galeri & Seri.'}`,
+    description: `${name}: ${c.max.toLocaleString('en-US')} unique living artworks by AXTO. Every design is generated from a mathematically unique DNA — no duplicate designs, never reprinted — and issued as a limited edition of ${c.exclusive ? '10' : '1 to 10 (the rarer, the fewer)'}. ${c.exclusive ? 'Exclusive edition: fixed price $1 at axto.io in AXTO coin — a meaningful gift, easy to share with a whole community; members resell at axto.io by auction, offer or fixed price, and withdraw to their wallets one by one or in bulk.' : `Browse by Gallery and Series${seriesOptions(key).length ? ` (${seriesOptions(key).map((x) => x[1]).join(', ')})` : ''}. Fixed price by rarity, from $1 (Classic) to $10,000 (Masterpiece).`} / ${KIND_NAME_ID[c.kind]}: ${c.max.toLocaleString('id-ID')} karya unik, edisi terbatas ${c.exclusive ? '10 per karya, harga tetap $1 di axto.io (koin AXTO).' : '1–10 per karya, harga tetap $1–$10.000 menurut kelangkaan; telusuri per Galeri & Seri.'}`,
     image: `${base}/logo-512.png`,
     banner_image: `${base}/og/${key}.svg`,
     external_link: `${base}/en/c/${key}`,
@@ -349,7 +349,8 @@ export function browseList(key, ids, { from = 1, n = 60, tier = null, series = '
     if (series && seriesKey(d) !== series) continue;
     const ref = d.kind === 'quran' ? quranRef(d) : null;
     if (surah && !(ref && ref.series === 'ayah' && ref.surah === surah)) continue;
-    items.push({ id, name: title(d, ref), tier: d.tier.rank, series: seriesKey(d), usd: editionOf(key, id).priceUsd });
+    const e = editionOf(key, id);
+    items.push({ id, name: title(d, ref), tier: d.tier.rank, series: seriesKey(d), usd: e.priceUsd, ed: e.supply });
   }
   return { items, next: i <= ids.length ? i : null };
 }

@@ -29,7 +29,7 @@ const TRAIT_NAMES_ID = {
   Series: 'Seri', Subject: 'Subjek', Frame: 'Bingkai', Palette: 'Palet', Mode: 'Mode', Year: 'Tahun', Denomination: 'Nominal',
   Pose: 'Pose', Outfit: 'Busana', Prop: 'Properti', Scene: 'Latar', Animation: 'Animasi', Hue: 'Rona', Composition: 'Komposisi',
   Illumination: 'Iluminasi', Material: 'Bahan', Background: 'Latar', Finish: 'Edisi', Setting: 'Latar', Light: 'Cahaya',
-  Motion: 'Gerak', Accessory: 'Aksesori', Kitab: 'Kitab', Book: 'Bab', Ayah: 'Ayat', Page: 'Halaman', Surah: 'Surah', Juz: 'Juz', 'Hadith Number': 'Nomor Hadits', 'Price (USD)': 'Harga (USD)', 'Starting Price (USD)': 'Harga Mulai (USD)', 'Uniqueness Score': 'Skor Keunikan', Edition: 'Edisi', Gallery: 'Galeri', Tier: 'Tingkat', Edition: 'Edisi', Collection: 'Koleksi',
+  Accessory: 'Aksesori', Kitab: 'Kitab', Book: 'Bab', Ayah: 'Ayat', Page: 'Halaman', Surah: 'Surah', Juz: 'Juz', 'Hadith Number': 'Nomor Hadits', 'Price (USD)': 'Harga (USD)', 'Starting Price (USD)': 'Harga Mulai (USD)', 'Uniqueness Score': 'Skor Keunikan', Edition: 'Edisi', 'Edition Size': 'Jumlah Edisi', Gallery: 'Galeri', Tier: 'Tingkat', Collection: 'Koleksi',
 };
 export const traitNameId = (n) => TRAIT_NAMES_ID[n] ?? n;
 

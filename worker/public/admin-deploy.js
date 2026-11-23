@@ -11,7 +11,7 @@ if (box) {
   fetch('/api/admin/setup', { credentials: 'same-origin' }).then((r) => r.json()).then((s) => {
     if (s.error) { say(id ? 'Masuk dulu dengan wallet admin (tombol Hubungkan wallet), lalu muat ulang.' : 'Sign in with the admin wallet first, then reload.'); return; }
     if (s.active) {
-      say(`✅ ${id ? 'Kontrak aktif di' : 'Contracts live on'} ${s.networks[s.active.chainId]?.name} · AuctionHouse ${s.active.auctionHouse}`, 'ok');
+      say(`✅ ${id ? 'Kontrak aktif di' : 'Contracts live on'} ${s.networks[s.active.chainId]?.name} · ${s.active.standard === 'erc1155' ? (id ? 'koleksi edisi ERC-1155' : 'ERC-1155 edition collections') : 'ERC-721'} · AXTO ${s.active.token}`, 'ok');
       const ul = el('ul');
       for (const [k, a] of Object.entries(s.active.collections ?? {})) {
         const li = el('li', `${k}: `);

@@ -36,6 +36,20 @@ export async function update(bucket, key, fn, tries = 5) {
   throw new Error(`cas gagal: ${key}`);
 }
 
+/** Compare-and-swap dengan customMetadata (ringkasan untuk daftar prefix). fn boleh melempar error untuk membatalkan. */
+export async function casMeta(bucket, key, fn, meta, tries = 6) {
+  for (let i = 0; i < tries; i += 1) {
+    const cur = await getJSON(bucket, key);
+    const next = await fn(cur?.value ?? null);
+    if (next === undefined) return cur?.value ?? null;
+    const onlyIf = cur ? { etagMatches: cur.etag } : { etagDoesNotMatch: '*' };
+    const r = await bucket.put(key, JSON.stringify(next), { ...JSON_META, customMetadata: meta ? meta(next) : undefined, onlyIf });
+    if (r !== null) return next;
+    await new Promise((res) => setTimeout(res, 40 * 2 ** i));
+  }
+  throw new Error(`cas gagal: ${key}`);
+}
+
 const rand = () => [...crypto.getRandomValues(new Uint8Array(6))].map((x) => x.toString(16).padStart(2, '0')).join('');
 
 /** Log append-only: satu objek per peristiwa, kunci unik berurutan waktu. */
