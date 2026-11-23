@@ -262,11 +262,12 @@ export function coinPage(lang, sale, paypalOn, a = {}) {
   const LOGO = ['coin', 'vesting', 'hold', 'coin'];
   const logo = (k, sz = 64, cls = '') => `<img src="/brand/axto-${k}-${sz}.png" alt="AXTO ${k === 'coin' ? 'Coin' : k === 'vesting' ? 'Vesting' : 'Hold'}" width="${sz}" height="${sz}" loading="lazy" class="${cls}">`;
   return `<section class="page coin"><div class="coinhead">${logo('coin', 256, 'coinlogo')}<div><h1>${esc(t.title)}</h1><p class="meta">${id ? 'Token AXTO di jaringan Base · simbol AXTO · 18 desimal' : 'AXTO token on the Base network · symbol AXTO · 18 decimals'}</p></div></div>
-  <dl class="counters"><div><dt>${esc(t.supply)}</dt><dd>10.000.000</dd></div><div><dt>${esc(t.price)}</dt><dd>$10</dd></div><div><dt>${esc(t.sold)}</dt><dd>${fmt(sale?.sold, lang)} / 2.000.000</dd></div></dl>
+  <dl class="counters"><div><dt>${esc(t.supply)}</dt><dd>${fmt(100_000_000, lang)}</dd></div><div><dt>${esc(t.price)}</dt><dd>$10</dd></div><div><dt>${esc(t.sold)}</dt><dd>${fmt(sale?.sold, lang)} / ${fmt(20_000_000, lang)}</dd></div></dl>
   <table class="split alloc"><tbody>${t.split.map(([x, y], i) => `<tr><th>${logo(LOGO[i] ?? 'coin', 64)}<span>${esc(x)}</span></th><td>${esc(y)}</td></tr>`).join('')}</tbody></table>
-  <div class="buy" id="coin-buy"><label>${id ? 'Jumlah koin' : 'Number of coins'} <input type="number" min="1" max="5000" step="1" value="10" id="coin-n"></label>
-  <p>${paypalOn ? `<button class="btn gold" type="button" data-buy="paypal">${esc(t.buyPaypal)}</button>` : `<span class="muted">${esc(t.paypalOff)}</span>`}
-  <button class="btn" type="button" data-buy="usdc">${esc(t.buyUsdc)}</button> <button class="btn" type="button" data-buy="eth">${esc(t.buyEth)}</button> <button class="btn ghost" type="button" data-watch-axto>${id ? 'Tambahkan AXTO ke wallet' : 'Add AXTO to wallet'}</button></p><p class="buymsg" role="status"></p></div>
+  <section class="np" id="beli-koin"><h2>${id ? 'Beli koin AXTO dengan kripto' : 'Buy AXTO coins with crypto'}</h2>
+  <p class="lead">${id ? 'USDT (TRON), USDC (BSC), Bitcoin atau BNB (BSC) — diproses otomatis oleh NOWPayments. Koin masuk ke saldo Anda begitu pembayaran selesai; pencairan hanya ke alamat & mata uang yang Anda pakai membeli.' : 'USDT (TRON), USDC (BSC), Bitcoin or BNB (BSC) — processed automatically by NOWPayments. Coins reach your balance as soon as the payment finishes; cash-outs go only to the address & currency you bought with.'}</p>
+  <div data-np="buy"><p class="muted">…</p></div>
+  <p><button class="btn ghost" type="button" data-watch-axto>${id ? 'Tambahkan AXTO ke wallet' : 'Add AXTO to wallet'}</button></p></section>
   ${coinWalletBox(lang, a)}
   ${coinGuide(lang, a)}
   <p class="disclaimer">${esc(t.disclaimer)}</p></section>`;
@@ -340,7 +341,7 @@ function coinWalletBox(lang, a) {
 
 export function memberPage(lang) {
   const t = T[lang].member;
-  return `<section class="page"><h1>${esc(t.title)}</h1><div id="member" data-lang="${lang}"><p>${esc(t.connectFirst)}</p></div></section>`;
+  return `<section class="page"><h1>${esc(t.title)}</h1><div id="member" data-lang="${lang}"><p>${esc(t.connectFirst)}</p></div><section class="np" data-np="member"></section></section>`;
 }
 
 export function adminPage(lang, ok, stats) {
@@ -351,7 +352,8 @@ export function adminPage(lang, ok, stats) {
   <p class="meta">genesis: ${stats.genesis ? new Date(stats.genesis).toISOString() : '—'}</p>
   <h2>${lang === 'id' ? 'Kontrak (deploy otomatis oleh sistem)' : 'Contracts (deployed automatically by the system)'}</h2>
   <p>${lang === 'id' ? 'Sistem mendeploy semua kontrak sendiri dari wallet deployer khusus; pemilik AuctionHouse & 8 koleksi langsung wallet produksi, pemilik koin AXTO langsung wallet koin. 4 koleksi publik (40.000.000 NFT) tercetak saat deploy ke wallet toko sistem dan tampil di OpenSea; 4 koleksi eksklusif (40.000) dicetak saat member WD.' : 'The system deploys every contract itself from a dedicated deployer wallet; ownership goes straight to the production and coin wallets. The 4 public collections (40,000,000 NFTs) are minted at deploy to the system store wallet and show on OpenSea; the 4 exclusive collections (40,000) are minted when members withdraw.'}</p>
-  <div id="deploy" data-lang="${lang}"><p class="muted">…</p></div></section>`;
+  <div id="deploy" data-lang="${lang}"><p class="muted">…</p></div>
+  <section class="np" data-np="admin"><p class="muted">…</p></section></section>`;
 }
 
 export function verifyPage(lang, c, id, meta, hash, owner) {

@@ -119,3 +119,18 @@ img.inl{display:inline-block;vertical-align:middle;border-radius:50%}
 .coin-guide{margin:26px 0;padding:18px;border:1px solid var(--line);border-radius:var(--radius);background:var(--panel)}.coin-guide h3{margin:14px 0 6px}
 .wguide details{border:1px solid var(--line);border-radius:12px;padding:10px 14px;margin:8px 0;background:#0e0e1c}.wguide summary{cursor:pointer;font-weight:700}.wguide ol{margin:8px 0 2px;padding-left:1.3em}
 .coin-guide .warn{color:#ffb4a8;font-size:.9em}.coin-guide .ok{color:#9be3c4}
+/* Koin AXTO lewat NOWPayments */
+.np{margin:2rem 0;padding:1.25rem;border:1px solid rgba(212,175,55,.35);border-radius:16px;background:rgba(212,175,55,.04)}
+.np-form{display:grid;gap:.75rem;max-width:560px}
+.np-form label{display:grid;gap:.3rem;font-size:.95rem}
+.np-form label.check{display:flex;gap:.5rem;align-items:flex-start}
+.np-form input[type=number],.np-form input[type=text],.np-form select{padding:.6rem .7rem;border-radius:10px;border:1px solid rgba(127,127,127,.4);background:transparent;color:inherit;font:inherit;width:100%;box-sizing:border-box}
+.np-terms{font-size:.88rem;line-height:1.5;border:1px solid rgba(127,127,127,.25);border-radius:12px;padding:.6rem .9rem}
+.np-terms ol{margin:.5rem 0 0;padding-left:1.2rem}
+.np-quote{font-weight:600}
+.np-pay{margin-top:1rem;padding:1rem;border-radius:12px;border:1px dashed rgba(212,175,55,.6)}
+.np-pay code,.np code{word-break:break-all}
+.np-balance{font-size:1.25rem}
+.np .tablewrap{overflow-x:auto}
+.np-table{font-size:.85rem}
+.np .ok{color:#3fb950}.np .warn{color:#f0883e}

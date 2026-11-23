@@ -146,6 +146,14 @@ jobs:
           ENGINE_HMAC_KEY: ${{ secrets.ENGINE_HMAC_KEY }}
           VAULT_HMAC_KEY: ${{ secrets.VAULT_HMAC_KEY }}
           OPENSEA_API_KEY: ${{ secrets.OPENSEA_API_KEY }}
+          # Koin AXTO lewat NOWPayments (pemilik, 23 Nov 2026). Tiga yang pertama untuk beli + webhook IPN; tiga berikutnya
+          # (opsional) membuat pencairan berjalan sendiri: email & kata sandi akun NOWPayments + rahasia Base32 2FA aplikasi.
+          NOWPAYMENTS_API_KEY: ${{ secrets.NOWPAYMENTS_API_KEY }}
+          NOWPAYMENTS_IPN_SECRET: ${{ secrets.NOWPAYMENTS_IPN_SECRET }}
+          NOWPAYMENTS_PUBLIC_KEY: ${{ secrets.NOWPAYMENTS_PUBLIC_KEY }}
+          NOWPAYMENTS_EMAIL: ${{ secrets.NOWPAYMENTS_EMAIL }}
+          NOWPAYMENTS_PASSWORD: ${{ secrets.NOWPAYMENTS_PASSWORD }}
+          NOWPAYMENTS_2FA_SECRET: ${{ secrets.NOWPAYMENTS_2FA_SECRET }}
         run: |
           have=$(npx wrangler secret list --name axto-web 2>/dev/null || echo '[]')
           # kunci data dibuat SEKALI (email member terenkripsi dengannya) — tidak pernah ditimpa
@@ -157,6 +165,11 @@ jobs:
           printf '%s' "${ENGINE_HMAC_KEY:-$(derive ENGINE_HMAC_KEY)}" | npx wrangler secret put ENGINE_HMAC_KEY --name axto-web >/dev/null
           printf '%s' "${VAULT_HMAC_KEY:-$(derive VAULT_HMAC_KEY)}" | npx wrangler secret put VAULT_HMAC_KEY --name axto-web >/dev/null
           [ -n "$OPENSEA_API_KEY" ] && printf '%s' "$OPENSEA_API_KEY" | npx wrangler secret put OPENSEA_API_KEY --name axto-web >/dev/null
+          np=""
+          for k in NOWPAYMENTS_API_KEY NOWPAYMENTS_IPN_SECRET NOWPAYMENTS_PUBLIC_KEY NOWPAYMENTS_EMAIL NOWPAYMENTS_PASSWORD NOWPAYMENTS_2FA_SECRET; do
+            if [ -n "${!k}" ]; then printf '%s' "${!k}" | npx wrangler secret put "$k" --name axto-web >/dev/null && np="$np $k"; fi
+          done
+          echo "- NOWPayments di worker:${np:- (belum ada secret)}" >> "$GITHUB_STEP_SUMMARY"
           echo "rahasia worker siap"
 
       - name: Pindahkan axto.io & www.axto.io ke worker axto-web
@@ -197,6 +210,10 @@ jobs:
           old=$(echo "$home$ads" | grep -oE 'pub-[0-9]{16}' | sort -u | grep -vE '6560360898389273|4906992051458194|5928074389292014|6701063918838796' || true)
           [ -z "$old" ] || { echo "::error::akun AdSense lama masih ada: $old"; exit 1; }
           curl -sf https://axto.io/api/meta/time/1 | grep -q '"name"'
+          # webhook IPN NOWPayments hidup dan menolak kiriman tanpa tanda tangan sah
+          code=$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'content-type: application/json' -H 'x-nowpayments-sig: 00' -d '{"payment_id":1}' https://axto.io/api/nowpayments/ipn)
+          [ "$code" = "401" ] || { echo "::error::webhook IPN tidak menjawab 401 untuk tanda tangan palsu (dapat $code)"; exit 1; }
+          echo "- Webhook IPN NOWPayments: https://axto.io/api/nowpayments/ipn (menolak tanda tangan palsu ✅)" >> "$GITHUB_STEP_SUMMARY"
           {
             echo "## axto.io live ✅"
             echo "- AdSense: loader ca-pub-5928074389292014 · 4 tag meta · ads.txt 4 baris · tanpa akun lama"

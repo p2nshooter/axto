@@ -22,6 +22,7 @@ import { ownerOf, isAddress, encodeClaim } from './eth.js';
 import { Ledger, KEYS } from './ledger.js';
 import { withCfg, saveContracts, NETWORKS } from './config.js';
 import { vault } from './vault.js';
+import * as COIN from './coin.js';
 import { hadithItem, translateHadith } from './translate.js';
 
 export { Ledger };
@@ -115,6 +116,17 @@ async function api(request, env, ctx, url) {
   const p = url.pathname;
   const method = request.method;
   const ip = request.headers.get('cf-connecting-ip') ?? '0';
+  // IPN NOWPayments: datang dari server NOWPayments (bukan peramban) — dilindungi tanda tangan HMAC-SHA512, bukan Origin
+  if (p === COIN.IPN_PATH) {
+    if (method !== 'POST') return json({ error: 'method' }, 405);
+    try {
+      const r = await COIN.ipn(request, env);
+      return json(r.body, r.status);
+    } catch (e) {
+      ctx.waitUntil(appendLog(env.STORE, 'error', { path: p, e: String(e?.message ?? e).slice(0, 500) }));
+      return json({ error: 'retry' }, 500); // NOWPayments mengirim ulang
+    }
+  }
   if (method === 'POST' && !p.startsWith('/api/paypal/webhook') && !p.startsWith('/internal/') && !sameOrigin(request, env)) return json({ error: 'origin' }, 403);
   if (!(await rateLimit(env, `ip:${ip}`, method === 'POST' ? 60 : 300))) return json({ error: 'rate_limited' }, 429);
 
@@ -208,6 +220,44 @@ async function api(request, env, ctx, url) {
     if (!s) return json({ wallet: null });
     const u = await loadMember(env, s.wallet);
     return json({ ...(u ? await publicProfile(env, u) : { wallet: s.wallet }), admin: s.admin });
+  }
+  // ---- koin AXTO lewat NOWPayments (beli, status pesanan, cairkan) ----
+  if (p === '/api/coin/quote') return json(await COIN.quote(env, { usd: url.searchParams.get('usd'), cur: url.searchParams.get('cur') }), 200, { 'cache-control': 'private, max-age=30' });
+  if (p === '/api/coin/agreement') {
+    const l = url.searchParams.get('lang') === 'id' ? 'id' : 'en';
+    return json({ v: COIN.AGREEMENT_V, lang: l, items: COIN.AGREEMENT[l], hash: await COIN.agreementHash(l), currencies: Object.fromEntries(Object.entries(COIN.CURRENCIES).map(([k, c]) => [k, c.label])), limits: COIN.LIMITS }, 200, { 'cache-control': 'public, max-age=300' });
+  }
+  if (p === '/api/coin/buy' && method === 'POST') {
+    if (!s) return json({ error: 'auth' }, 401);
+    if (!(await rateLimit(env, `coinbuy:${s.wallet}`, 10))) return json({ error: 'rate_limited' }, 429);
+    const b = await readBody(request, 2048);
+    const r = await COIN.buy(env, s.wallet, b, { lang: b.lang === 'id' ? 'id' : 'en', country: request.headers.get('cf-ipcountry'), base: env.BASE_URL || url.origin });
+    return json(r, r.ok ? 200 : 400, { 'cache-control': 'private, no-store' });
+  }
+  if (p === '/api/coin/me') {
+    if (!s) return json({ error: 'auth' }, 401);
+    return json(await COIN.memberView(env, s.wallet), 200, { 'cache-control': 'private, no-store' });
+  }
+  m = /^\/api\/coin\/order\/([0-9a-z]{8,40})$/.exec(p);
+  if (m) {
+    if (!s) return json({ error: 'auth' }, 401);
+    const o = await COIN.orderStatus(env, s.wallet, m[1]);
+    return o ? json(o, 200, { 'cache-control': 'private, no-store' }) : json({ error: 'not_found' }, 404);
+  }
+  if (p === '/api/coin/cashout' && method === 'POST') {
+    if (!s) return json({ error: 'auth' }, 401);
+    if (!(await rateLimit(env, `cashout:${s.wallet}`, 5))) return json({ error: 'rate_limited' }, 429);
+    const r = await COIN.requestCashout(env, s.wallet, await readBody(request, 1024));
+    if (r.ok) ctx.waitUntil(COIN.processCashouts(env).catch(() => null));
+    return json(r, r.ok ? 200 : 400, { 'cache-control': 'private, no-store' });
+  }
+  if (p === '/api/admin/coin') {
+    if (!s?.admin) return json({ error: 'admin_only' }, 403);
+    return json(await COIN.adminView(env), 200, { 'cache-control': 'private, no-store' });
+  }
+  if (p === '/api/admin/coin/cfg' && method === 'POST') {
+    if (!s?.admin) return json({ error: 'admin_only' }, 403);
+    return json(await COIN.setCfg(env, s.wallet, await readBody(request, 512)), 200, { 'cache-control': 'private, no-store' });
   }
   if (p === '/api/me/profile' && method === 'POST') {
     if (!s) return json({ error: 'auth' }, 401);
@@ -562,6 +612,7 @@ export default {
       return;
     }
     ctx.waitUntil(ledger(env).tick(Date.now()).then((r) => appendLog(env.STORE, 'tick', { r })));
+    ctx.waitUntil(COIN.processCashouts(env).catch((e) => appendLog(env.STORE, 'error', { path: 'cron:cashout', e: String(e?.message ?? e).slice(0, 300) })));
   },
 };
 

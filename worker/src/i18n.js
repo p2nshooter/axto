@@ -48,7 +48,7 @@ export const T = {
       status: { not_produced: 'Sedang diproduksi', waiting: 'Menunggu ronde — Anda bisa mengajukan penawaran', sealed: 'Tersegel — segera live', live: 'Live', sold: 'Terjual', ended: 'Lelang selesai', claim: 'Menunggu klaim pemenang' },
     },
     exclusiveBlurb: ['Edisi Eksklusif', '5 × 10.000 karya hanya di axto.io, dilelang dengan koin AXTO, disimpan aman di kustodi axto.io sampai Anda menariknya ke wallet.'],
-    coinBlurb: ['Koin AXTO', '10.000.000 koin, tanpa burn, harga tetap $10 sampai 2.000.000 terjual. Koin hanya untuk transaksi NFT di axto.io dan tidak dapat diuangkan di axto.io.'],
+    coinBlurb: ['Koin AXTO', '100.000.000 koin, tanpa burn, harga tetap $10 sampai 20.000.000 terjual. Beli dengan USDT, USDC, BTC atau BNB lewat NOWPayments; bisa dicairkan kembali ke alamat pembelian (dipotong 50% sebelum rilis DEX).'],
     faq: {
       title: 'Pertanyaan umum',
       items: [
@@ -67,8 +67,8 @@ export const T = {
     exclusive: { title: 'Marketplace eksklusif', lead: 'Hanya di axto.io. Pembayaran hanya koin AXTO. Fee situs 10%.', buyNow: 'Beli sekarang', offer: 'Ajukan penawaran', withdraw: 'Tarik ke wallet', custody: 'Kustodi axto.io' },
     coin: {
       title: 'Koin AXTO', supply: 'Total suplai', price: 'Harga presale', sold: 'Terjual', buyPaypal: 'Beli dengan PayPal', buyUsdc: 'Beli dengan USDC', buyEth: 'Beli dengan ETH',
-      split: [['Presale axto.io ($10)', '20% · 2.000.000'], ['Likuiditas DEX (setelah presale)', '30% · 3.000.000'], ['Cadangan jangka panjang (5 tahun)', '30% · 3.000.000'], ['Perusahaan', '20% · 2.000.000']],
-      disclaimer: 'AXTO adalah token utilitas untuk transaksi NFT di axto.io, bukan produk investasi dan tidak dijamin nilainya. Koin yang dibeli tidak dapat diuangkan di axto.io. Pastikan Anda memahami risikonya dan aturan di negara Anda.',
+      split: [['Presale axto.io ($10)', '20% · 20.000.000'], ['Likuiditas DEX (setelah presale)', '30% · 30.000.000'], ['Cadangan jangka panjang (5 tahun)', '30% · 30.000.000'], ['Perusahaan', '20% · 20.000.000']],
+      disclaimer: 'AXTO adalah token utilitas untuk transaksi NFT di axto.io, bukan produk investasi dan tidak dijamin nilainya. Pencairan hanya ke alamat & mata uang pembelian, dipotong 50% sebelum koin dirilis ke DEX. Pastikan Anda memahami risikonya dan aturan di negara Anda.',
       paypalOff: 'Pembelian lewat PayPal belum dibuka.',
     },
     member: { title: 'Portal member', connectFirst: 'Hubungkan wallet dan tanda tangani pesan masuk terlebih dahulu.', profile: 'Profil', email: 'Email', username: 'Nama pengguna', password: 'Kata sandi', save: 'Simpan', holds: 'Hold aktif', bids: 'Tawaran', wins: 'Menang', claim: 'Klaim', logout: 'Keluar', balance: 'Saldo' },
@@ -121,7 +121,7 @@ export const T = {
       status: { not_produced: 'In production', waiting: 'Waiting for a round — you can make an offer', sealed: 'Sealed — going live soon', live: 'Live', sold: 'Sold', ended: 'Auction ended', claim: 'Awaiting the winner\'s claim' },
     },
     exclusiveBlurb: ['Exclusive Editions', '5 × 10,000 works only on axto.io, auctioned in AXTO coin and kept safe in axto.io custody until you withdraw them to your wallet.'],
-    coinBlurb: ['AXTO Coin', '10,000,000 coins, no burn, a fixed $10 until 2,000,000 are sold. The coin is for NFT transactions on axto.io and cannot be cashed out on axto.io.'],
+    coinBlurb: ['AXTO Coin', '100,000,000 coins, no burn, a fixed $10 until 20,000,000 are sold. Buy with USDT, USDC, BTC or BNB through NOWPayments; cash out back to your purchase address (50% reduction before the DEX release).'],
     faq: {
       title: 'FAQ',
       items: [
@@ -140,8 +140,8 @@ export const T = {
     exclusive: { title: 'Exclusive marketplace', lead: 'Only on axto.io. Paid in AXTO coin only. 10% site fee.', buyNow: 'Buy now', offer: 'Make an offer', withdraw: 'Withdraw to wallet', custody: 'axto.io custody' },
     coin: {
       title: 'AXTO Coin', supply: 'Total supply', price: 'Presale price', sold: 'Sold', buyPaypal: 'Buy with PayPal', buyUsdc: 'Buy with USDC', buyEth: 'Buy with ETH',
-      split: [['axto.io presale ($10)', '20% · 2,000,000'], ['DEX liquidity (after the presale)', '30% · 3,000,000'], ['Long-term reserve (5 years)', '30% · 3,000,000'], ['Company', '20% · 2,000,000']],
-      disclaimer: 'AXTO is a utility token for NFT transactions on axto.io. It is not an investment product and its value is not guaranteed. Coins you buy cannot be cashed out on axto.io. Make sure you understand the risks and the rules in your country.',
+      split: [['axto.io presale ($10)', '20% · 20,000,000'], ['DEX liquidity (after the presale)', '30% · 30,000,000'], ['Long-term reserve (5 years)', '30% · 30,000,000'], ['Company', '20% · 20,000,000']],
+      disclaimer: 'AXTO is a utility token for NFT transactions on axto.io. It is not an investment product and its value is not guaranteed. Cash-outs go only to your purchase address & currency, reduced by 50% before the DEX release. Make sure you understand the risks and the rules in your country.',
       paypalOff: 'PayPal purchases are not open yet.',
     },
     member: { title: 'Member portal', connectFirst: 'Connect your wallet and sign the sign-in message first.', profile: 'Profile', email: 'Email', username: 'Username', password: 'Password', save: 'Save', holds: 'Active holds', bids: 'Bids', wins: 'Wins', claim: 'Claim', logout: 'Sign out', balance: 'Balance' },
