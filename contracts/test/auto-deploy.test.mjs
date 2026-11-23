@@ -16,7 +16,7 @@ const PRESALE_W = '0x114aa45B77f06C07B6Ee0aB03F89FAdaCDc6614C';
 const VESTING_W = '0x61A0CD9c14EDF48948E39144cc5d8aB4e8A17c62';
 const HOLD_W = '0xeef8b1c3BDE202A77Fe3B24d1f43EbA10498a94c';
 const art = (n) => JSON.parse(readFileSync(new URL(`../out/${n}.json`, import.meta.url), 'utf8'));
-let server, provider, deployer, signerW, storeW, result, mod;
+let server, provider, deployer, signerW, storeW, result, mod, validator;
 const BUYBACK = '0x000000000000000000000000000000000000bEEF'; // contoh fiktif (alamat asli hanya di R2 privat)
 
 before(async () => {
@@ -27,7 +27,10 @@ before(async () => {
   deployer = ethers.HDNodeWallet.fromPhrase(mnemonic, undefined, "m/44'/60'/0'/0/0").connect(provider);
   signerW = ethers.HDNodeWallet.fromPhrase(mnemonic, undefined, "m/44'/60'/0'/0/1");
   storeW = ethers.HDNodeWallet.fromPhrase(mnemonic, undefined, "m/44'/60'/0'/0/2");
-  Object.assign(process.env, { LOCAL_RPC: 'http://127.0.0.1:18545', LOCAL_KEY: deployer.privateKey, LOCAL_STORE_KEY: storeW.privateKey, SIGNER: signerW.address, LOCAL_BUYBACK: BUYBACK });
+  // validator royalti tiruan (perilaku v3: daftar putih operator + OTC) — di Base dipakai validator Limit Break asli
+  const mv = await (await new ethers.ContractFactory(art('MockTransferValidator').abi, art('MockTransferValidator').bytecode, deployer).deploy()).waitForDeployment();
+  validator = await mv.getAddress();
+  Object.assign(process.env, { LOCAL_RPC: 'http://127.0.0.1:18545', LOCAL_KEY: deployer.privateKey, LOCAL_STORE_KEY: storeW.privateKey, SIGNER: signerW.address, LOCAL_BUYBACK: BUYBACK, LOCAL_VALIDATOR: validator });
   mod = await import('../scripts/auto-deploy.mjs');
   result = await mod.main();
 });
@@ -125,4 +128,37 @@ test('aman diulang: run kedua tidak mendeploy apa pun lagi', async () => {
   const again = await mod.main();
   assert.equal(again.done, true);
   assert.equal(await provider.getTransactionCount(result.deployer, 'latest'), n0);
+});
+
+test('royalti 10% tetap berlaku setelah WD (ERC-1155C): hanya marketplace dalam daftar koleksi yang boleh memindah, kirim langsung tetap boleh', async () => {
+  const c = result.contracts;
+  const member = ethers.HDNodeWallet.fromPhrase('test test test test test test test test test test test junk', undefined, "m/44'/60'/0'/0/3").connect(provider);
+  for (const a of Object.values(c.collections)) {
+    const col = new ethers.Contract(a, art('AxtoEditions').abi, provider);
+    assert.equal(await col.getTransferValidator(), validator);
+    assert.ok((await col.operatorListId()) > 0n);
+    for (const op of mod.ROYALTY_OPERATORS) assert.equal(await new ethers.Contract(validator, art('MockTransferValidator').abi, provider).isAccountWhitelistedByCollection(a, op), true);
+    assert.equal(await col.supportsInterface('0x2a55205a'), true, 'ERC-2981');
+    const [recv, roy] = await col.royaltyInfo(1, 10_000n);
+    assert.equal(recv, TREASURY);
+    assert.equal(roy, 1000n);
+  }
+  const col = new ethers.Contract(c.collections['ex-quran'], art('AxtoEditions').abi, member);
+  const sig = (await col.getTransferValidationFunction())[0];
+  assert.equal(sig, ethers.id('validateTransfer(address,address,address,uint256,uint256)').slice(0, 10));
+  // member (sudah WD 3 edisi #7 di uji sebelumnya) mengirim langsung antar wallet → boleh (keputusan pemilik)
+  const friend = ethers.Wallet.createRandom().address;
+  assert.equal(await col.directTransfersAllowed(), true);
+  await (await col.safeTransferFrom(member.address, friend, 7, 1, '0x')).wait();
+  assert.equal(await col.balanceOf(friend, 7), 1n);
+  // hanya pemilik (wallet admin) yang bisa menutupnya
+  await assert.rejects(col.setDirectTransfersAllowed(false));
+  // marketplace yang tidak membayar royalti (operator di luar daftar) → ditolak di rantai
+  const rogue = ethers.HDNodeWallet.fromPhrase('test test test test test test test test test test test junk', undefined, "m/44'/60'/0'/0/1").connect(provider);
+  await (await col.setApprovalForAll(rogue.address, true)).wait();
+  await assert.rejects(col.connect(rogue).safeTransferFrom(member.address, friend, 7, 1, '0x'));
+  // tanpa validator (mis. jaringan tanpa Limit Break): penegakan mati, deploy tetap jalan
+  const ed = art('AxtoEditions');
+  const plain = await (await new ethers.ContractFactory(ed.abi, ed.bytecode, deployer).deploy({ name: 'X', symbol: 'X', owner: ADMIN, royaltyReceiver: TREASURY, baseURI: 'x', contractURI: 'x', custody: ethers.ZeroAddress, operator: ethers.ZeroAddress, releaser: ethers.ZeroAddress, signer: signerW.address, maxId: 10, editionCap: 10, validator: ethers.Wallet.createRandom().address, operators: mod.ROYALTY_OPERATORS })).waitForDeployment();
+  assert.equal(await plain.getTransferValidator(), ethers.ZeroAddress);
 });

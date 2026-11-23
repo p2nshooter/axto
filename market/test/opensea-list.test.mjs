@@ -35,7 +35,7 @@ before(async () => {
   [deployer, store, buyer] = [0, 1, 2].map((i) => ethers.HDNodeWallet.fromPhrase(mnemonic, undefined, `m/44'/60'/0'/0/${i}`).connect(provider));
   let n = await provider.getTransactionCount(deployer.address, 'latest');
   const f = (name) => new ethers.ContractFactory(art(name).abi, art(name).bytecode, deployer);
-  col = await (await f('AxtoEditions').deploy({ name: 'AXTO Time', symbol: 'AXTIME', owner: buyer.address, royaltyReceiver: TREASURY, baseURI: 'https://axto.io/api/edition/time/', contractURI: 'https://axto.io/api/contract/time', custody: store.address, operator: CONDUIT, releaser: deployer.address, signer: ethers.ZeroAddress, maxId: 10_000_000, editionCap: 0 }, { nonce: n++ })).waitForDeployment();
+  col = await (await f('AxtoEditions').deploy({ name: 'AXTO Time', symbol: 'AXTIME', owner: buyer.address, royaltyReceiver: TREASURY, baseURI: 'https://axto.io/api/edition/time/', contractURI: 'https://axto.io/api/contract/time', custody: store.address, operator: CONDUIT, releaser: deployer.address, signer: ethers.ZeroAddress, maxId: 10_000_000, editionCap: 0, validator: ethers.ZeroAddress, operators: [] }, { nonce: n++ })).waitForDeployment();
   for (let from = 1; from <= FIRST; from += 2500) await (await col.release(releaseSupplies('time', from, Math.min(2500, FIRST - from + 1)), { nonce: n++ })).wait();
   feed = await (await f('MockFeed').deploy(2500n * 10n ** 8n, { nonce: n++ })).waitForDeployment();
   const cfg = JSON.stringify({ chainId: 8453, standard: 'erc1155', released: { time: FIRST }, store: store.address, collections: { time: await col.getAddress() } });

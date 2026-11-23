@@ -12,6 +12,26 @@ import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 
+/// @notice Antarmuka Creator Token Standards (ERC-1155C, Limit Break) yang dikenali OpenSea & marketplace lain untuk
+///         menegakkan royalti kreator di rantai.
+interface ICreatorToken {
+    event TransferValidatorUpdated(address oldValidator, address newValidator);
+    function getTransferValidator() external view returns (address validator);
+    function setTransferValidator(address validator) external;
+    function getTransferValidationFunction() external view returns (bytes4 functionSignature, bool isViewFunction);
+}
+
+/// @notice Bagian CreatorTokenTransferValidator v3 yang dipakai (ABI terverifikasi di Base, 0x721C…cd1B).
+interface ITransferValidatorV3 {
+    function validateTransfer(address caller, address from, address to, uint256 tokenId, uint256 amount) external;
+    function createList(string calldata name) external returns (uint120 id);
+    function addAccountsToWhitelist(uint120 id, address[] calldata accounts) external;
+    function removeAccountsFromWhitelist(uint120 id, address[] calldata accounts) external;
+    function applyListToCollection(address collection, uint120 id) external;
+    function setTokenTypeOfCollection(address collection, uint16 tokenType) external;
+    function isAccountWhitelistedByCollection(address collection, address account) external view returns (bool);
+}
+
 /**
  * @title AxtoEditions
  * @notice Koleksi AXTO berbentuk edisi (ERC-1155) — keputusan akhir pemilik 23 Nov 2026:
@@ -24,9 +44,15 @@ import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
  *  - Koleksi eksklusif axto.io: supply 10 per NFT (`editionCap`), dijual axto.io $1 dan diperdagangkan member di
  *    axto.io (kustodi). Token baru tercetak di wallet member saat member menarik (WD) — satuan atau massal dalam satu
  *    transaksi untuk menghemat gas — dengan voucher bertanda tangan vault (`mintWithVoucher`). Gas dibayar member.
- *  Royalti jual kembali 10% (ERC-2981) ke treasury.
+ *  Royalti jual kembali 10% (ERC-2981) ke treasury — juga SETELAH member menarik (WD) NFT ke wallet dan menjualnya di mana
+ *  pun (perintah pemilik 23 Nov 2026: „ketika di wd ke wallet NFT member dan di jual ke manapun, axto.io tetap
+ *  mendapatkan 10% dari penjualan member"). Ditegakkan di rantai dengan Creator Token Standards (ERC-1155C): setiap
+ *  perpindahan oleh operator (marketplace) diperiksa validator Limit Break v3; hanya operator dalam daftar milik koleksi
+ *  ini — konduit OpenSea dan bursa yang membayar royalti — yang diizinkan, sehingga NFT tidak bisa dijual lewat pasar yang
+ *  melewati royalti. Kirim langsung antar wallet tetap boleh (pemilik: „Biarin TF langsung antar wallet mah"). Daftar dibuat & DIVERIFIKASI SENDIRI di
+ *  konstruktor; bila validator tidak tersedia atau verifikasi gagal, penegakan dimatikan agar penjualan tidak macet.
  */
-contract AxtoEditions is IERC1155, IERC1155MetadataURI, ERC2981, Ownable2Step, EIP712 {
+contract AxtoEditions is IERC1155, IERC1155MetadataURI, ERC2981, ICreatorToken, Ownable2Step, EIP712 {
     using Strings for uint256;
 
     bytes32 public constant VOUCHER_TYPEHASH =
@@ -46,6 +72,8 @@ contract AxtoEditions is IERC1155, IERC1155MetadataURI, ERC2981, Ownable2Step, E
         address signer; // penanda tangan voucher WD (eksklusif); boleh 0
         uint256 maxId; // id tertinggi yang boleh ada
         uint256 editionCap; // eksklusif: salinan per id (10); 0 untuk koleksi OpenSea
+        address validator; // CreatorTokenTransferValidator v3 (royalti ditegakkan); 0 = tanpa penegakan
+        address[] operators; // marketplace yang diizinkan memindahkan token (konduit OpenSea, dst.)
     }
 
     string public name;
@@ -67,10 +95,17 @@ contract AxtoEditions is IERC1155, IERC1155MetadataURI, ERC2981, Ownable2Step, E
     mapping(uint256 => uint256) private _touchedWords; // 1 bit per id: saldo kustodi sudah ditulis nyata
     string private _base;
     string private _contractURI;
+    address private _validator;
+    /// @notice Daftar operator milik koleksi ini di validator (0 = belum dibuat).
+    uint120 public operatorListId;
+    /// @notice Kirim langsung antar wallet (tanpa marketplace). Bawaan: TERBUKA — pemilik 23 Nov 2026 „Biarin TF langsung
+    ///         antar wallet mah". Pemilik dapat menutupnya bila perlu (setDirectTransfersAllowed).
+    bool public directTransfersAllowed = true;
 
     event Released(uint256 fromId, uint256 toId, uint256 editions);
     event SignerUpdated(address signer);
     event ReleaserUpdated(address releaser);
+    event DirectTransfersAllowed(bool allowed);
 
     error NotAuthorized();
     error BadId();
@@ -81,6 +116,7 @@ contract AxtoEditions is IERC1155, IERC1155MetadataURI, ERC2981, Ownable2Step, E
     error BadSignature();
     error NotExclusive();
     error NotOpenSeaCollection();
+    error DirectTransferDisabled();
 
     constructor(Config memory c) Ownable(c.owner) EIP712(c.name, "1") {
         require(c.royaltyReceiver != address(0) && c.maxId > 0, "config");
@@ -102,6 +138,65 @@ contract AxtoEditions is IERC1155, IERC1155MetadataURI, ERC2981, Ownable2Step, E
         }
         if (c.signer != address(0)) emit SignerUpdated(c.signer);
         if (c.releaser != address(0)) emit ReleaserUpdated(c.releaser);
+        if (c.validator != address(0) && c.validator.code.length > 0 && c.operators.length > 0) _setupValidator(c.validator, c.operators);
+    }
+
+    /// @dev Buat daftar operator milik koleksi, terapkan, lalu verifikasi setiap operator benar-benar diizinkan.
+    ///      Hanya bila semua langkah berhasil, penegakan diaktifkan. Tidak pernah membatalkan deploy.
+    function _setupValidator(address v, address[] memory ops) private {
+        ITransferValidatorV3 val = ITransferValidatorV3(v);
+        uint120 id;
+        try val.createList("AXTO royalty-enforcing marketplaces") returns (uint120 x) { id = x; } catch { return; }
+        try val.addAccountsToWhitelist(id, ops) {} catch { return; }
+        try val.applyListToCollection(address(this), id) {} catch { return; }
+        try val.setTokenTypeOfCollection(address(this), 1155) {} catch {}
+        for (uint256 i; i < ops.length; ++i) {
+            try val.isAccountWhitelistedByCollection(address(this), ops[i]) returns (bool ok) { if (!ok) return; } catch { return; }
+        }
+        operatorListId = id;
+        _validator = v;
+        emit TransferValidatorUpdated(address(0), v);
+    }
+
+    // ---------------------------------------------------------------- royalti ditegakkan (ERC-1155C)
+
+    function getTransferValidator() external view returns (address) {
+        return _validator;
+    }
+
+    function getTransferValidationFunction() external pure returns (bytes4 functionSignature, bool isViewFunction) {
+        return (ITransferValidatorV3.validateTransfer.selector, false);
+    }
+
+    /// @notice Pemilik dapat mengganti/mematikan validator (0 = tanpa penegakan).
+    function setTransferValidator(address v) external onlyOwner {
+        require(v == address(0) || v.code.length > 0, "validator");
+        emit TransferValidatorUpdated(_validator, v);
+        _validator = v;
+    }
+
+    /// @notice Pemilik menambah/mengurangi marketplace yang diizinkan (daftar milik koleksi ini di validator).
+    function setOperatorWhitelist(address[] calldata accounts, bool allowed) external onlyOwner {
+        require(_validator != address(0) && operatorListId != 0, "list");
+        if (allowed) ITransferValidatorV3(_validator).addAccountsToWhitelist(operatorListId, accounts);
+        else ITransferValidatorV3(_validator).removeAccountsFromWhitelist(operatorListId, accounts);
+    }
+
+    /// @notice Pemilik membuka/menutup kirim langsung antar wallet.
+    function setDirectTransfersAllowed(bool allowed) external onlyOwner {
+        directTransfersAllowed = allowed;
+        emit DirectTransfersAllowed(allowed);
+    }
+
+    /// @dev Kirim langsung (pemilik token sendiri yang memanggil) hanya bila dibuka pemilik — kecuali dari wallet toko
+    ///      sistem. Perpindahan oleh operator (marketplace) diperiksa validator: hanya daftar yang membayar royalti.
+    function _validate(address from, address to, uint256 id, uint256 value) private {
+        if (msg.sender == from) {
+            if (!directTransfersAllowed && from != custody) revert DirectTransferDisabled();
+            return;
+        }
+        address v = _validator;
+        if (v != address(0) && msg.sender != v) ITransferValidatorV3(v).validateTransfer(msg.sender, from, to, id, value);
     }
 
     // ---------------------------------------------------------------- jumlah edisi
@@ -150,6 +245,7 @@ contract AxtoEditions is IERC1155, IERC1155MetadataURI, ERC2981, Ownable2Step, E
 
     function safeTransferFrom(address from, address to, uint256 id, uint256 value, bytes calldata data) external {
         if (from != msg.sender && !_ops[from][msg.sender]) revert NotAuthorized();
+        _validate(from, to, id, value);
         _move(from, to, id, value);
         emit TransferSingle(msg.sender, from, to, id, value);
         ERC1155Utils.checkOnERC1155Received(msg.sender, from, to, id, value, data);
@@ -158,7 +254,10 @@ contract AxtoEditions is IERC1155, IERC1155MetadataURI, ERC2981, Ownable2Step, E
     function safeBatchTransferFrom(address from, address to, uint256[] calldata ids, uint256[] calldata values, bytes calldata data) external {
         if (from != msg.sender && !_ops[from][msg.sender]) revert NotAuthorized();
         require(ids.length == values.length, "length");
-        for (uint256 i; i < ids.length; ++i) _move(from, to, ids[i], values[i]);
+        for (uint256 i; i < ids.length; ++i) {
+            _validate(from, to, ids[i], values[i]);
+            _move(from, to, ids[i], values[i]);
+        }
         emit TransferBatch(msg.sender, from, to, ids, values);
         ERC1155Utils.checkOnERC1155BatchReceived(msg.sender, from, to, ids, values, data);
     }
@@ -270,6 +369,6 @@ contract AxtoEditions is IERC1155, IERC1155MetadataURI, ERC2981, Ownable2Step, E
     }
 
     function supportsInterface(bytes4 id) public view override(ERC2981, IERC165) returns (bool) {
-        return id == type(IERC1155).interfaceId || id == type(IERC1155MetadataURI).interfaceId || super.supportsInterface(id);
+        return id == type(IERC1155).interfaceId || id == type(IERC1155MetadataURI).interfaceId || id == type(ICreatorToken).interfaceId || super.supportsInterface(id);
     }
 }

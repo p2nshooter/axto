@@ -45,8 +45,21 @@ export const RELEASE_N = Number(process.env.RELEASE_N || 5000);
 const RELEASE_BATCH = 2500;
 /** Konduit OpenSea (Seaport) — sama di semua jaringan; disetujui sejak konstruktor agar listing tanpa transaksi persetujuan. */
 export const OPENSEA_CONDUIT = '0x1E0049783F008A0085193E00003D00cd54003c71';
+/**
+ * Royalti 10% tetap berlaku setelah WD & dijual di mana pun (perintah pemilik 23 Nov 2026): Creator Token Standards v3
+ * (Limit Break) — validator terverifikasi di Base. Daftar operator milik tiap koleksi: konduit OpenSea + operator daftar
+ * bawaan Limit Break di Base (Payment Processor), dibaca dari log AddedAccountToList validator.
+ */
+export const TRANSFER_VALIDATOR = process.env.LOCAL_VALIDATOR || '0x721C002B0059009a671D00aD1700c9748146cd1B';
+export const ROYALTY_OPERATORS = [
+  '0x1E0049783F008A0085193E00003D00cd54003c71', // konduit OpenSea (Seaport)
+  '0x9A1D00000000fC540e2000560054812452eB5366', // Payment Processor (daftar bawaan Limit Break, Base)
+  '0x9A1D001670C8b17F8B7900E8d7A41e785B3F0515',
+  '0x9A1D00bEd7CD04BCDA516d721A596eb22Aac6834',
+  '0x0E00009d00d1000069ed00A908e00081F5006008',
+].map((a) => ethers.getAddress(a.toLowerCase()));
 /** Gas terukur di ganache untuk seluruh urutan ini (lihat test/auto-deploy.test.mjs), dibulatkan ke atas. */
-export const TOTAL_GAS = BigInt(process.env.TOTAL_GAS_OVERRIDE || 85_000_000); // terukur 81,7 jt di ganache (test/auto-deploy.test.mjs)
+export const TOTAL_GAS = BigInt(process.env.TOTAL_GAS_OVERRIDE || 90_000_000); // terukur ±86,9 jt di ganache (test/auto-deploy.test.mjs), termasuk daftar operator royalti
 
 const LOCAL = !!process.env.LOCAL_RPC;
 const CHAIN = Number(process.env.CHAIN_ID || 8453);
@@ -239,6 +252,7 @@ async function main() {
       custody: ex ? ethers.ZeroAddress : STORE, operator: ex ? ethers.ZeroAddress : OPENSEA_CONDUIT,
       releaser: ex ? ethers.ZeroAddress : me, signer: ex ? signer : ethers.ZeroAddress,
       maxId: collection(k).max, editionCap: ex ? 10 : 0,
+      validator: TRANSFER_VALIDATOR, operators: ROYALTY_OPERATORS,
     };
     st.collections[k] = await deploy(`col:${k}`, 'AxtoEditions', cfg);
     delete st[`col:${k}`];
