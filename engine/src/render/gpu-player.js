@@ -1,85 +1,83 @@
 /**
- * Player HIDUP seri G- (pemilik, 23 Nov 2026: „Masa GPU cuma ngehasilin gambar … harusnya animasinya jarum jam bergerak dll").
+ * Player seri G- — animasi 100% buatan GPU yang INTERAKTIF (pemilik, 24 Nov 2026: „Series G- wajib sudah dengan animasi saat
+ * produksi, jd 100% di buatkan GPU" · „hasil NFT 100% sudah keluar dengan animasi yg interaktif").
  *
- * GPU gratis hanya menghasilkan gambar diam (model video tidak ada yang gratis), maka lukisan GPU dihidupkan di peramban —
- * tanpa biaya, tanpa server tambahan:
- *  - semua koleksi: kamera bergerak pelan (lukisan + hiasan bergerak bersama), sapuan cahaya, kilau berkedip, vignette;
- *  - Jam: kaca safir di tengah dial + jarum jam/menit/detik yang bergerak menurut waktu nyata (zona waktu bisa dipilih);
- *  - Prangko: cap pos bertanggal hari ini yang „tercap" berulang di sudut prangko;
- *  - Kaligrafi Al-Qur'an & Hadits: teks Arab ASLI dari dataset (tidak pernah dibuat mesin) di panel kosong lukisan, kata
- *    demi kata berpendar seperti dibaca, rujukan di bawahnya.
- * Satu berkas HTML mandiri (gambar dari /gpu/<c>/<id>.png, font dari /fonts/).
+ * Gerak karya = video buatan GPU dari lukisan G- (Wan 2.2 I2V / LTX-Video). Peramban TIDAK menambah animasi tiruan; ia hanya
+ * memberi kendali atas video GPU itu:
+ *   · miringkan — kartu condong mengikuti jari/tetikus atau kemiringan ponsel (3D),
+ *   · geser kiri/kanan — memutar maju/mundur bingkai video GPU,
+ *   · ketuk — jeda/putar · ketuk dua kali — layar penuh · papan tik: spasi, ← →, F.
+ *
+ * Satu-satunya yang bukan buatan GPU: teks Arab ASLI ayat/hadits (aturan tetap: teks Al-Qur'an & hadits tidak pernah dibuat
+ * mesin). Teks diletakkan TEPAT di panel kosong lukisan — posisi panel diukur pemeriksa mutu dari lukisan itu sendiri
+ * (`qa.panel`, pecahan lebar/tinggi) — tanpa kotak tempelan; warna teks mengikuti terang/gelapnya panel.
  */
-import { esc, rng } from '../core.js';
+import { esc } from '../core.js';
 
-const KACA = { time: { x: 50, y: 52, r: 17 } }; // pusat dial (persen kanvas) & jari-jari kaca safir
-
-function kilau(seed, n = 22) {
-  const r = rng(seed ^ 0x9e3779b9);
-  let s = '';
-  for (let i = 0; i < n; i += 1) {
-    const z = 6 + Math.round(r() * 16);
-    s += `<i class="sp" style="left:${(4 + r() * 92).toFixed(1)}%;top:${(4 + r() * 92).toFixed(1)}%;--z:${z}px;--d:${(2.4 + r() * 3.6).toFixed(1)}s;--l:${(r() * 6).toFixed(1)}s"></i>`;
-  }
-  return s;
-}
-
-/** @param d dna · @param meta metadata · @param ctx renderCtx (teks ayat/hadits) · @param o {img, g, ref} */
+/** @param d dna · @param meta metadata · @param ctx renderCtx (teks ayat/hadits) · @param o {img, video, g, ref, qa, nonce} */
 export function gpuPlayer(d, meta, ctx, o) {
   const kind = d.kind;
   const n = o.nonce ? ` nonce="${o.nonce}"` : '';
-  const k = KACA[kind];
-  let hias = '';
+  const pnl = Array.isArray(o.qa?.panel) && o.qa.panel.length === 4 ? o.qa.panel.map(Number) : null;
+  const gelap = o.qa?.nada === 'gelap';
+  let panel = '';
   let css = '';
-  let js = '';
-  if (kind === 'time') {
-    css = `.kaca{position:absolute;left:${k.x - k.r}%;top:${k.y - k.r}%;width:${k.r * 2}%;height:${k.r * 2}%;border-radius:50%;backdrop-filter:blur(7px) saturate(1.35) brightness(1.08);-webkit-backdrop-filter:blur(7px) saturate(1.35) brightness(1.08);background:radial-gradient(circle at 35% 30%,rgba(255,255,255,.28),rgba(255,255,255,.06) 38%,rgba(0,0,0,.18) 72%);box-shadow:inset 0 0 0 2px rgba(255,255,255,.35),inset 0 -8px 24px rgba(0,0,0,.35),0 6px 24px rgba(0,0,0,.35)}
-#jr{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
-.tz{position:absolute;right:2%;bottom:2%;font:12px system-ui;background:rgba(0,0,0,.55);color:#fff;border:1px solid rgba(255,255,255,.25);border-radius:8px;padding:3px 6px;max-width:46%}`;
-    const C = [k.x * 10, k.y * 10], R = k.r * 10;
-    let tanda = '';
-    for (let i = 0; i < 60; i += 1) {
-      const a = (i / 60) * Math.PI * 2, b = i % 5 === 0 ? 0.84 : 0.9;
-      tanda += `<line x1="${(C[0] + Math.sin(a) * R * b).toFixed(1)}" y1="${(C[1] - Math.cos(a) * R * b).toFixed(1)}" x2="${(C[0] + Math.sin(a) * R * 0.96).toFixed(1)}" y2="${(C[1] - Math.cos(a) * R * 0.96).toFixed(1)}" stroke="#fff" stroke-opacity="${i % 5 === 0 ? 0.9 : 0.45}" stroke-width="${i % 5 === 0 ? 3 : 1.4}" stroke-linecap="round"/>`;
-    }
-    hias = `<div class="kaca"></div><svg id="jr" viewBox="0 0 1000 1000" aria-hidden="true"><defs><linearGradient id="lg" x1="0" x2="1"><stop offset="0" stop-color="#fff8e1"/><stop offset=".5" stop-color="#e9c46a"/><stop offset="1" stop-color="#9a7b2f"/></linearGradient><filter id="gl" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="2.4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>${tanda}<g filter="url(#gl)"><path id="hh" d="M${C[0] - 7} ${C[1] + 14}L${C[0]} ${C[1] - R * 0.5}L${C[0] + 7} ${C[1] + 14}Z" fill="url(#lg)" stroke="#5a4515" stroke-width="1.2"/><path id="mm" d="M${C[0] - 5} ${C[1] + 18}L${C[0]} ${C[1] - R * 0.78}L${C[0] + 5} ${C[1] + 18}Z" fill="url(#lg)" stroke="#5a4515" stroke-width="1.2"/><g id="ss"><line x1="${C[0]}" y1="${C[1] + R * 0.18}" x2="${C[0]}" y2="${C[1] - R * 0.88}" stroke="#ff5a6e" stroke-width="2.4" stroke-linecap="round"/><circle cx="${C[0]}" cy="${C[1] + R * 0.12}" r="5" fill="#ff5a6e"/></g><circle cx="${C[0]}" cy="${C[1]}" r="9" fill="url(#lg)" stroke="#5a4515" stroke-width="1.5"/></g></svg>`;
-    js = `const C=[${C}];const q=new URLSearchParams(location.search);let tz=q.get('tz')||Intl.DateTimeFormat().resolvedOptions().timeZone;try{const s=localStorage.getItem('axto-tz');if(s&&!q.get('tz'))tz=s}catch(e){}
-const sel=document.getElementById('tz');for(const z of(Intl.supportedValuesOf?Intl.supportedValuesOf('timeZone'):[tz])){const o=document.createElement('option');o.value=o.textContent=z;if(z===tz)o.selected=true;sel.appendChild(o)}sel.onchange=()=>{tz=sel.value;try{localStorage.setItem('axto-tz',tz)}catch(e){}};
-const rot=(id,deg)=>document.getElementById(id).setAttribute('transform','rotate('+deg.toFixed(2)+' '+C[0]+' '+C[1]+')');
-function t(){const now=new Date();const p=new Intl.DateTimeFormat('en-GB',{timeZone:tz,hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}).formatToParts(now);const v=x=>Number(p.find(y=>y.type===x).value);const h=v('hour')%12,m=v('minute'),s=v('second')+now.getMilliseconds()/1000;rot('ss',s*6);rot('mm',(m+s/60)*6);rot('hh',(h+m/60)*30);requestAnimationFrame(t)}t();`;
-    hias += '<select id="tz" class="tz" aria-label="Zona waktu"></select>';
-  } else if (kind === 'stamp') {
-    css = `.cap{position:absolute;right:7%;bottom:8%;width:34%;height:34%;opacity:0;animation:cap 9s ease-out infinite;transform-origin:50% 50%}
-@keyframes cap{0%,8%{opacity:0;transform:scale(1.6) rotate(-18deg)}13%{opacity:.88;transform:scale(.96) rotate(-12deg)}16%{transform:scale(1) rotate(-12deg)}82%{opacity:.82;transform:scale(1) rotate(-12deg)}100%{opacity:0;transform:scale(1) rotate(-12deg)}}`;
-    hias = `<svg class="cap" viewBox="0 0 200 200" aria-hidden="true"><defs><path id="lk" d="M100 100m-74 0a74 74 0 1 1 148 0a74 74 0 1 1-148 0"/><filter id="tinta"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="4"/></filter></defs><g fill="none" stroke="#1d1b3a" stroke-opacity=".85" filter="url(#tinta)"><circle cx="100" cy="100" r="92" stroke-width="5"/><circle cx="100" cy="100" r="58" stroke-width="3"/><path d="M-60 70q30-14 60 0t60 0t60 0t60 0M-60 100q30-14 60 0t60 0t60 0t60 0M-60 130q30-14 60 0t60 0t60 0t60 0" stroke-width="4" transform="translate(-150 0)"/></g><text font-family="Georgia,serif" font-size="17" font-weight="700" fill="#1d1b3a" fill-opacity=".85" letter-spacing="3"><textPath href="#lk">AXTO · POS · ${esc(String(meta.attributes.find((a) => a.trait_type === 'Realm')?.value ?? 'AXTO').toUpperCase().slice(0, 18))} ·</textPath></text><text id="tgl" x="100" y="108" text-anchor="middle" font-family="Georgia,serif" font-size="22" font-weight="700" fill="#1d1b3a" fill-opacity=".9"></text></svg>`;
-    js = "document.getElementById('tgl').textContent=new Date().toLocaleDateString('id-ID',{day:'2-digit',month:'short',year:'numeric'}).toUpperCase();";
-  } else {
-    // quran / hadith: teks Arab asli di panel kosong lukisan
+  if ((kind === 'quran' || kind === 'hadith') && pnl) {
     const ar = String(ctx.ar ?? (ctx.lines ?? []).slice(0, 3).join(' ')).replace(/\s+/g, ' ').trim();
-    const kata = ar.split(' ').filter(Boolean);
-    css = `.panel{position:absolute;left:19%;right:19%;top:30%;bottom:30%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2%;padding:3%;border-radius:18px;background:radial-gradient(ellipse at 50% 40%,rgba(10,12,24,.62),rgba(10,12,24,.78));border:1.5px solid rgba(233,196,106,.75);box-shadow:0 0 0 6px rgba(233,196,106,.12),0 10px 40px rgba(0,0,0,.45);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px)}
-@font-face{font-family:'Amiri Quran';src:url(/fonts/amiri-quran-arabic.woff2) format('woff2');font-display:swap}
-#ar{font-family:'Amiri Quran',serif;direction:rtl;text-align:center;line-height:1.9;color:#f3dfa2;text-shadow:0 0 12px rgba(233,196,106,.45);max-height:84%;overflow:hidden;word-spacing:.08em}
-#ar .w{transition:color .4s,text-shadow .4s}#ar .w.on{color:#fffbe8;text-shadow:0 0 14px #ffd76a,0 0 28px rgba(255,215,106,.7)}
-.ruj{font:600 clamp(9px,2.2vmin,16px) Georgia,serif;color:#e9c46a;letter-spacing:.06em}`;
-    hias = `<div class="panel"><div id="ar" lang="ar">${kata.map((w) => `<span class="w">${esc(w)}</span>`).join(' ')}</div>${o.ref ? `<div class="ruj">${esc(o.ref)}</div>` : ''}</div>`;
-    js = `const A=document.getElementById('ar'),P=A.parentElement;let f=Math.min(window.innerWidth,window.innerHeight)*0.07;function pas(){A.style.fontSize=f+'px';let i=0;while((A.scrollHeight>P.clientHeight*0.84||A.scrollWidth>P.clientWidth*0.96)&&i<60){f*=0.93;A.style.fontSize=f+'px';i++}}pas();addEventListener('resize',()=>{f=Math.min(innerWidth,innerHeight)*0.07;pas()});document.fonts&&document.fonts.ready.then(pas);
-const W=[...A.querySelectorAll('.w')];let j=0;setInterval(()=>{W.forEach(x=>x.classList.remove('on'));if(W.length){W[j%W.length].classList.add('on');j++}},${Math.max(450, Math.min(1100, Math.round(14000 / Math.max(1, kata.length))))});`;
+    if (ar) {
+      css = `@font-face{font-family:'Amiri Quran';src:url(/fonts/amiri-quran-arabic.woff2) format('woff2');font-display:swap}
+#pn{position:absolute;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3%;padding:5% 6%;box-sizing:border-box;pointer-events:none;overflow:hidden}
+#ar{font-family:'Amiri Quran',serif;direction:rtl;text-align:center;line-height:1.9;color:${gelap ? '#f3dfa2' : '#2e1d0c'};text-shadow:${gelap ? '0 1px 2px rgba(0,0,0,.55)' : '0 1px 0 rgba(255,250,235,.6)'}}
+.ruj{font:600 clamp(8px,2vmin,15px) Georgia,serif;letter-spacing:.06em;color:${gelap ? '#e9c46a' : '#6b4a1c'}}`;
+      panel = `<div id="pn" data-p="${pnl.join(',')}"><div id="ar" lang="ar">${esc(ar)}</div>${o.ref ? `<div class="ruj">${esc(o.ref)}</div>` : ''}</div>`;
+    }
   }
-  const fokus = k ? `${k.x}% ${k.y}%` : '50% 50%';
-  return `<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(meta.name)} — G-${o.g}</title><style${n}>html,body{margin:0;height:100%;background:#05060c;overflow:hidden}
-#s{position:absolute;left:50%;top:50%;width:100vmin;height:100vmin;transform:translate(-50%,-50%);overflow:hidden;border-radius:2px}
-.cam{position:absolute;inset:0;transform-origin:${fokus};animation:kb 28s ease-in-out infinite alternate}
-@keyframes kb{from{transform:scale(1.015)}to{transform:scale(1.09) translate(-.8%,.6%)}}
-.img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
-.sheen{position:absolute;inset:-30%;background:linear-gradient(115deg,transparent 42%,rgba(255,255,255,.2) 50%,transparent 58%);mix-blend-mode:screen;animation:sh 8s ease-in-out infinite;pointer-events:none}
-@keyframes sh{0%{transform:translateX(-60%)}55%,100%{transform:translateX(60%)}}
-.sp{position:absolute;width:var(--z);height:var(--z);margin:calc(var(--z)/-2) 0 0 calc(var(--z)/-2);opacity:0;animation:tw var(--d) ease-in-out var(--l) infinite;pointer-events:none;background:radial-gradient(circle,#fff 0,rgba(255,255,255,.7) 18%,transparent 55%)}
-.sp::before,.sp::after{content:'';position:absolute;left:50%;top:-40%;bottom:-40%;width:1.2px;margin-left:-.6px;background:linear-gradient(transparent,#fff,transparent)}.sp::after{transform:rotate(90deg)}
-@keyframes tw{0%,100%{opacity:0;transform:scale(.2) rotate(0)}50%{opacity:1;transform:scale(1) rotate(45deg)}}
-.vig{position:absolute;inset:0;background:radial-gradient(circle at 50% 50%,transparent 58%,rgba(0,0,0,.42));pointer-events:none}
-.g{position:absolute;left:2.5%;top:2.5%;padding:.25em .75em;border-radius:999px;background:rgba(13,42,32,.86);color:#9be3c4;font:700 clamp(10px,2.4vmin,15px) system-ui;border:1px solid #2a5a52}
-${css}
-@media(prefers-reduced-motion:reduce){.cam,.sheen,.sp,.cap{animation:none!important}.sp{opacity:.6}.cap{opacity:.85}}
-</style></head><body><div id="s"><div class="cam"><img class="img" src="${esc(o.img)}" alt="${esc(meta.name)} — G-${o.g}">${kind === 'time' ? hias.replace(/<select[\s\S]*<\/select>/, '') : hias}${kilau(d.seed)}<div class="sheen"></div></div><div class="vig"></div><span class="g">G-${o.g}</span>${kind === 'time' ? '<select id="tz" class="tz" aria-label="Zona waktu"></select>' : ''}</div><script${n}>${js}</script></body></html>`;
+  const hint = 'Geser untuk memutar · ketuk untuk jeda';
+  return `<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(meta.name)} — G-${o.g}</title><style${n}>html,body{margin:0;height:100%;background:#05060c;overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none}
+#s{position:absolute;left:50%;top:50%;width:100vmin;height:100vmin;transform:translate(-50%,-50%);perspective:1100px;cursor:grab}
+#s:active{cursor:grabbing}
+#k{position:absolute;inset:3%;transform-style:preserve-3d;transform:rotateX(var(--rx,0deg)) rotateY(var(--ry,0deg));transition:transform .35s cubic-bezier(.2,.7,.2,1);border-radius:14px;overflow:hidden;box-shadow:0 24px 60px rgba(0,0,0,.55)}
+video{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000;pointer-events:none}
+.g{position:absolute;left:4.5%;top:4.5%;padding:.25em .75em;border-radius:999px;background:rgba(13,42,32,.86);color:#9be3c4;font:700 clamp(10px,2.4vmin,15px) system-ui;border:1px solid #2a5a52;pointer-events:none}
+.bar{position:absolute;left:8%;right:8%;bottom:1.2%;height:3px;border-radius:3px;background:rgba(255,255,255,.14);pointer-events:none}
+.bar i{display:block;height:100%;width:0;border-radius:3px;background:#e9c46a}
+.ht{position:absolute;left:50%;bottom:5%;transform:translateX(-50%);padding:.35em .9em;border-radius:999px;background:rgba(5,6,12,.72);color:#e8e6df;font:500 clamp(10px,2.2vmin,14px) system-ui;pointer-events:none;transition:opacity .6s;white-space:nowrap}
+.jeda .ht::after{content:' · dijeda'}
+@media (prefers-reduced-motion:reduce){#k{transition:none}}
+${css}</style></head><body><div id="s" tabindex="0" role="application" aria-label="${esc(meta.name)} — G-${o.g}. ${hint}"><div id="k"><video id="v" src="${esc(o.video)}" poster="${esc(o.img)}" autoplay muted loop playsinline preload="auto"></video>${panel}</div><span class="g">G-${o.g}</span><div class="bar"><i id="pr"></i></div><div class="ht" id="ht">${hint}</div></div>
+<script${n}>(()=>{const S=document.getElementById('s'),K=document.getElementById('k'),V=document.getElementById('v'),PR=document.getElementById('pr'),HT=document.getElementById('ht'),PN=document.getElementById('pn');
+const diam=matchMedia('(prefers-reduced-motion: reduce)').matches;
+const miring=(x,y)=>{if(diam)return;K.style.setProperty('--ry',(x*16).toFixed(2)+'deg');K.style.setProperty('--rx',(-y*16).toFixed(2)+'deg')};
+const lurus=()=>{K.style.setProperty('--rx','0deg');K.style.setProperty('--ry','0deg')};
+function letak(){if(!PN)return;const p=PN.dataset.p.split(',').map(Number),W=K.clientWidth,H=K.clientHeight,vw=V.videoWidth||1,vh=V.videoHeight||1,s=Math.min(W/vw,H/vh),w=vw*s,h=vh*s,ox=(W-w)/2,oy=(H-h)/2;
+Object.assign(PN.style,{left:ox+p[0]*w+'px',top:oy+p[1]*h+'px',width:(p[2]-p[0])*w+'px',height:(p[3]-p[1])*h+'px'});
+const A=document.getElementById('ar');let f=Math.min(W,H)*0.075;A.style.fontSize=f+'px';let i=0;while((PN.scrollHeight>PN.clientHeight+1||A.scrollWidth>A.clientWidth+1)&&i<70){f*=0.93;A.style.fontSize=f+'px';i++}}
+letak();V.addEventListener('loadedmetadata',letak);addEventListener('resize',letak);document.fonts&&document.fonts.ready.then(letak);
+V.addEventListener('timeupdate',()=>{if(V.duration)PR.style.width=(100*V.currentTime/V.duration)+'%'});
+setTimeout(()=>{HT.style.opacity='0'},2800);
+const keadaan=()=>{S.classList.toggle('jeda',V.paused);HT.style.opacity=V.paused?'1':'0'};
+const putar=()=>{V.paused?V.play().catch(()=>{}):V.pause();keadaan()};
+const layar=()=>{document.fullscreenElement?document.exitFullscreen().catch(()=>{}):S.requestFullscreen&&S.requestFullscreen().catch(()=>{})};
+let tekan=null,ketukAkhir=0;
+S.addEventListener('pointermove',(e)=>{const r=S.getBoundingClientRect();const x=(e.clientX-r.left)/r.width-0.5,y=(e.clientY-r.top)/r.height-0.5;
+if(tekan){const dx=e.clientX-tekan.x;if(Math.abs(dx)>6)tekan.geser=true;if(tekan.geser&&V.duration){V.currentTime=Math.min(V.duration-0.01,Math.max(0,tekan.t+dx/r.width*V.duration*1.2));PR.style.width=(100*V.currentTime/V.duration)+'%'}}
+miring(x,y)});
+S.addEventListener('pointerleave',()=>{if(!tekan)lurus()});
+S.addEventListener('pointerdown',(e)=>{S.setPointerCapture(e.pointerId);tekan={x:e.clientX,t:V.currentTime,main:!V.paused,geser:false,at:Date.now()};if(!V.paused)V.pause()});
+const lepas=(e)=>{if(!tekan)return;const t=tekan;tekan=null;if(t.geser){if(t.main)V.play().catch(()=>{});keadaan();if(e.pointerType!=='mouse')lurus();return}
+if(t.main)V.play().catch(()=>{});const now=Date.now();if(now-ketukAkhir<320){ketukAkhir=0;layar();return}ketukAkhir=now;setTimeout(()=>{if(ketukAkhir===now){putar()}},330);if(e.pointerType!=='mouse')lurus()};
+S.addEventListener('pointerup',lepas);S.addEventListener('pointercancel',lepas);
+S.addEventListener('keydown',(e)=>{if(e.key===' '||e.key==='k'){e.preventDefault();putar()}else if(e.key==='ArrowRight'||e.key==='ArrowLeft'){V.currentTime=Math.max(0,V.currentTime+(e.key==='ArrowRight'?0.2:-0.2))}else if(e.key==='f'){layar()}});
+addEventListener('deviceorientation',(e)=>{if(tekan||e.gamma==null)return;miring(Math.max(-0.5,Math.min(0.5,e.gamma/60)),Math.max(-0.5,Math.min(0.5,(e.beta-45)/60)))});
+V.play().catch(()=>{});})();</script></body></html>`;
+}
+
+/**
+ * Karya G- LAMA (pemilik, 24 Nov 2026: „Series G- yg sudah terlanjur di buat, kembalikan ke gambar aslinya tanpa animasi"):
+ * hanya lukisan GPU aslinya, diam — tanpa video, tanpa skrip, tanpa jarum/panel/teks tempelan.
+ */
+export function gpuGambar(meta, o) {
+  return `<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(meta.name)} — G-${o.g}</title><style${o.nonce ? ` nonce="${o.nonce}"` : ''}>html,body{margin:0;height:100%;background:#05060c;overflow:hidden}
+img{position:absolute;left:50%;top:50%;width:100vmin;height:100vmin;transform:translate(-50%,-50%);object-fit:contain}
+.g{position:absolute;left:calc(50% - 50vmin + 2.5vmin);top:calc(50% - 50vmin + 2.5vmin);padding:.25em .75em;border-radius:999px;background:rgba(13,42,32,.86);color:#9be3c4;font:700 clamp(10px,2.4vmin,15px) system-ui;border:1px solid #2a5a52}</style></head><body><img src="${esc(o.img)}" alt="${esc(meta.name)} — G-${o.g}"><span class="g">G-${o.g}</span></body></html>`;
 }

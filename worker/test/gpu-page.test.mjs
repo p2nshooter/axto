@@ -20,7 +20,7 @@ test('halaman karya dari kartu G- (?v=g): panggung = lukisan GPU, bukan animasi 
 
 test('kartu seri G- menaut ke versi GPU halaman karya', () => {
   const html = P.collectionPage('id', 'ex-hadith', { produced: 1, from: 1, first: { items: [{ id: 42, tier: 0, name: 'X', gpu: true, g: 3 }], next: null }, crumbs: [['Beranda', '/id']], maker: 'gpu', gpuCount: 1 });
-  assert.match(html, /<li data-id="42"[^>]*class="g" data-g="3"><a href="[^"]*\/nft\/ex-hadith\/42\?v=g"><img src="\/gpu\/ex-hadith\/42\.png\?v=b"/);
+  assert.match(html, /<li data-id="42"[^>]*class="g" data-g="3"><a href="[^"]*\/nft\/ex-hadith\/42\?v=g"><img src="\/gpu\/ex-hadith\/42\.png\?v=2"/);
 });
 
 test('halaman publik tidak pernah menyebut penyedia GPU (rahasia perusahaan)', () => {
@@ -37,10 +37,31 @@ test('player G- Jam & Prangko tidak pernah memuat teks Arab/ayat — teks Arab h
   const { dna } = await import('../../engine/src/dna.js');
   const AYAT = { ar: 'بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ', surah: 1, ayah: 1 }; // sengaja diberikan: tetap tidak boleh tampil
   for (const c of ['time', 'ex-time', 'stamp', 'ex-stamp']) {
-    const html = gpuPlayer(dna(c, 5), metadata(c, 5, 'https://axto.io'), AYAT, { img: `/gpu/${c}/5.png?v=b`, g: 1, ref: 'x' });
+    const html = gpuPlayer(dna(c, 5), metadata(c, 5, 'https://axto.io'), AYAT, { img: `/gpu/${c}/5.png?v=b`, video: `/gpu/${c}/5.mp4`, g: 1, ref: 'x' });
     assert.doesNotMatch(html, /[؀-ۿ]/, `${c}: tidak boleh ada huruf Arab`);
     assert.doesNotMatch(html, /id="ar"|Amiri/, c);
   }
-  assert.match(gpuPlayer(dna('time', 5), metadata('time', 5, 'https://axto.io'), {}, { img: 'x', g: 1 }), /id="hh"[\s\S]*id="mm"[\s\S]*id="ss"/, 'jam: jarum jam, menit, detik');
-  for (const c of ['hadith', 'ex-quran']) assert.match(gpuPlayer(dna(c, 5), metadata(c, 5, 'https://axto.io'), AYAT, { img: 'x', g: 1, ref: 'r' }), /بِسْمِ/, c);
+  const jam = gpuPlayer(dna('time', 5), metadata('time', 5, 'https://axto.io'), {}, { img: '/gpu/time/5.png?v=2', video: '/gpu/time/5.mp4?v=2', g: 1, qa: { v: 2 } });
+  assert.match(jam, /<video id="v" src="\/gpu\/time\/5\.mp4\?v=2" poster="\/gpu\/time\/5\.png\?v=2" autoplay muted loop playsinline/, 'animasi = video buatan GPU');
+  assert.doesNotMatch(jam, /@keyframes|requestAnimationFrame|animation:/, 'tanpa animasi tiruan di peramban (100% GPU)');
+  // interaktif (pemilik 24 Nov 2026: „animasi yg interaktif"): miring 3D, geser = putar maju/mundur bingkai GPU, ketuk = jeda
+  assert.match(jam, /perspective:1100px/);
+  assert.match(jam, /V\.currentTime=Math\.min/, 'geser memutar video GPU');
+  assert.match(jam, /deviceorientation/);
+  assert.match(jam, /requestFullscreen/);
+  // Qur'an/hadits: teks ASLI hanya bila panel kosong lukisan sudah diukur; diletakkan di panel itu, tanpa kotak tempelan
+  const PANEL = { v: 2, panel: [0.3, 0.32, 0.7, 0.68], nada: 'terang' };
+  for (const c of ['hadith', 'ex-quran']) {
+    const h = gpuPlayer(dna(c, 5), metadata(c, 5, 'https://axto.io'), AYAT, { img: 'x', video: 'v', g: 1, ref: 'r', qa: PANEL });
+    assert.match(h, /بِسْمِ/, c);
+    assert.match(h, /data-p="0\.3,0\.32,0\.7,0\.68"/, c);
+    assert.doesNotMatch(h, /background:rgba\(10,12,24/, 'tanpa kotak gelap tempelan');
+  }
+  // karya G- lama (pemilik 24 Nov 2026: „kembalikan ke gambar aslinya tanpa animasi"): gambar asli saja, tanpa video/skrip/tempelan
+  const { gpuGambar } = await import('../../engine/src/render/gpu-player.js');
+  const lama = gpuGambar(metadata('quran', 5, 'https://axto.io'), { img: '/gpu/quran/5.png?v=2', g: 7 });
+  assert.match(lama, /<img src="\/gpu\/quran\/5\.png\?v=2"/);
+  assert.doesNotMatch(lama, /<video|<script|id="ar"|@keyframes|animation:/);
+  assert.match(lama, /G-7/);
+  assert.doesNotMatch(gpuPlayer(dna('quran', 5), metadata('quran', 5, 'https://axto.io'), AYAT, { img: 'x', video: 'v', g: 1, ref: 'r', qa: { v: 2 } }), /id="ar"/, 'tanpa panel terukur, teks tidak ditempel asal');
 });
