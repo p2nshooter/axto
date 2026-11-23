@@ -1,0 +1,37 @@
+name: Seri G- (karya GPU)
+
+# Pemilik 23 Nov 2026: „tandai serinya dengan G- biar jelas bahwa ini karya GPU" · „Series G- masih blm terlihat,
+# biar cepet live". Tiap jam: antrean karya dari DNA (tanpa teks) → kunci GPU ulyah.com merender tiap 15 menit →
+# hasil disalin ke R2 axto.io dengan nomor seri G- (ops/gpu-sync.mjs). Figur Model tidak dilukis GPU.
+on:
+  schedule:
+    - cron: '23 * * * *'
+  workflow_dispatch:
+  push:
+    branches: [ccr-9ef9a045-gmv4m2, main]
+    paths: ['ops/gpu-sync.mjs', '.github/workflows/gpu-sync.yml']
+
+concurrency:
+  group: gpu-sync
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      CLOUDFLARE_API_KEY: ${{ secrets.CLOUDFLARE_API_KEY }}
+      CLOUDFLARE_EMAIL: ${{ secrets.CLOUDFLARE_EMAIL }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Uji
+        run: node --test ops/test/gpu-sync.test.mjs
+      - name: Antrean → ulyah.com, hasil → R2 axto.io (seri G-)
+        run: node ops/gpu-sync.mjs

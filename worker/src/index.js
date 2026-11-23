@@ -57,17 +57,21 @@ const facetsOf = (c, sc) => (sc.facets ??= listFacets(c, sc.ids));
 /** Koleksi OpenSea aktif (kontrak edisi sudah dideploy) — sebelum itu halaman jujur menyebut „segera hadir di OpenSea". */
 const osLive = (env) => /^0x[0-9a-fA-F]{40}$/.test(env.COLLECTION_TIME ?? '');
 const colAddrOf = (env) => (c) => env[`COLLECTION_${c.replace('-', '_').toUpperCase()}`] ?? '';
-/** Karya GPU (seri G-) per koleksi publik: R2 os/gpu-<c>.json {ids:[…]} ditulis pipeline GPU; kosong sampai produksi. */
+/** Karya GPU (seri G-) per koleksi publik: R2 os/gpu-<c>.json {ids, serial} ditulis ops/gpu-sync.mjs (kunci GPU ulyah.com). */
 const GPU = new Map();
-async function gpuIds(env, c) {
+async function gpuSet(env, c) {
   const hit = GPU.get(c);
-  if (hit && Date.now() - hit.at < 300_000) return hit.ids;
-  let ids = [];
-  try { ids = (await readJSON(env.STORE, `os/gpu-${c}.json`))?.ids ?? []; } catch { ids = []; }
-  const v = { at: Date.now(), ids: Array.isArray(ids) ? ids.filter((x) => Number.isSafeInteger(x) && x >= 1 && x <= COLLECTIONS[c].max) : [] };
+  if (hit && Date.now() - hit.at < 120_000) return hit;
+  let doc = null;
+  try { doc = await readJSON(env.STORE, `os/gpu-${c}.json`); } catch { doc = null; }
+  const ids = Array.isArray(doc?.ids) ? doc.ids.filter((x) => Number.isSafeInteger(x) && x >= 1 && x <= COLLECTIONS[c].max) : [];
+  const v = { at: Date.now(), ids, serial: doc?.serial ?? {} };
   GPU.set(c, v);
-  return v.ids;
+  return v;
 }
+const gpuIds = async (env, c) => (await gpuSet(env, c)).ids;
+/** Kartu seri G-: terbaru di depan, nomor seri G-n, gambar GPU. */
+const gpuItems = (g, items) => items.map((it) => ({ ...it, gpu: true, g: Number(g.serial[it.id] ?? 0) }));
 /** Edisi eksklusif terjual per karya (cache 60 dtk per isolate). */
 const SOLD = new Map();
 async function soldOf(env, c) {
@@ -195,10 +199,11 @@ async function api(request, env, ctx, url) {
     const n = Math.min(120, Math.max(1, Number(q.get('n') ?? 60) | 0));
     if (!COLLECTIONS[m[1]].exclusive) {
       const gpu = q.get('maker') === 'gpu';
-      const ids = gpu ? await gpuIds(env, m[1]) : (await showcase(env, m[1])).ids;
+      const gs = gpu ? await gpuSet(env, m[1]) : null;
+      const ids = gpu ? [...gs.ids].reverse() : (await showcase(env, m[1])).ids;
       const surah = Math.min(114, Math.max(0, Number(q.get('surah') ?? 0) | 0));
       const r = browseList(m[1], ids, { from: Number(q.get('from') ?? 1) | 0, n, tier: Number.isInteger(tier) && tier >= 0 && tier <= 4 ? tier : null, series: String(q.get('series') ?? '').slice(0, 32), surah });
-      if (gpu) r.items = r.items.map((it) => ({ ...it, gpu: true }));
+      if (gpu) r.items = gpuItems(gs, r.items);
       return json(r, 200, { 'cache-control': 'public, max-age=60' });
     }
     // eksklusif: semua 10.000 karya tersedia di toko; kartu memuat $1 + sisa edisi
@@ -524,7 +529,8 @@ async function html(request, env, ctx, url) {
     const sc = await showcase(env, c);
     const facets = facetsOf(c, sc);
     const maker = url.searchParams.get('maker') === 'gpu' ? 'gpu' : '';
-    const gpu = await gpuIds(env, c);
+    const gs = await gpuSet(env, c);
+    const gpu = [...gs.ids].reverse();
     let series = String(url.searchParams.get('series') ?? '').slice(0, 32);
     let surah = 0;
     let rest = `/c/${c}`;
@@ -540,7 +546,7 @@ async function html(request, env, ctx, url) {
     const tq = url.searchParams.get('tier');
     const tier = tq !== null && tq !== '' && /^[0-4]$/.test(tq) ? Number(tq) : null;
     const first = browseList(c, maker ? gpu : sc.ids, { from, n: 60, tier, series, surah });
-    if (maker) first.items = first.items.map((it) => ({ ...it, gpu: true }));
+    if (maker) first.items = gpuItems(gs, first.items);
     const crumbs = [[BREAD[lang].home, `/${lang}`], [BREAD[lang].hub, `/${lang}/${PATHS.opensea[lang]}`], [P.collName(lang, c), `/${lang}/c/${c}`]];
     if (surah) crumbs.push([`${surah}. ${surahInfo(surah)[2]}`, `/${lang}${rest}`]);
     else if (parts[3]) crumbs.push([seriesLabel(c, series, lang), `/${lang}${rest}`]);
@@ -586,7 +592,9 @@ async function html(request, env, ctx, url) {
       const offer = os ? { '@type': 'Offer', priceCurrency: 'USD', price: usd, availability: 'https://schema.org/InStock', url: os, seller: { '@type': 'Organization', name: 'AXTO' } } : { '@type': 'Offer', priceCurrency: 'USD', price: usd, availability: 'https://schema.org/PreOrder', url: `${base}/${lang}/nft/${c}/${id}`, seller: { '@type': 'Organization', name: 'AXTO' } };
       const product = { '@context': 'https://schema.org', '@type': 'Product', name: meta.name, image: meta.image, description: meta.description.slice(0, 500), sku: `${c}-${id}`, category: gal[1], brand: { '@type': 'Brand', name: 'AXTO' }, offers: offer };
       const desc = `${meta.name}: ${gal[1]} · ${meta.attributes.find((a) => a.trait_type === 'Tier')?.value} · ${e.supply} ${lang === 'id' ? 'edisi' : 'editions'} · $${usd} ${os ? (lang === 'id' ? 'di OpenSea (jaringan Base)' : 'on OpenSea (Base network)') : (lang === 'id' ? '— segera di OpenSea' : '— coming to OpenSea')}.`.slice(0, 160);
-      return out({ page: 'home', rest: `/nft/${c}/${id}`, title: `${meta.name} — $${usd}`, desc, image: meta.image, noindex: !inStock, jsonld: [product, breadcrumb(base, [...crumbs, [meta.name, `/${lang}/nft/${c}/${id}`]])], body: P.nftPage(lang, c, id, meta, attributesFor(c, id, lang), os, { usd, ed: e.supply, crumbs, related, galleryHref: gal[0], galleryName: gal[1], desc: c === 'hadith' ? hadithBlurb(c, id, lang) : null }) });
+      const gs = await gpuSet(env, c);
+      const gpuSerial = gs.serial[id] ? Number(gs.serial[id]) : 0;
+      return out({ page: 'home', rest: `/nft/${c}/${id}`, title: `${meta.name} — $${usd}`, desc, image: meta.image, noindex: !inStock, jsonld: [product, breadcrumb(base, [...crumbs, [meta.name, `/${lang}/nft/${c}/${id}`]])], body: P.nftPage(lang, c, id, meta, attributesFor(c, id, lang), os, { usd, ed: e.supply, crumbs, related, galleryHref: gal[0], galleryName: gal[1], desc: c === 'hadith' ? hadithBlurb(c, id, lang) : null, gpuSerial }) });
     }
     // eksklusif: toko $1/edisi + listing pasar member untuk karya ini
     const stock = await SHOP.stockOf(env, c, id);
@@ -659,6 +667,12 @@ export default {
       if (p.startsWith('/api/') || p.startsWith('/internal/') || p === '/tokenlist.json') return await api(request, env, ctx, url);
       let m = /^\/img\/([a-z-]+)\/(\d+)\.svg$/.exec(p);
       if (m && validToken(m[1], Number(m[2]))) return await svg(request, env, ctx, m[1], Number(m[2]), url.origin);
+      m = /^\/gpu\/([a-z]+)\/(\d+)\.png$/.exec(p);
+      if (m && validToken(m[1], Number(m[2])) && !COLLECTIONS[m[1]].exclusive) {
+        const o = await env.STORE.get(`gpu/${m[1]}/${m[2]}.png`);
+        if (!o) return new Response('not found', { status: 404 });
+        return new Response(o.body, { headers: { 'content-type': 'image/png', 'cache-control': 'public, max-age=86400, s-maxage=31536000, immutable', 'x-content-type-options': 'nosniff' } });
+      }
       m = /^\/play\/([a-z-]+)\/(\d+)$/.exec(p);
       if (m && validToken(m[1], Number(m[2]))) return await player(request, env, ctx, m[1], Number(m[2]), url.origin);
       m = /^\/lang\/(id|en)$/.exec(p);

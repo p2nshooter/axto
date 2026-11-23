@@ -147,8 +147,9 @@ if (ex) {
     const a = document.createElement('a');
     a.href = `/${lang}/nft/${c}/${it.id}`;
     const im = document.createElement('img');
-    Object.assign(im, { src: `/img/${c}/${it.id}.svg?v=9`, alt: it.name, loading: 'lazy', width: 300, height: 300 });
-    const id = document.createElement('span'); id.className = 'id'; id.textContent = `#${it.gpu ? 'G-' : ''}${fmtN(it.id)}`;
+    Object.assign(im, { src: it.gpu ? `/gpu/${c}/${it.id}.png` : `/img/${c}/${it.id}.svg?v=9`, alt: it.name, loading: 'lazy', width: 300, height: 300 });
+    const id = document.createElement('span'); id.className = 'id'; id.textContent = it.gpu ? `G-${fmtN(it.g)}` : `#${fmtN(it.id)}`;
+    if (it.gpu) li.classList.add('g');
     const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = it.name;
     const tr = document.createElement('span'); tr.className = `tr t${it.tier}`; tr.textContent = I.tiers?.[it.tier] ?? '';
     a.append(im, id, nm, tr);
