@@ -141,7 +141,7 @@ export async function run({ io = realIO(), chainId: chainIn = Number(process.env
   for (const f of ['from', 'cur', 'out', 'until', 'pend']) st[f] ??= {};
   st.listed ??= 0; st.errors ??= []; st.minted ??= [];
   const save = () => io.r2put(stKey, JSON.stringify(st));
-  // 10 koleksi edisi 1–10 + 3 koleksi 1/1 (pemilik 24 Nov 2026) — koleksi staking TIDAK pernah dilisting
+  // 10 koleksi edisi 1–10 + 6 kontrak 1/1 (3 tema × 2; pemilik 24 Nov 2026) — koleksi staking TIDAK pernah dilisting
   const cols = LIST_COLS.filter((c) => ethers.isAddress(cfg.collections?.[c.key] ?? ''));
   const head = await provider.getBlockNumber();
   const fee = await provider.getFeeData();
