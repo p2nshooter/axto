@@ -62,6 +62,11 @@ function fakeGateway(state) {
       const q = Object.fromEntries(u.searchParams);
       state.calls = [...(state.calls ?? []), u.pathname];
       if (u.pathname === '/api/v2/capital/deposit/address/list') {
+        // tanpa parameter jaringan: semua jaringan koin itu (perilaku API asli); state.noCoinList → jawaban bukan daftar
+        if (!q.network) {
+          if (state.noCoinList) return ok({ code: -1102, msg: 'network required' }, 400);
+          return ok(Object.entries(ADDR).filter(([k]) => k.startsWith(`${q.coin}:`)).map(([, a]) => ({ coin: q.coin, address: a.address, tag: a.tag ?? '', network: a.network })));
+        }
         const a = ADDR[`${q.coin}:${q.network}`];
         if (!a) return ok([{ coin: q.coin, address: '', tag: '', network: q.network.toLowerCase() }]);
         return ok([{ coin: q.coin, address: a.address, tag: a.tag ?? '', network: a.network }]);
@@ -97,6 +102,26 @@ test('alamat deposit (API v2): hanya jaringan yang punya alamat & dikenali; memo
   // sistem tidak pernah memanggil titik lain (penarikan, perdagangan)
   await assert.rejects(PAY.gw(env, '/api/v2/capital/withdraw/apply', {}), /gw:method/);
   await assert.rejects(PAY.gw(env, '/api/v2/order', {}), /gw:method/);
+});
+
+test('alamat deposit dibaca satu panggilan per koin (cron 5 menit dibatasi ±30 detik); jawaban bukan daftar → per jaringan', async () => {
+  const env = ENV();
+  const state = {};
+  globalThis.fetch = fakeGateway(state);
+  const got = await PAY.readAddresses(env, { pause: 0 });
+  assert.equal(state.calls.length, Object.keys(PAY.CANDIDATES).length, 'satu panggilan per koin');
+  const one = PAY.buildOptions(got.rows);
+  const st2 = { noCoinList: true };
+  globalThis.fetch = fakeGateway(st2);
+  const got2 = await PAY.readAddresses(env, { pause: 0 });
+  assert.ok(st2.calls.length > Object.keys(PAY.CANDIDATES).length, 'cadangan: per jaringan');
+  assert.deepEqual(PAY.buildOptions(got2.rows).opts, one.opts, 'hasil sama');
+  assert.deepEqual(one.opts.find((o) => o.coin === 'btc').nets.map((n) => n.net), ['btc'], 'BTC „mainnet" tampil sebagai Bitcoin');
+  // batas waktu: berhenti, hasil sebagian tetap dipakai
+  let t = 0;
+  globalThis.fetch = fakeGateway({});
+  const part = await PAY.readAddresses(env, { pause: 0, budgetMs: 2, now: () => (t += 1) });
+  assert.ok(part.errors['gw:budget'] >= 1);
 });
 
 test('jumlah unik: dua pembayaran $10 tidak pernah berjumlah sama; tambahan maksimal ±$0,10', () => {

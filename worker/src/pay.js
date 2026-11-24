@@ -196,8 +196,8 @@ export const CANDIDATES = {
   eth: ['BASE', 'ARB', 'OP', 'ETH', 'ERC20'],
   btc: ['MAINNET', 'BTC'],
   bnb: ['BEP20', 'BSC'],
-  sol: ['SOL'],
-  trx: ['TRC20', 'TRX'],
+  sol: ['MAINNET', 'SOL'],
+  trx: ['MAINNET', 'TRC20', 'TRX'],
   pol: ['POLYGON', 'POL', 'MATIC'],
   doge: ['MAINNET', 'DOGE'],
   ltc: ['MAINNET', 'LTC'],
@@ -225,26 +225,49 @@ export function buildOptions(rows) {
 }
 
 /** Baca alamat deposit semua kandidat (berjeda — batas 50 permintaan/menit per IP). Hanya cron & admin. */
-export async function readAddresses(env, { pause = 1300 } = {}) {
+/**
+ * Baca alamat deposit: SATU panggilan per koin tanpa parameter jaringan (API menjawab semua jaringan koin itu). Cron worker
+ * tiap 5 menit hanya boleh berjalan ±30 detik, jadi tidak boleh mencoba puluhan kombinasi koin-jaringan berjeda. Jawaban
+ * yang bukan daftar → coba kandidat jaringan koin itu satu per satu. Berhenti di `budgetMs` (hasil sebagian tetap dipakai).
+ */
+export async function readAddresses(env, { pause = 300, budgetMs = 20_000, now = Date.now } = {}) {
+  const t0 = now();
   const rows = [];
   const errors = {};
+  const sleep = (ms) => (ms ? new Promise((res) => setTimeout(res, ms)) : null);
+  const fatal = (m) => m === 'gw:403' || m === 'gw:401' || m === 'gw:-2015';
   for (const [coin, nets] of Object.entries(CANDIDATES)) {
-    for (const n of nets) {
-      try {
-        const j = await gw(env, '/api/v2/capital/deposit/address/list', { coin: coin.toUpperCase(), network: n });
-        for (const r of Array.isArray(j) ? j : []) rows.push(r);
-      } catch (e) {
-        errors[e.message] = (errors[e.message] ?? 0) + 1;
-        if (e.message === 'gw:403' || e.message === 'gw:401' || e.message === 'gw:-2015') return { rows, errors, fatal: e.message };
-      }
-      if (pause) await new Promise((res) => setTimeout(res, pause));
+    if (now() - t0 > budgetMs) { errors['gw:budget'] = (errors['gw:budget'] ?? 0) + 1; break; }
+    let list = null;
+    try {
+      const j = await gw(env, '/api/v2/capital/deposit/address/list', { coin: coin.toUpperCase() });
+      if (Array.isArray(j)) list = j;
+    } catch (e) {
+      errors[e.message] = (errors[e.message] ?? 0) + 1;
+      if (fatal(e.message)) return { rows, errors, fatal: e.message };
     }
+    await sleep(pause);
+    if (!list) {
+      list = [];
+      for (const n of nets) {
+        if (now() - t0 > budgetMs) break;
+        try {
+          const j = await gw(env, '/api/v2/capital/deposit/address/list', { coin: coin.toUpperCase(), network: n });
+          if (Array.isArray(j)) list.push(...j);
+        } catch (e) {
+          errors[e.message] = (errors[e.message] ?? 0) + 1;
+          if (fatal(e.message)) return { rows, errors, fatal: e.message };
+        }
+        await sleep(pause);
+      }
+    }
+    for (const r of list) rows.push({ ...r, coin: r?.coin || coin.toUpperCase() });
   }
   return { rows, errors };
 }
 
 let CFG = { at: 0, v: null };
-export async function gatewayCfg(env, { refresh = false, now = Date.now(), refreshPause = 1300 } = {}) {
+export async function gatewayCfg(env, { refresh = false, now = Date.now(), refreshPause = 300 } = {}) {
   if (!refresh && CFG.v && now - CFG.at < 300_000) return CFG.v;
   let v = await readJSON(env.STORE, 'pay/cfg.json').catch(() => null);
   if (refresh) {
@@ -257,7 +280,11 @@ export async function gatewayCfg(env, { refresh = false, now = Date.now(), refre
       await putJSON(env.STORE, 'pay/cfg.json', v);
     }
   }
-  if (!v) throw new Error('gw:warming'); // alamat belum terbaca (cron berikutnya mengisi)
+  if (!v) {
+    // alamat belum terbaca: tampilkan kode galat akses terakhir bila ada (tanpa data akun), selain itu „warming"
+    const ce = await readJSON(env.STORE, 'pay/cfg-error.json').catch(() => null);
+    throw new Error(/^gw:[\w-]+$/.test(ce?.error ?? '') ? ce.error : 'gw:warming');
+  }
   CFG = { at: now, v };
   return v;
 }
@@ -477,7 +504,7 @@ export async function syncDeposits(env, { now = Date.now(), force = false } = {}
 }
 
 /** Cron: sinkronkan deposit, lalu selesaikan/lepaskan intent yang kedaluwarsa, lalu bersihkan penanda jumlah lama. */
-export async function cron(env, now = Date.now(), { refreshPause = 1300 } = {}) {
+export async function cron(env, now = Date.now(), { refreshPause = 300 } = {}) {
   if (gatewayReady(env)) {
     const c = await readJSON(env.STORE, 'pay/cfg.json').catch(() => null);
     const e = await readJSON(env.STORE, 'pay/cfg-error.json').catch(() => null);
