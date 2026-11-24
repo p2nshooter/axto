@@ -211,6 +211,12 @@ jobs:
           old=$(echo "$home$ads" | grep -oE 'pub-[0-9]{16}' | sort -u | grep -vE '6560360898389273|4906992051458194|5928074389292014|6701063918838796' || true)
           [ -z "$old" ] || { echo "::error::akun AdSense lama masih ada: $old"; exit 1; }
           curl -sf https://axto.io/api/meta/time/1 | grep -q '"name"'
+          # 100 juta NFT ERC-721 (pemilik 24 Nov 2026): metadata token OpenSea, kode OS-/OS-G-, edisi di luar jumlah ditolak
+          curl -sf https://axto.io/api/token/time/42 | grep -q '"name":"OS-42 · ' || { echo "::error::metadata token /api/token/time/42 tidak berkode OS-"; exit 1; }
+          curl -sf https://axto.io/api/token/g-time/42 | grep -q '"name":"OS-G' || { echo "::error::metadata seri G- /api/token/g-time/42 tidak berkode OS-G"; exit 1; }
+          [ "$(curl -s -o /dev/null -w '%{http_code}' https://axto.io/api/token/time/100000001)" = "404" ] || { echo "::error::token di luar 10 edisi tidak ditolak"; exit 1; }
+          curl -sf https://axto.io/api/contract/g-time | grep -q 'AXTO G- Time' || { echo "::error::metadata koleksi G- tidak ada"; exit 1; }
+          echo "- Metadata OpenSea ERC-721: OS-42 · OS-G · koleksi AXTO G- ✅" >> "$GITHUB_STEP_SUMMARY"
           # webhook IPN NOWPayments hidup dan menolak kiriman tanpa tanda tangan sah
           code=$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'content-type: application/json' -H 'x-nowpayments-sig: 00' -d '{"payment_id":1}' https://axto.io/api/nowpayments/ipn)
           [ "$code" = "401" ] || { echo "::error::webhook IPN tidak menjawab 401 untuk tanda tangan palsu (dapat $code)"; exit 1; }
