@@ -153,6 +153,26 @@ test('runner GitHub (API menolak worker 403): alamat & deposit lewat ingest → 
   assert.deepEqual((await PAY.publicOptions(env)).map((o) => o.coin), ['usdt', 'btc']);
 });
 
+test('harga: ticker publik ditolak dari worker → harga kiriman runner (≤ 15 menit); tanpa keduanya pembelian ditolak dengan jelas', async () => {
+  const env = ENV();
+  const state = {};
+  const base = fakeGateway(state);
+  globalThis.fetch = async (url, init) => (String(url).includes('ticker_all') || new URL(String(url)).origin === PAY.GW ? new Response('forbidden', { status: 403 }) : base(url, init));
+  await PAY.ingest(env, { addresses: [{ coin: 'USDT', address: EVM, tag: '', network: 'bep20' }, { coin: 'ETH', address: EVM, tag: '', network: 'base' }] });
+  PAY._resetCfg();
+  const buy = () => C.buy(env, W, { usd: 10, coin: 'eth', net: 'base', payer: '0x' + '77'.repeat(20), agree: true, agreementV: C.AGREEMENT_V }, { lang: 'id' });
+  assert.equal((await buy()).error, 'price', 'tanpa harga: ditolak, tidak menebak');
+  const r0 = await PAY.ingest(env, { tickers: { usdt_idr: { last: '16000' }, eth_idr: { last: '48000000' }, evil: { last: '1' }, btc_idr: { last: 'x' } } });
+  assert.equal(r0.prices, 2, 'hanya pasangan *_idr dengan angka sah');
+  PAY._resetPrices();
+  const r = await buy();
+  assert.ok(r.ok, JSON.stringify(r));
+  assert.ok(Number(r.intent.amount) > 0.00333 && Number(r.intent.amount) < 0.0034, `ETH ${r.intent.amount} untuk $10 pada $3.000`);
+  // harga runner basi (> 15 menit) tidak dipakai
+  PAY._resetPrices();
+  await assert.rejects(PAY.pricesUsd(env, Date.now() + PAY.PX_RUNNER_MS + 60_000), /px:unavailable/);
+});
+
 test('jumlah unik: dua pembayaran $10 tidak pernah berjumlah sama; tambahan maksimal ±$0,10', () => {
   const p = PAY.amountPlan('usdt', 1000, 1);
   assert.equal(p.base, 1_000_000_000n); // 10 USDT dalam unit 1e-8

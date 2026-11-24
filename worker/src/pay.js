@@ -164,12 +164,22 @@ export async function gw(env, path, params = {}) {
 }
 
 let PX = { at: 0, map: null };
+/** Harga terakhir dari runner GitHub (ops/pay-sync.mjs) dipakai bila ticker publik tidak bisa diambil worker. */
+export const PX_RUNNER_MS = 15 * 60_000;
 /** Harga USD per koin dari ticker publik bursa (IDR ÷ USDT/IDR). Cache 60 detik. */
 export async function pricesUsd(env, now = Date.now()) {
   if (PX.map && now - PX.at < 60_000) return PX.map;
-  const r = await fetch(`${PUBAPI}/ticker_all`, { headers: { accept: 'application/json' } });
-  if (!r.ok) throw new Error(`px:${r.status}`);
-  const t = (await r.json())?.tickers ?? {};
+  let t = null;
+  try {
+    const r = await fetch(`${PUBAPI}/ticker_all`, { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(8_000) });
+    if (r.ok) t = (await r.json())?.tickers ?? null;
+  } catch { t = null; }
+  if (!t || !(Number(t.usdt_idr?.last ?? t.usdtidr?.last) > 0)) {
+    // jaringan worker ditolak bursa → harga kiriman runner (segar ≤ 15 menit)
+    const p = await readJSON(env.STORE, 'pay/px.json').catch(() => null);
+    if (!p?.tickers || now - Number(p.at ?? 0) > PX_RUNNER_MS) throw new Error('px:unavailable');
+    t = p.tickers;
+  }
   const last = (k) => Number(t[`${k}_idr`]?.last ?? t[`${k}idr`]?.last);
   const usdt = last('usdt');
   if (!(usdt > 0)) throw new Error('px:usdt');
@@ -522,8 +532,16 @@ export async function syncDeposits(env, { now = Date.now(), force = false } = {}
  * Data dari runner GitHub (ops/pay-sync.mjs, HMAC): API menolak jaringan worker (403), runner tidak. Runner hanya membaca
  * (alamat deposit & riwayat deposit, kunci izin lihat) lalu mengirim jawabannya apa adanya; pencocokan tetap di sini.
  */
-export async function ingest(env, { addresses, deposits } = {}, now = Date.now()) {
+export async function ingest(env, { addresses, deposits, tickers } = {}, now = Date.now()) {
   const out = {};
+  // harga ticker publik (IDR) untuk koin yang ditawarkan — hanya angka `last`
+  if (tickers && typeof tickers === 'object') {
+    const clean = {};
+    for (const [k, v] of Object.entries(tickers)) {
+      if (/^[a-z0-9]{2,10}_idr$/.test(k) && Number(v?.last) > 0) clean[k] = { last: String(Number(v.last)) };
+    }
+    if (clean.usdt_idr) { await putJSON(env.STORE, 'pay/px.json', { at: now, tickers: clean }); out.prices = Object.keys(clean).length; }
+  }
   if (Array.isArray(addresses)) {
     const v = { ...buildOptions(addresses), at: now, via: 'runner' };
     if (v.opts.length) {
