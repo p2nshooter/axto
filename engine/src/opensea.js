@@ -34,10 +34,15 @@ export const OS_KEYS = OS_COLS.map((c) => c.key);
  * Tiap tema = 2 kontrak (I & II, ±16,7 jt karya) karena batas gas per transaksi Base (EIP-7825, 16.777.216 gas).
  */
 const ONE_NAMES = { quran: "AXTO 1/1 Qur'an Calligraphy", hadith: 'AXTO 1/1 Hadith Calligraphy', stamp: 'AXTO 1/1 Stamps' };
-export const ONE_COLS = Object.values(ONE_SETS).map((s) => ({
-  key: s.key, base: s.key, g: false, one: true, kind: s.kind, part: s.key.endsWith('-2') ? 2 : 1,
-  name: s.key.endsWith('-2') ? `${ONE_NAMES[s.kind]} II` : ONE_NAMES[s.kind], symbol: s.symbol, works: s.max, editions: 1,
-}));
+const ROMAN = ['', ' II', ' III', ' IV', ' V', ' VI'];
+const THEME = ['quran', 'hadith', 'stamp'];
+/** Bagian I & II (inti) per tema, lalu tambahan berselang tema: III Qur'an, III Hadits, III Prangko, IV … (urutan deploy). */
+export const ONE_COLS = Object.values(ONE_SETS)
+  .map((s) => ({ key: s.key, base: s.key, g: false, one: true, kind: s.kind, part: s.part, extra: s.extra, name: `${ONE_NAMES[s.kind]}${ROMAN[s.part - 1]}`, symbol: s.symbol, works: s.max, editions: 1 }))
+  .sort((a, b) => (a.extra - b.extra) || (a.extra ? a.part - b.part || THEME.indexOf(a.kind) - THEME.indexOf(b.kind) : THEME.indexOf(a.kind) - THEME.indexOf(b.kind) || a.part - b.part));
+/** Inti (selalu dideploy) & tambahan (bila sisa dana deployer cukup). */
+export const ONE_CORE = ONE_COLS.filter((c) => !c.extra);
+export const ONE_EXTRA = ONE_COLS.filter((c) => c.extra);
 export const ONE_KEYS = ONE_COLS.map((c) => c.key);
 /** Semua koleksi yang dilisting mesin OpenSea (edisi 1–10 + 1/1). */
 export const LIST_COLS = [...OS_COLS, ...ONE_COLS];

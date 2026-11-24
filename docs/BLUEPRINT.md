@@ -39,3 +39,7 @@ Aturan kerja yang terbuka untuk kontributor:
   produksi) membaca alamat deposit (satu panggilan per koin) dan riwayat deposit tiap 20 detik selama ±9 menit, lalu
   mengirimnya apa adanya ke worker (`/internal/pay/ingest`, HMAC engine). Pencocokan & pengkreditan tetap di
   `worker/src/pay.js`; hanya titik baca yang dipanggil.
+- **1/1 tambahan 50 jt** (pemilik 25 Nov 2026: „Tambahin aja 50jt lg, jgn 80jt biar cukup"): bagian III Qur'an, Hadits dan
+  Prangko (±16,7 jt karya per kontrak, desain melanjutkan bagian II). Dideploy dari sisa dana deployer SETELAH koin + 22
+  koleksi inti aktif & terdaftar, satu per satu, hanya bila saldo cukup (batas gas × maxFee + cadangan); terdaftar ke worker
+  & dilisting otomatis. Total 1/1 di OpenSea 150 jt karya.

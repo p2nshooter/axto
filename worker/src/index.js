@@ -221,7 +221,7 @@ async function api(request, env, ctx, url) {
   if (m) return validStake(Number(m[1])) ? json(stakeMetadata(Number(m[1]), env.BASE_URL), 200, { 'cache-control': IMMUTABLE, 'access-control-allow-origin': '*' }) : json({ error: 'not_found' }, 404);
   if (p === '/api/contract/stake') return json(stakeContractMetadata(env.BASE_URL), 200, { 'cache-control': 'public, max-age=86400', 'access-control-allow-origin': '*' });
   // koleksi 1/1 (3 tema × 2 kontrak, 100 jt karya unik; engine/src/core.js ONE_SETS) — metadata token lewat rute OpenSea di bawah
-  m = /^\/api\/contract\/(one-[a-z]+(?:-2)?)$/.exec(p);
+  m = /^\/api\/contract\/(one-[a-z]+(?:-[2-9])?)$/.exec(p);
   if (m && OSX.osCol(m[1])) return json(OSX.oneContractMetadata(m[1], env.BASE_URL), 200, { 'cache-control': 'public, max-age=86400', 'access-control-allow-origin': '*' });
   m = /^\/api\/token\/([a-z-]+)\/(\d+)$/.exec(p);
   if (m && OSX.osCol(m[1])) {
@@ -891,7 +891,7 @@ export default {
       if (m && validStake(Number(m[1]))) { const sd = stakeDesign(Number(m[1])); return await svg(request, env, ctx, sd.key, sd.id, url.origin); }
       m = /^\/play\/stake\/(\d+)$/.exec(p);
       if (m && validStake(Number(m[1]))) { const sd = stakeDesign(Number(m[1])); return await player(request, env, ctx, sd.key, sd.id, url.origin); }
-      m = /^\/(img|play)\/(one-[a-z]+(?:-2)?)\/(\d+)(\.svg)?$/.exec(p);
+      m = /^\/(img|play)\/(one-[a-z]+(?:-[2-9])?)\/(\d+)(\.svg)?$/.exec(p);
       if (m && validOne(m[2], Number(m[3])) && (m[1] === 'img') === Boolean(m[4])) return m[1] === 'img' ? await svg(request, env, ctx, m[2], Number(m[3]), url.origin) : await player(request, env, ctx, m[2], Number(m[3]), url.origin);
       m = /^\/img\/([a-z-]+)\/(\d+)\.svg$/.exec(p);
       if (m && validToken(m[1], Number(m[2]))) return await svg(request, env, ctx, m[1], Number(m[2]), url.origin);
