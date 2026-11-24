@@ -1,9 +1,10 @@
 name: Seri G- (video GPU)
 
-# Pemilik 24 Nov 2026: „Series G- wajib sudah dengan animasi saat produksi, jd 100% di buatkan GPU" · „ini series G- sampah
-# semua" · „bikin ulang semua". Lukisan seri G- kini hanya dari worker axto.io (FLUX.2 + pemeriksa mutu). Tiap jam
-# (ops/gpu-sync.mjs): video buatan GPU (kunci GPU ulyah.com, ZeroGPU) disalin ke R2 axto.io, karya lolos mutu yang belum
-# beranimasi diantrekan. Karya tampil hanya bila lolos mutu DAN sudah beranimasi.
+# Pemilik 24 Nov 2026: „Series G- wajib sudah dengan animasi saat produksi, jd 100% di buatkan GPU" · „G- berhenti" ·
+# „Copy aja API GPU dari ulyah.com, biar ga terhubung ke ulyah.com". Lukisan seri G- dari worker axto.io (FLUX.2 + pemeriksa
+# mutu); tiap jam (ops/gpu-sync.mjs) axto.io SENDIRI menjadikannya video lewat ZeroGPU dengan kunci di vault axto (salinan
+# serah-terima tersegel dari ulyah.com), video ke R2 axto.io. Gagal dicoba lagi setelah 3 jam. Karya tampil hanya bila lolos
+# mutu DAN sudah beranimasi.
 on:
   schedule:
     - cron: '23 * * * *'
@@ -22,11 +23,12 @@ permissions:
 jobs:
   sync:
     runs-on: ubuntu-24.04
-    timeout-minutes: 35
+    timeout-minutes: 55
     env:
       CLOUDFLARE_API_KEY: ${{ secrets.CLOUDFLARE_API_KEY }}
       CLOUDFLARE_EMAIL: ${{ secrets.CLOUDFLARE_EMAIL }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      GPU_BUDGET_MIN: '40'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -36,5 +38,5 @@ jobs:
         run: node --test ops/test/gpu-sync.test.mjs
         env:
           CLOUDFLARE_API_KEY: ''
-      - name: Video GPU → R2 axto.io, antrean video → ulyah.com (seri G-)
+      - name: Video GPU seri G- dirender axto.io → R2 axto.io
         run: node ops/gpu-sync.mjs
