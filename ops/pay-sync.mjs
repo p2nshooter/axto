@@ -79,7 +79,14 @@ export async function run({
         deposits[c] = await call(fetchImpl, key, secret, '/api/v2/capital/deposit/hisrec', { coin: c.toUpperCase(), startTime: String(end - 2 * 86_400_000), endTime: String(end), limit: '1000' });
       } catch (e) { depErr[e.message] = (depErr[e.message] ?? 0) + 1; }
     }
-    const r = await post(fetchImpl, api, hmacKey, { deposits });
+    // harga ticker publik (worker bisa ditolak bursa juga untuk ticker) — hanya `last` koin yang dipakai
+    let tickers;
+    try {
+      const tr = await fetchImpl('https://indodax.com/api/ticker_all', { headers: { accept: 'application/json' } });
+      const all = tr.ok ? (await tr.json())?.tickers ?? {} : {};
+      tickers = Object.fromEntries([...COINS, 'matic'].map((c) => [`${c}_idr`, all[`${c}_idr`]]).filter(([, v]) => Number(v?.last) > 0).map(([k, v]) => [k, { last: v.last }]));
+    } catch { tickers = undefined; }
+    const r = await post(fetchImpl, api, hmacKey, { deposits, tickers });
     matched += r.matched ?? 0;
     seen = r.seen ?? seen;
     rounds += 1;
