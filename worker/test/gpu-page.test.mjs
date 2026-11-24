@@ -51,6 +51,9 @@ test('player G- Jam & Prangko tidak pernah memuat teks Arab/ayat — teks Arab h
   assert.match(jam, /V\.currentTime=Math\.min/, 'geser memutar video GPU');
   assert.match(jam, /deviceorientation/);
   assert.match(jam, /requestFullscreen/);
+  // pemilik 24 Nov 2026: „Hapus aja jgn ada label, biar bersih" — tanpa lencana kode & teks petunjuk di atas karya
+  assert.doesNotMatch(jam, /class="g"|class="ht"|>G-1<|>OS-G/);
+  assert.match(jam, /aria-label="[^"]*Geser untuk memutar/, 'petunjuk hanya untuk pembaca layar');
   // Qur'an/hadits: teks ASLI hanya bila panel kosong lukisan sudah diukur; diletakkan di panel itu, tanpa kotak tempelan
   const PANEL = { v: 2, panel: [0.3, 0.32, 0.7, 0.68], nada: 'terang' };
   for (const c of ['hadith', 'ex-quran']) {
@@ -64,6 +67,6 @@ test('player G- Jam & Prangko tidak pernah memuat teks Arab/ayat — teks Arab h
   const lama = gpuGambar(metadata('quran', 5, 'https://axto.io'), { img: '/gpu/quran/5.png?v=2', g: 7 });
   assert.match(lama, /<img src="\/gpu\/quran\/5\.png\?v=2"/);
   assert.doesNotMatch(lama, /<video|<script|id="ar"|@keyframes|animation:/);
-  assert.match(lama, /G-7/);
+  assert.doesNotMatch(lama, /class="g"|>G-7</, 'tanpa lencana di atas gambar');
   assert.doesNotMatch(gpuPlayer(dna('quran', 5), metadata('quran', 5, 'https://axto.io'), AYAT, { img: 'x', video: 'v', g: 1, ref: 'r', qa: { v: 2 } }), /id="ar"/, 'tanpa panel terukur, teks tidak ditempel asal');
 });

@@ -104,9 +104,12 @@ export function wrapWords(text, maxChars) {
 
 export const text = (x, y, s, attrs = '') => `<text x="${r1(x)}" y="${r1(y)}" ${attrs}>${esc(s)}</text>`;
 
-/** Lencana edisi eksklusif. */
-export function exclusiveBadge(w, tokenId, max, finish) {
-  return `<g><rect x="${w / 2 - 150}" y="18" width="300" height="34" rx="17" fill="#0b0b10" opacity=".72" stroke="#f2cf6b" stroke-width="1.5"/>${text(w / 2, 41, `EXCLUSIVE · ${finish} · ${tokenId.toLocaleString('en-US')} / ${max.toLocaleString('en-US')}`, 'text-anchor="middle" font-family="Georgia,serif" font-size="14" fill="#f2cf6b" letter-spacing="1.5"')}</g>`;
+/**
+ * Dulu lencana „EXCLUSIVE · … · n / max" di atas karya eksklusif. Pemilik, 24 Nov 2026: „Hapus aja jgn ada label, biar
+ * bersih" — karya tanpa label; status eksklusif & nomor edisi ada di kode AC-…, metadata dan halaman karya.
+ */
+export function exclusiveBadge() {
+  return '';
 }
 
 /**

@@ -10,7 +10,7 @@ const PUBLIC = ['time', 'stamp', 'quran', 'model', 'hadith'];
 const EXCL = ['ex-time', 'ex-stamp', 'ex-quran', 'ex-model', 'ex-hadith'];
 const fmt = (n, lang) => Number(n ?? 0).toLocaleString(lang === 'id' ? 'id-ID' : 'en-US');
 const nftPath = (lang, c, id) => `/${lang}/nft/${c}/${id}`;
-const IMGV = 'v=10';
+const IMGV = 'v=11';
 const img = (c, id) => `/img/${c}/${id}.svg?${IMGV}`;
 /** Lencana jenis karya: publik (OpenSea, harga tetap per kelangkaan) atau eksklusif ($1, koin AXTO, kustodi axto.io, WD). */
 export const badge = (lang, c, long = false) => {

@@ -217,8 +217,8 @@ jobs:
           [ "$(curl -s -o /dev/null -w '%{http_code}' https://axto.io/api/token/time/100000001)" = "404" ] || { echo "::error::token di luar 10 edisi tidak ditolak"; exit 1; }
           curl -sf https://axto.io/api/contract/g-time | grep -q 'AXTO G- Time' || { echo "::error::metadata koleksi G- tidak ada"; exit 1; }
           # jgn ada logo apapun di semua karya (pemilik 24 Nov 2026): karya hidup tanpa tanda „AXTO"
-          for k in time stamp quran hadith ex-stamp; do
-            if curl -sf "https://axto.io/img/$k/42.svg?v=live$GITHUB_RUN_ID" | grep -q '>AXTO<\|>AXTO·'; then echo "::error::karya $k/42 masih membawa tanda AXTO"; exit 1; fi
+          for k in time stamp quran hadith ex-stamp ex-time; do
+            if curl -sf "https://axto.io/img/$k/42.svg?v=live$GITHUB_RUN_ID" | grep -q '>AXTO<\|>AXTO·\|>EXCLUSIVE ·'; then echo "::error::karya $k/42 masih membawa tanda/label"; exit 1; fi
           done
           echo "- Metadata OpenSea ERC-721: OS-42 · OS-G · koleksi AXTO G- ✅" >> "$GITHUB_STEP_SUMMARY"
           # webhook IPN NOWPayments hidup dan menolak kiriman tanpa tanda tangan sah
