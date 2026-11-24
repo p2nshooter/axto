@@ -47,7 +47,7 @@ const ADDR = {
   'ETH:BASE': { address: EVM, network: 'base' },
   'ETH:ARB': { address: EVM, network: 'arb' },
   'ETH:ETH': { address: EVM, network: 'eth' },
-  'BTC:BTC': { address: 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4', network: 'btc' },
+  'BTC:MAINNET': { address: '1BoatSLRHtKNngkdXEeobR76b53LETtpyT', network: 'mainnet' },
 };
 function fakeGateway(state) {
   return async (url, init = {}) => {

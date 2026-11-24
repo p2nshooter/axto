@@ -194,13 +194,13 @@ export const CANDIDATES = {
   usdt: ['BEP20', 'TRC20', 'POLYGON', 'BASE', 'ARB', 'SOL', 'OP', 'ERC20'],
   usdc: ['BASE', 'BEP20', 'POLYGON', 'ARB', 'SOL', 'OP', 'ERC20'],
   eth: ['BASE', 'ARB', 'OP', 'ETH', 'ERC20'],
-  btc: ['BTC'],
+  btc: ['MAINNET', 'BTC'],
   bnb: ['BEP20', 'BSC'],
   sol: ['SOL'],
   trx: ['TRC20', 'TRX'],
   pol: ['POLYGON', 'POL', 'MATIC'],
-  doge: ['DOGE'],
-  ltc: ['LTC'],
+  doge: ['MAINNET', 'DOGE'],
+  ltc: ['MAINNET', 'LTC'],
 };
 
 /** Bangun daftar opsi dari baris alamat deposit API v2: [{coin, address, tag, network}]. */
@@ -212,7 +212,8 @@ export function buildOptions(rows) {
     for (const r of rows.filter((x) => lw(x.coin) === coin || (coin === 'pol' && lw(x.coin) === 'matic'))) {
       if (!r.address) continue;
       if (r.tag) continue; // memo wajib: tidak ditawarkan (salah memo = dana hilang)
-      const net = lw(r.network);
+      // koin asli (BTC, LTC, DOGE) memakai nama jaringan „mainnet" di API → ditampilkan sebagai nama koinnya
+      const net = lw(r.network) === 'mainnet' && NETS[coin] ? coin : lw(r.network);
       if (!NETS[net]) { unknown.push(`${coin}:${net}`); continue; }
       if (!addrOk(coin, net, r.address)) { unknown.push(`${coin}:${net}:alamat`); continue; }
       if (!out.some((o) => o.net === net)) out.push({ net, addr: r.address });
