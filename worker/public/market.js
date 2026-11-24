@@ -212,7 +212,7 @@ const bp = $('[data-mk="blueprint"]');
 if (bp) bp.addEventListener('toggle', async () => {
   if (!bp.open || bp.dataset.loaded) return;
   const r = await fetch('/api/admin/blueprint', { credentials: 'same-origin' });
-  $('.bp-text', bp).textContent = r.ok ? await r.text() : (id_ ? 'Blueprint belum ada di R2 privat.' : 'Blueprint not in private R2 yet.');
+  $('.bp-text', bp).textContent = r.ok ? await r.text() : (id_ ? 'Blueprint belum tersedia.' : 'Blueprint not available yet.');
   bp.dataset.loaded = '1';
 });
 

@@ -1,5 +1,5 @@
 // Koleksi OpenSea (keputusan pemilik 24 Nov 2026): 10 kontrak ERC-721 × 10 juta karya = 100 juta, edisi 1 tercetak saat
-// deploy, edisi berikutnya urut sampai 1–10 menurut kelangkaan, harga tetap $1–$10.000; token = (edisi − 1) × 10 jt + karya.
+// deploy, edisi berikutnya urut sampai 1–10 menurut kelangkaan, harga tetap $1–$250; token = (edisi − 1) × 10 jt + karya.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { OS_COLS, OS_KEYS, WORKS, tokenOf, tokenInfo, nextToken, tokenMetadata, gContractMetadata } from '../src/opensea.js';
@@ -16,7 +16,7 @@ test('10 koleksi: 5 publik + 5 kembaran seri G-, nama & simbol unik', () => {
 test('nomor token ↔ karya & edisi; edisi tidak melebihi jumlah edisi karya; harga & edisi sama dengan editions.js', () => {
   for (const k of [1, 2, 42, 5_000_000, WORKS]) {
     const e = edition('quran', k);
-    assert.ok(e.supply >= 1 && e.supply <= 10 && e.priceUsd >= 1 && e.priceUsd <= 10_000);
+    assert.ok(e.supply >= 1 && e.supply <= 10 && e.priceUsd >= 1 && e.priceUsd <= 250);
     for (let ed = 1; ed <= e.supply; ed += 1) {
       const t = tokenOf(k, ed);
       assert.deepEqual([tokenInfo('quran', t).work, tokenInfo('quran', t).edition, tokenInfo('quran', t).supply, tokenInfo('quran', t).priceUsd], [k, ed, e.supply, e.priceUsd]);

@@ -139,8 +139,41 @@ export function kode(key, id, g = 0) {
   return g ? `${pre}-G-${g}` : `${pre}-${id}`;
 }
 
+/**
+ * Koleksi hadiah staking koin AXTO (pemilik, 24 Nov 2026: „buatkan husus untuk hadiah staking, jgn versi G-, bikin versi OS
+ * aja … bikin aja 10jt dulu … Supply 1/1 aja husus Stacking Komunis biar lebih VVIP" · „Pastikan tidak ada karya yg sama").
+ * Satu kontrak „AXTO Staking"; token t dipetakan ke salah satu himpunan di bawah (engine/src/stake.js). Sengaja DI LUAR
+ * COLLECTIONS: tidak dijual, tidak masuk galeri/etalase/sitemap publik.
+ *
+ * Tidak pernah sama dengan karya lain — dijamin oleh konstruksi, bukan kebetulan: desain diambil dari urutan acak (permutasi
+ * bijektif) yang SAMA dengan koleksi publiknya (`after`), tetapi pada nomor SESUDAH jatah koleksi publik itu:
+ *   · Qur'an: ayat ke-(k mod 6.236) dengan nomor gaya sesudah ±1.602 gaya publik ayat itu;
+ *   · hadits: hadits ke-(k mod 38.144) dengan nomor gaya sesudah gaya publik hadits itu;
+ *   · prangko: kombinasi ke-(10.000.000 + k) dari 1,4 miliar kombinasi.
+ * Jam & model tidak dipakai: ruang sifatnya (±10,3 jt) sudah hampir habis dipakai 10 jt karya publik. Karya eksklusif
+ * membawa sifat Finish sehingga juga tidak pernah identik.
+ */
+export const STAKE_SETS = {
+  'st-quran': { key: 'st-quran', kind: 'quran', max: 100_000_000, salt: 'axto/stake-quran/v1', exclusive: false, stake: true, after: 'quran', symbol: 'AXSTAKE' },
+  'st-hadith': { key: 'st-hadith', kind: 'hadith', max: 100_000_000, salt: 'axto/stake-hadith/v1', exclusive: false, stake: true, after: 'hadith', symbol: 'AXSTAKE' },
+  'st-stamp': { key: 'st-stamp', kind: 'stamp', max: 100_000_000, salt: 'axto/stake-stamp/v1', exclusive: false, stake: true, after: 'stamp', symbol: 'AXSTAKE' },
+};
+
+/**
+ * 100 juta karya 1/1 baru di OpenSea (pemilik, 24 Nov 2026: „klo bikin 100jt lg 1/1 ke opensea" → 3 koleksi besar). Sama
+ * seperti STAKE_SETS, desain diambil SESUDAH jatah publik dalam permutasi yang sama, dan sesudah 20 jt nomor pertama yang
+ * dicadangkan untuk staking (`skip`) → tidak pernah sama dengan karya publik, hadiah staking, atau sesamanya.
+ */
+export const ONE_SETS = {
+  'one-quran': { key: 'one-quran', kind: 'quran', max: 33_333_334, salt: 'axto/one-quran/v1', exclusive: false, one: true, after: 'quran', skip: 20_000_000, symbol: 'AX1QURAN' },
+  'one-hadith': { key: 'one-hadith', kind: 'hadith', max: 33_333_333, salt: 'axto/one-hadith/v1', exclusive: false, one: true, after: 'hadith', skip: 20_000_000, symbol: 'AX1HADITH' },
+  'one-stamp': { key: 'one-stamp', kind: 'stamp', max: 33_333_333, salt: 'axto/one-stamp/v1', exclusive: false, one: true, after: 'stamp', skip: 20_000_000, symbol: 'AX1STAMP' },
+};
+/** Nomor „sesudah publik" yang dicadangkan untuk koleksi staking (kontrak staking maks. 50 jt → ≤ 16,7 jt per himpunan). */
+export const STAKE_RESERVED = 20_000_000;
+
 export function collection(key) {
-  const c = COLLECTIONS[key];
+  const c = COLLECTIONS[key] ?? STAKE_SETS[key] ?? ONE_SETS[key];
   if (!c) throw new Error(`Koleksi tidak dikenal: ${key}`);
   return c;
 }
@@ -182,13 +215,18 @@ export function percentileTable(traitPoints) {
   }
   const scores = [...dist.keys()].sort((a, b) => a - b);
   const table = new Map();
+  const ranges = new Map();
   let below = 0;
   for (const s of scores) {
     const w = dist.get(s);
     table.set(s, below + w / 2);
+    ranges.set(s, [below, w]);
     below += w;
   }
-  return (score) => table.get(score) ?? 0;
+  const fn = (score) => table.get(score) ?? 0;
+  /** Rentang persentil [bawah, lebar] milik satu skor — untuk menyebar karya berskor sama secara merata. */
+  fn.range = (score) => ranges.get(score) ?? [0, 0];
+  return fn;
 }
 
 export function tierFor(percentile) {

@@ -45,6 +45,7 @@ function fakeNP(state) {
     }
     if (u.pathname === '/v1/payment/555001') return ok(state.payment);
     if (u.pathname === '/v1/estimate') return ok({ estimated_amount: Number(u.searchParams.get('amount')) * 1.0 });
+    if (u.pathname === '/v1/min-amount') return ok({ min_amount: 10, fiat_equivalent: u.searchParams.get('currency_from') === 'usdttrc20' ? 10.46 : 0.07 });
     if (u.pathname === '/v1/payout/fee') return ok({ fee: 1 });
     if (u.pathname === '/v1/balance') return state.balance ? ok(state.balance) : new Response('{}', { status: 404 });
     if (u.pathname === '/v1/auth') { state.auth = body; return ok({ token: 'jwt-token' }); }
@@ -113,12 +114,12 @@ test('beli → IPN (diperiksa ulang ke API) → kredit sekali; IPN berulang tida
   globalThis.fetch = fakeNP(state);
   assert.equal((await C.buy(env, W, { usd: 50, cur: 'usdt-trx', payer: 'TTestAddrForAxtoUnitTests123456789', agree: false, agreementV: C.AGREEMENT_V }, { lang: 'id', base: 'https://axto.io' })).error, 'agreement');
   assert.equal((await C.buy(env, W, { usd: 50, cur: 'usdt-trx', payer: '0xabababababababababababababababababababab', agree: true, agreementV: C.AGREEMENT_V }, { lang: 'id', base: 'https://axto.io' })).error, 'payer_address');
-  assert.equal((await C.buy(env, W, { usd: 5, cur: 'usdt-trx', payer: 'TTestAddrForAxtoUnitTests123456789', agree: true, agreementV: C.AGREEMENT_V }, { lang: 'id', base: 'https://axto.io' })).error, 'amount');
+  assert.equal((await C.buy(env, W, { usd: 5, cur: 'usdt-trx', payer: 'TTestAddrForAxtoUnitTests123456789', agree: true, agreementV: C.AGREEMENT_V }, { lang: 'id', base: 'https://axto.io' })).error, 'amount_min'); // USDT TRON: minimum jaringan ±$10,46 → $12; pemilik: minimum umum $1
   const r = await C.buy(env, W, { usd: 50, cur: 'usdt-trx', payer: 'TTestAddrForAxtoUnitTests123456789', agree: true, agreementV: C.AGREEMENT_V }, { lang: 'id', base: 'https://axto.io' });
   assert.ok(r.ok, JSON.stringify(r));
   assert.equal(state.createdWith.pay_currency, 'usdttrc20');
   assert.equal(state.createdWith.price_currency, 'usd');
-  assert.equal(state.createdWith.ipn_callback_url, 'https://axto.io/api/nowpayments/ipn');
+  assert.equal(state.createdWith.ipn_callback_url, 'https://axto.io/api/pay/ipn');
   assert.equal(r.order.pay.address, 'TPayAddressOfNowPayments11111111');
   // IPN palsu (tanda tangan salah) ditolak
   const fake = new Request('https://axto.io/api/nowpayments/ipn', { method: 'POST', body: JSON.stringify({ payment_id: 555001, order_id: r.order.id, payment_status: 'finished' }), headers: { 'x-nowpayments-sig': 'ab'.repeat(64) } });
@@ -199,11 +200,12 @@ test('cairkan: hanya ke alamat & mata uang pembelian, potong 50%, payout 2 fase 
   assert.equal((await C.account(env, W)).micro, '4000000');
   // ringkasan admin: terjual 10 (presale tidak berkurang), buyback 6 (yang 4 dikembalikan ke member)
   const av = await C.adminView(env);
-  assert.equal(av.totals.soldViaNowpayments, '10');
+  assert.equal(av.totals.soldViaGateway, '10');
+  assert.equal(av.totals.presaleSold, '10', 'presale terjual tidak berkurang saat koin dijual kembali');
   assert.equal(av.totals.boughtBack, '6');
   assert.equal(av.buyback.coins, '6');
   assert.equal(av.totals.heldByMembers, '4');
-  assert.equal(av.ipnUrl, 'https://axto.io/api/nowpayments/ipn');
+  assert.equal(av.ipnUrl, 'https://axto.io/api/pay/ipn');
 });
 
 test('tanpa kredensial payout: pencairan tetap antre (tidak hilang), admin melihatnya', async () => {

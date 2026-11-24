@@ -133,15 +133,17 @@ if (ex) {
   const out = $('.jump output', ex);
   const ftier = $('.ftier', ex);
   const fseries = $('.fseries', ex);
+  const fprice = $('.fprice', ex);
   let next = ex.dataset.next ? Number(ex.dataset.next) : null;
   let busy = false;
-  const st = { from: Number(ex.dataset.from), tier: ftier?.value ?? '', series: fseries?.value ?? '', view: [...ex.querySelectorAll('[data-view]')].find((b) => b.getAttribute('aria-pressed') === 'true')?.dataset.view ?? 'mosaic' };
+  const st = { from: Number(ex.dataset.from), tier: ftier?.value ?? '', series: fseries?.value ?? '', price: fprice?.value ?? '', view: [...ex.querySelectorAll('[data-view]')].find((b) => b.getAttribute('aria-pressed') === 'true')?.dataset.view ?? 'mosaic' };
   const fmtN = (n) => Number(n).toLocaleString(lang === 'id' ? 'id-ID' : 'en-US');
   const sync = () => {
     const q = new URLSearchParams({ from: String(st.from), view: st.view });
     if (ex.dataset.maker) q.set('maker', ex.dataset.maker); // mode seri G- tetap setelah dimuat ulang
     if (st.tier !== '') q.set('tier', st.tier);
     if (st.series) q.set('series', st.series);
+    if (st.price) { const [a, b] = st.price.split('-'); q.set('pmin', a); q.set('pmax', b); }
     history.replaceState(null, '', `${location.pathname}?${q}`);
   };
   const tile = (it) => {
@@ -172,6 +174,7 @@ if (ex) {
     const q = new URLSearchParams({ from: String(next), n: '60' });
     if (st.tier !== '') q.set('tier', st.tier);
     if (st.series) q.set('series', st.series);
+    if (st.price) { const [a, b] = st.price.split('-'); q.set('pmin', a); q.set('pmax', b); }
     if (ex.dataset.surah) q.set('surah', ex.dataset.surah);
     if (ex.dataset.maker) q.set('maker', ex.dataset.maker);
     try {
@@ -194,6 +197,7 @@ if (ex) {
   range?.addEventListener('input', () => { out.textContent = fmtN(range.value); clearTimeout(jt); jt = setTimeout(() => { st.from = Number(range.value); load(true); }, 220); });
   ftier?.addEventListener('change', () => { st.tier = ftier.value; load(true); });
   fseries?.addEventListener('change', () => { st.series = fseries.value; load(true); });
+  fprice?.addEventListener('change', () => { st.price = fprice.value; load(true); });
   // tampilan
   ex.querySelectorAll('[data-view]').forEach((b) => b.addEventListener('click', () => {
     st.view = b.dataset.view;
@@ -259,10 +263,10 @@ document.addEventListener('click', (e) => {
   navigator.clipboard?.writeText(b.dataset.copy).then(() => { const t = b.textContent; b.textContent = '✓'; setTimeout(() => { b.textContent = t; }, 1500); });
 });
 
-// Koin AXTO lewat NOWPayments (beli, saldo & cairkan, pantauan admin) — dimuat hanya di halaman yang memakainya
+// Koin AXTO (beli, saldo, staking & jual kembali, pantauan admin) — dimuat hanya di halaman yang memakainya
 if (document.querySelector('[data-np]')) {
   const x = document.createElement('script');
   x.type = 'module';
-  x.src = '/coin.js?v=1';
+  x.src = '/coin.js?v=2';
   document.head.append(x);
 }

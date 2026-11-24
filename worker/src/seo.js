@@ -14,7 +14,7 @@ const KIND = {
   model: { id: ['NFT Figur Animasi', 'figur beranimasi 2D dalam seri pendidikan, antariksa dan lainnya', 'NFT animasi'], en: ['Animated Figure NFTs', 'animated 2D figures in education, space and more series', 'animated NFT'] },
   hadith: { id: ['NFT Kaligrafi Hadits', 'kaligrafi hadits lengkap dengan nama kitab, bab & nomor, dibacakan suara Arab dan diterjemahkan ke bahasa Anda', 'NFT hadits'], en: ['Hadith Calligraphy NFTs', 'hadith calligraphy with collection, book and number, read aloud in Arabic and translated into your language', 'hadith NFT'] },
 };
-const PRICE = { id: 'edisi 1–10 per karya, harga tetap $1–$10.000 menurut kelangkaan', en: '1–10 editions per work at fixed prices from $1 to $10,000 by rarity' };
+const PRICE = { id: 'edisi 1–10 per karya, harga tetap $1–$250 menurut kelangkaan', en: '1–10 editions per work at fixed prices from $1 to $250 by rarity' };
 // jujur soal status OpenSea (pemilik 23 Nov 2026: „yg tampil dr opensea kan blm ada"): sebelum kontrak aktif = pratinjau
 const WHERE = { id: (live) => (live ? 'dijual langsung di OpenSea (jaringan Base)' : 'segera hadir di OpenSea (jaringan Base)'), en: (live) => (live ? 'sold directly on OpenSea (Base network)' : 'coming soon to OpenSea (Base network)') };
 const fmt = (n, lang) => Number(n).toLocaleString(lang === 'id' ? 'id-ID' : 'en-US');

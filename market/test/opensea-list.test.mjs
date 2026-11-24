@@ -1,6 +1,6 @@
 /**
  * Uji mesin listing OpenSea (keputusan pemilik 24 Nov 2026: 10 koleksi ERC-721 × 10 juta karya, edisi 1 tercetak saat
- * deploy, edisi berikutnya otomatis saat laku, harga tetap $1–$10.000, tanpa lelang) di ganache: kontrak AxtoCollection
+ * deploy, edisi berikutnya otomatis saat laku, harga tetap $1–$250, tanpa lelang) di ganache: kontrak AxtoCollection
  * sungguhan dengan premint 10 juta, listing lewat SDK tiruan (tanpa jaringan), penjualan dibaca dari event Transfer,
  * edisi berikutnya dicetak wallet toko, karya habis diganti calon berikutnya, hasil jual → treasury dari R2 privat.
  */
@@ -136,4 +136,66 @@ test('edisi terakhir: tidak ada edisi ke-(supply+1); admin menjeda listing; tanp
   R2['axto-nft-data/cfg/contracts-8453.json'] = JSON.stringify({ ...JSON.parse(old), standard: 'erc1155' });
   assert.equal((await go()).waiting, 'standard');
   R2['axto-nft-data/cfg/contracts-8453.json'] = old;
+});
+
+test('hadiah staking koin AXTO: wallet toko mengirim NFT hadiah dengan transferBatch (gas oleh axto.io), batch tercatat sekali', async () => {
+  const d2 = deployer.connect(new ethers.JsonRpcProvider('http://127.0.0.1:18546', undefined, { cacheTimeout: -1 })); // nonce segar
+  const f = new ethers.ContractFactory(art('AxtoCollection').abi, art('AxtoCollection').bytecode, d2);
+  const scfg = { name: 'AXTO Staking', symbol: 'AXSTAKE', maxSupply: 500, owner: buyer.address, royaltyReceiver: TREASURY, baseURI: 'https://axto.io/api/token/stake/', contractURI: 'https://axto.io/api/contract/stake', custody: store.address, premint: 100, operator: ethers.ZeroAddress, signer: ethers.ZeroAddress, minter: store.address, editionStride: 0, validator: ethers.ZeroAddress, operators: [] };
+  const scol = await (await f.deploy(scfg, { gasLimit: 30_000_000 })).waitForDeployment();
+  const c = JSON.parse(R2['axto-nft-data/cfg/contracts-8453.json']);
+  c.collections.stake = await scol.getAddress();
+  R2['axto-nft-data/cfg/contracts-8453.json'] = JSON.stringify(c);
+  await (await d2.sendTransaction({ to: store.address, value: ethers.parseEther('0.05') })).wait(); // hasil penjualan = dana gas
+  const member = ethers.Wallet.createRandom().address;
+  const queue = [{ id: 'abc12345', payout: member, tier: 'classic', offset: 0, ids: [5, 9, 77] }];
+  const sent = [];
+  const stakeApi = async (method, path, body) => {
+    if (method === 'GET' && path === '/internal/stake/kirim') return { items: queue.splice(0) };
+    if (method === 'POST' && path === '/internal/stake/terkirim') { sent.push(body); return { ok: true }; }
+    throw new Error(`tak terduga ${method} ${path}`);
+  };
+  const x = io(); x.feed = await feed.getAddress(); x.stakeApi = stakeApi;
+  await run({ io: x, chainId: 8453, rpc: 'http://127.0.0.1:18546', log: () => {}, window: WIN, budgetMs: 60_000 });
+  for (const id of [5, 9, 77]) assert.equal(await scol.ownerOf(id), member);
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].count, 3);
+  assert.match(sent[0].tx, /^0x[0-9a-f]{64}$/);
+  // batch yang sudah terkirim tetapi belum tercatat: dicatat tanpa transaksi baru
+  queue.push({ id: 'abc12345', payout: member, tier: 'classic', offset: 0, ids: [5, 9, 77] });
+  const x2 = io(); x2.feed = await feed.getAddress(); x2.stakeApi = stakeApi;
+  await run({ io: x2, chainId: 8453, rpc: 'http://127.0.0.1:18546', log: () => {}, window: WIN, budgetMs: 60_000 });
+  assert.equal(sent.length, 2);
+  assert.equal(sent[1].tx, null);
+  assert.equal(await scol.isApprovedForAll(store.address, CONDUIT), false, 'koleksi staking tidak pernah disetujui konduit OpenSea');
+});
+
+test('staking ditutup: sisa hadiah yang belum pernah diundikan dilepas ke pasar OpenSea (1/1, harga tier), konduit disetujui sekali', async () => {
+  const { stakeFree, poolToken, stakeTier, REWARD_TIERS } = await import('../../engine/src/stake.js');
+  const c = JSON.parse(R2['axto-nft-data/cfg/contracts-8453.json']);
+  const scol = new ethers.Contract(c.collections.stake, art('AxtoCollection').abi, provider);
+  assert.equal(await scol.isApprovedForAll(store.address, CONDUIT), false);
+  const pools = { classic: 50, rare: 10, epic: 0, masterpiece: 0 };
+  const api = (open) => async (method, path) => {
+    if (path === '/internal/stake/stok') return { open, pools };
+    if (path === '/internal/stake/kirim') return { items: [] };
+    return { ok: true };
+  };
+  // staking masih dibuka → tidak ada yang dilisting dari koleksi staking
+  const before = posted.length;
+  const x0 = io(); x0.feed = await feed.getAddress(); x0.stakeApi = api(true);
+  await run({ io: x0, chainId: 8453, rpc: 'http://127.0.0.1:18546', log: () => {}, window: WIN, budgetMs: 60_000 });
+  assert.equal(posted.slice(before).filter((p) => p.asset.tokenAddress === c.collections.stake).length, 0);
+  // staking ditutup → dilepas
+  const x = io(); x.feed = await feed.getAddress(); x.stakeApi = api(false);
+  await run({ io: x, chainId: 8453, rpc: 'http://127.0.0.1:18546', log: () => {}, window: WIN, budgetMs: 60_000 });
+  assert.equal(await scol.isApprovedForAll(store.address, CONDUIT), true);
+  const listed = posted.slice(before).filter((p) => p.asset.tokenAddress === c.collections.stake).map((p) => Number(p.asset.tokenId));
+  assert.equal(listed.length, WIN);
+  for (const t of listed) assert.ok(stakeFree(t, pools), `token ${t} sudah menjadi hadiah`);
+  // token yang sudah diundikan (posisi < kursor) tidak pernah dilisting
+  const given = poolToken('classic', 3);
+  assert.equal(stakeTier(given), REWARD_TIERS.classic);
+  assert.equal(stakeFree(given, pools), false);
+  assert.ok(!listed.includes(given));
 });

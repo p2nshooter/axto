@@ -12,7 +12,7 @@ import { edition, designOf } from '../../engine/src/editions.js';
 import { hadithRef } from '../../engine/src/render/hadith.js';
 import { gpuPlayer, gpuGambar } from '../../engine/src/render/gpu-player.js';
 import { collectionSeo, seriesSeo, surahSeo, hubSeo, breadcrumb, itemList, seriesLabel, surahInfo, BREAD } from './seo.js';
-import { COLLECTIONS, sha256Hex, kode } from '../../engine/src/core.js';
+import { COLLECTIONS, sha256Hex, kode, ONE_SETS } from '../../engine/src/core.js';
 import { canonical } from '../../engine/src/dna.js';
 import { MODELS } from '../../engine/src/catalog/model.js';
 import { LANGS, T, PATHS, LEGACY, pickLang, pageFromSlug } from './i18n.js';
@@ -27,6 +27,8 @@ import { Ledger, KEYS } from './ledger.js';
 import { withCfg, saveContracts, NETWORKS } from './config.js';
 import { vault } from './vault.js';
 import * as COIN from './coin.js';
+import * as STAKE from './stake.js';
+import { STAKE_KEY, validStake, stakeDesign, stakeMetadata, stakeContractMetadata } from '../../engine/src/stake.js';
 import * as SHOP from './shop.js';
 import * as GPUP from './gpu.js';
 import { QA_V, vGambar, promptFor as gpuPrompt } from '../../engine/src/gpu.js';
@@ -96,6 +98,15 @@ async function soldOf(env, c) {
   return map;
 }
 const validToken = (c, id) => COLLECTIONS[c] && Number.isSafeInteger(id) && id >= 1 && id <= COLLECTIONS[c].max;
+/** Saringan harga galeri (?pmin=&pmax=, USD bulat $1–$250; sama = satu harga tertentu). */
+const priceRange = (q) => {
+  const v = (k) => Math.min(250, Math.max(0, Number(q.get(k) ?? 0) | 0));
+  const pmin = v('pmin');
+  const pmax = v('pmax');
+  return { pmin, pmax: pmax && pmax < pmin ? pmin : pmax };
+};
+/** Karya koleksi 1/1 (ONE_SETS): 1..jumlah karya koleksi itu. */
+const validOne = (c, id) => Boolean(ONE_SETS[c]) && Number.isSafeInteger(id) && id >= 1 && id <= ONE_SETS[c].max;
 
 /** Penyedia data Qur'an & foto model dari ASSETS (tanpa R2). */
 function assetProvider(env, origin) {
@@ -161,8 +172,8 @@ async function api(request, env, ctx, url) {
   const p = url.pathname;
   const method = request.method;
   const ip = request.headers.get('cf-connecting-ip') ?? '0';
-  // IPN NOWPayments: datang dari server NOWPayments (bukan peramban) — dilindungi tanda tangan HMAC-SHA512, bukan Origin
-  if (p === COIN.IPN_PATH) {
+  // IPN gerbang pembayaran: datang dari server gerbang (bukan peramban) — dilindungi tanda tangan HMAC-SHA512, bukan Origin
+  if (COIN.IPN_PATHS.includes(p)) {
     if (method !== 'POST') return json({ error: 'method' }, 405);
     try {
       const r = await COIN.ipn(request, env);
@@ -199,6 +210,13 @@ async function api(request, env, ctx, url) {
   // metadata token koleksi OpenSea ERC-721 (pemilik 24 Nov 2026; tokenURI = /api/token/<koleksi>/<token>): 10 koleksi
   // (5 publik + 5 seri G-), token = (edisi − 1) × 10 jt + karya, edisi 1–10 menurut kelangkaan (engine/src/opensea.js).
   // Seri G-: lukisan GPU bila sudah ada, selain itu karya aslinya (cache singkat agar penggantian cepat terlihat).
+  // koleksi hadiah staking „AXTO Staking" (1/1, tidak dijual; engine/src/stake.js)
+  m = /^\/api\/token\/stake\/(\d+)$/.exec(p);
+  if (m) return validStake(Number(m[1])) ? json(stakeMetadata(Number(m[1]), env.BASE_URL), 200, { 'cache-control': IMMUTABLE, 'access-control-allow-origin': '*' }) : json({ error: 'not_found' }, 404);
+  if (p === '/api/contract/stake') return json(stakeContractMetadata(env.BASE_URL), 200, { 'cache-control': 'public, max-age=86400', 'access-control-allow-origin': '*' });
+  // 3 koleksi 1/1 (100 jt karya unik; engine/src/core.js ONE_SETS) — metadata token lewat rute OpenSea di bawah
+  m = /^\/api\/contract\/(one-[a-z]+)$/.exec(p);
+  if (m && OSX.osCol(m[1])) return json(OSX.oneContractMetadata(m[1], env.BASE_URL), 200, { 'cache-control': 'public, max-age=86400', 'access-control-allow-origin': '*' });
   m = /^\/api\/token\/([a-z-]+)\/(\d+)$/.exec(p);
   if (m && OSX.osCol(m[1])) {
     const info = OSX.tokenInfo(m[1], Number(m[2]));
@@ -233,7 +251,7 @@ async function api(request, env, ctx, url) {
       const gs = gpu ? await gpuSet(env, m[1]) : null;
       const ids = gpu ? [...gs.ids].reverse() : (await showcase(env, m[1])).ids;
       const surah = Math.min(114, Math.max(0, Number(q.get('surah') ?? 0) | 0));
-      const r = browseList(m[1], ids, { from: Number(q.get('from') ?? 1) | 0, n, tier: Number.isInteger(tier) && tier >= 0 && tier <= 4 ? tier : null, series: String(q.get('series') ?? '').slice(0, 32), surah });
+      const r = browseList(m[1], ids, { from: Number(q.get('from') ?? 1) | 0, n, tier: Number.isInteger(tier) && tier >= 0 && tier <= 4 ? tier : null, series: String(q.get('series') ?? '').slice(0, 32), surah, ...priceRange(q) });
       if (gpu) r.items = gpuItems(gs, r.items);
       return json(r, 200, { 'cache-control': 'public, max-age=60' });
     }
@@ -312,11 +330,11 @@ async function api(request, env, ctx, url) {
     const u = await loadMember(env, s.wallet);
     return json({ ...(u ? await publicProfile(env, u) : { wallet: s.wallet }), admin: s.admin });
   }
-  // ---- koin AXTO lewat NOWPayments (beli, status pesanan, cairkan) ----
+  // ---- koin AXTO (beli lewat gerbang pembayaran kripto, status pesanan, cairkan) ----
   if (p === '/api/coin/quote') return json(await COIN.quote(env, { usd: url.searchParams.get('usd'), cur: url.searchParams.get('cur') }), 200, { 'cache-control': 'private, max-age=30' });
   if (p === '/api/coin/agreement') {
     const l = url.searchParams.get('lang') === 'id' ? 'id' : 'en';
-    return json({ v: COIN.AGREEMENT_V, lang: l, items: COIN.AGREEMENT[l], hash: await COIN.agreementHash(l), currencies: Object.fromEntries(Object.entries(COIN.CURRENCIES).map(([k, c]) => [k, c.label])), limits: COIN.LIMITS }, 200, { 'cache-control': 'public, max-age=300' });
+    return json({ v: COIN.AGREEMENT_V, lang: l, items: COIN.AGREEMENT[l], warn: COIN.AGREEMENT_WARN[l], stakeV: STAKE.STAKE_AGREEMENT_V, hash: await COIN.agreementHash(l), currencies: Object.fromEntries(Object.entries(COIN.CURRENCIES).map(([k, c]) => [k, c.label])), limits: COIN.LIMITS }, 200, { 'cache-control': 'public, max-age=300' });
   }
   if (p === '/api/coin/buy' && method === 'POST') {
     if (!s) return json({ error: 'auth' }, 401);
@@ -341,6 +359,30 @@ async function api(request, env, ctx, url) {
     const r = await COIN.requestCashout(env, s.wallet, await readBody(request, 1024));
     if (r.ok) ctx.waitUntil(COIN.processCashouts(env).catch(() => null));
     return json(r, r.ok ? 200 : 400, { 'cache-control': 'private, no-store' });
+  }
+  // ---- staking koin AXTO (engine/src/stake.js, src/stake.js) ----
+  if (p === '/api/stake/quote') return json(await STAKE.quote(env, { coins: url.searchParams.get('coins'), months: url.searchParams.get('months') }), 200, { 'cache-control': 'public, max-age=60' });
+  if (p === '/api/stake' && method === 'POST') {
+    if (!s) return json({ error: 'auth' }, 401);
+    if (!(await rateLimit(env, `stake:${s.wallet}`, 6))) return json({ error: 'rate_limited' }, 429);
+    const r = await STAKE.lock(env, s.wallet, await readBody(request, 1024));
+    return json(r, r.ok ? 200 : 400, { 'cache-control': 'private, no-store' });
+  }
+  if (p === '/api/stake/me') {
+    if (!s) return json({ error: 'auth' }, 401);
+    return json(await STAKE.memberView(env, s.wallet), 200, { 'cache-control': 'private, no-store' });
+  }
+  m = /^\/api\/stake\/([0-9a-z]{8,40})\/nft$/.exec(p);
+  if (m) {
+    if (!s) return json({ error: 'auth' }, 401);
+    const tier = url.searchParams.get('tier');
+    if (!['classic', 'rare', 'epic', 'masterpiece'].includes(tier)) return json({ error: 'tier' }, 400);
+    const r = await STAKE.items(env, s.wallet, m[1], tier, Math.max(0, Math.min(100_000, Number(url.searchParams.get('page')) || 0)));
+    return r ? json(r, 200, { 'cache-control': 'private, no-store' }) : json({ error: 'not_found' }, 404);
+  }
+  if (p === '/api/admin/stake') {
+    if (!s?.admin) return json({ error: 'admin_only' }, 403);
+    return json(await STAKE.adminView(env), 200, { 'cache-control': 'private, no-store' });
   }
   if (p === '/api/admin/coin') {
     if (!s?.admin) return json({ error: 'admin_only' }, 403);
@@ -467,6 +509,20 @@ async function api(request, env, ctx, url) {
     const r = await GPUP.lukisGratis(env, b.c, Number(b.id), prompt, { rata: false, simpan: false });
     if (!r.gambar) return json({ error: r.alasan === 'jatah' ? 'jatah' : 'ai', detail: String(r.alasan).slice(0, 300) }, r.alasan === 'jatah' ? 429 : 502);
     return json({ ok: r.ok, alasan: r.alasan, qa: r.qa, model: r.model, type: r.type, prompt, klein: r.alasanKlein ?? '', image: btoa(Array.from(new Uint8Array(r.gambar), (x) => String.fromCharCode(x)).join('')) });
+  }
+  // pengiriman hadiah staking oleh wallet toko (market/opensea-list.mjs) — gas ditanggung axto.io
+  if (p === '/internal/stake/kirim') {
+    if (!(await engineAuth(request, env, ''))) return json({ error: 'auth' }, 401);
+    return json({ items: await STAKE.pendingSends(env) });
+  }
+  if (p === '/internal/stake/stok') {
+    if (!(await engineAuth(request, env, ''))) return json({ error: 'auth' }, 401);
+    return json(await STAKE.stockState(env));
+  }
+  if (p === '/internal/stake/terkirim' && method === 'POST') {
+    const body = await request.text();
+    if (!(await engineAuth(request, env, body))) return json({ error: 'auth' }, 401);
+    return json(await STAKE.markSent(env, JSON.parse(body)));
   }
   if (p === '/internal/engine/commit' && method === 'POST') {
     const body = await request.text();
@@ -618,13 +674,14 @@ async function html(request, env, ctx, url) {
     const from = Math.max(1, Number(url.searchParams.get('from') ?? 1) | 0);
     const tq = url.searchParams.get('tier');
     const tier = tq !== null && tq !== '' && /^[0-4]$/.test(tq) ? Number(tq) : null;
-    const first = browseList(c, maker ? gpu : sc.ids, { from, n: 60, tier, series, surah });
+    const price = priceRange(url.searchParams);
+    const first = browseList(c, maker ? gpu : sc.ids, { from, n: 60, tier, series, surah, ...price });
     if (maker) first.items = gpuItems(gs, first.items);
     const crumbs = [[BREAD[lang].home, `/${lang}`], [BREAD[lang].hub, `/${lang}/${PATHS.opensea[lang]}`], [P.collName(lang, c), `/${lang}/c/${c}`]];
     if (surah) crumbs.push([`${surah}. ${surahInfo(surah)[2]}`, `/${lang}${rest}`]);
     else if (parts[3]) crumbs.push([seriesLabel(c, series, lang), `/${lang}${rest}`]);
-    const filtered = url.searchParams.has('from') || tier !== null || url.searchParams.has('series') || !!maker;
-    return out({ page: 'home', rest, title: seo.title, desc: seo.desc, image: `${base}/img/${c}/${first.items[0]?.id ?? sc.ids[0] ?? 1}.svg`, noindex: filtered || count === 0, jsonld: [breadcrumb(base, crumbs.map(([nm, h]) => [nm, h])), itemList(base, lang, c, first.items, seo.h1)], body: P.collectionPage(lang, c, { produced: maker ? gpu.length : sc.ids.length, from, tier, series, surah, first, facets, seo, crumbs, view: url.searchParams.get('view') ?? 'mosaic', live, maker, gpuCount: gpu.length }) });
+    const filtered = url.searchParams.has('from') || tier !== null || url.searchParams.has('series') || !!maker || !!price.pmin || !!price.pmax;
+    return out({ page: 'home', rest, title: seo.title, desc: seo.desc, image: `${base}/img/${c}/${first.items[0]?.id ?? sc.ids[0] ?? 1}.svg`, noindex: filtered || count === 0, jsonld: [breadcrumb(base, crumbs.map(([nm, h]) => [nm, h])), itemList(base, lang, c, first.items, seo.h1)], body: P.collectionPage(lang, c, { produced: maker ? gpu.length : sc.ids.length, from, tier, series, surah, ...price, first, facets, seo, crumbs, view: url.searchParams.get('view') ?? 'mosaic', live, maker, gpuCount: gpu.length }) });
   }
   if (sub === 'c' && COLLECTIONS[parts[2]] && !parts[3]) {
     // koleksi eksklusif: semua 10.000 karya dijual di toko axto.io ($1/edisi)
@@ -709,7 +766,7 @@ async function html(request, env, ctx, url) {
   if (key === 'coin') {
     // publik hanya kontrak token; wallet internal hanya di Portal admin (perintah pemilik #43)
     const addrs = { token: env.AXTO_TOKEN || '', sale: '' };
-    return out({ page: key, title: T[lang].coin.title, image: `${base}/brand/axto-coin-512.png`, jsonld: [P.coinGuideJsonLd(lang, base)], body: P.coinPage(lang, await readJSON(env.STORE, 'e/coin/sale.json'), false, addrs) });
+    return out({ page: key, title: T[lang].coin.title, image: `${base}/brand/axto-coin-512.png`, jsonld: [P.coinGuideJsonLd(lang, base)], body: P.coinPage(lang, { sold: Number((await COIN.presaleSold(env)) / COIN.MICRO) }, false, addrs) });
   }
   if (key === 'member') {
     // wallet admin selalu ke Portal admin (perintah pemilik #34)
@@ -743,7 +800,13 @@ export default {
       if (p === '/robots.txt') return new Response(`User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /internal/\nDisallow: /id/member\nDisallow: /en/member\nDisallow: /id/admin\nDisallow: /en/admin\nSitemap: ${env.BASE_URL}/sitemap.xml\n`, { headers: { 'content-type': 'text/plain; charset=utf-8' } });
       if (p.startsWith('/sitemap')) return (await sitemap(env, url)) ?? new Response('not found', { status: 404 });
       if (p.startsWith('/api/') || p.startsWith('/internal/') || p === '/tokenlist.json') return await api(request, env, ctx, url);
-      let m = /^\/img\/([a-z-]+)\/(\d+)\.svg$/.exec(p);
+      let m = /^\/img\/stake\/(\d+)\.svg$/.exec(p);
+      if (m && validStake(Number(m[1]))) { const sd = stakeDesign(Number(m[1])); return await svg(request, env, ctx, sd.key, sd.id, url.origin); }
+      m = /^\/play\/stake\/(\d+)$/.exec(p);
+      if (m && validStake(Number(m[1]))) { const sd = stakeDesign(Number(m[1])); return await player(request, env, ctx, sd.key, sd.id, url.origin); }
+      m = /^\/(img|play)\/(one-[a-z]+)\/(\d+)(\.svg)?$/.exec(p);
+      if (m && validOne(m[2], Number(m[3])) && (m[1] === 'img') === Boolean(m[4])) return m[1] === 'img' ? await svg(request, env, ctx, m[2], Number(m[3]), url.origin) : await player(request, env, ctx, m[2], Number(m[3]), url.origin);
+      m = /^\/img\/([a-z-]+)\/(\d+)\.svg$/.exec(p);
       if (m && validToken(m[1], Number(m[2]))) return await svg(request, env, ctx, m[1], Number(m[2]), url.origin);
       m = /^\/gpu\/([a-z-]+)\/(\d+)\.png$/.exec(p);
       if (m && validToken(m[1], Number(m[2]))) {
@@ -805,6 +868,8 @@ export default {
     ctx.waitUntil(SHOP.settleDue(e2).catch((e) => appendLog(env.STORE, 'error', { path: 'cron:settle', e: String(e?.message ?? e).slice(0, 300) })));
     ctx.waitUntil(SHOP.recover(e2, colAddrOf(e2), EX_NAMES).catch((e) => appendLog(env.STORE, 'error', { path: 'cron:recover', e: String(e?.message ?? e).slice(0, 300) })));
     ctx.waitUntil(COIN.processCashouts(env).catch((e) => appendLog(env.STORE, 'error', { path: 'cron:cashout', e: String(e?.message ?? e).slice(0, 300) })));
+    // staking jatuh tempo: koin kembali ke saldo, NFT hadiah masuk antrean kirim tanpa gas
+    ctx.waitUntil(STAKE.processDue(env).catch((e) => appendLog(env.STORE, 'error', { path: 'cron:stake', e: String(e?.message ?? e).slice(0, 300) })));
     // seri G- 24 jam: satu karya per tick bila jatah gratis harian terbuka (lihat src/gpu.js)
     ctx.waitUntil(GPUP.gpuTick(env).catch((e) => appendLog(env.STORE, 'error', { path: 'cron:gpu', e: String(e?.message ?? e).slice(0, 300) })));
   },

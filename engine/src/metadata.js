@@ -209,7 +209,7 @@ export function contractMetadata(key, base = 'https://axto.io') {
   const name = `${c.exclusive ? 'AXTO Exclusive — ' : ''}${KIND_NAME[c.kind]}`;
   return {
     name,
-    description: `${name}: ${c.max.toLocaleString('en-US')} unique living artworks by AXTO. Every design is generated from a mathematically unique DNA — no duplicate designs, never reprinted — and issued as a limited edition of ${c.exclusive ? '10' : '1 to 10 (the rarer, the fewer)'}. ${c.exclusive ? 'Exclusive edition: fixed price $1 at axto.io in AXTO coin — a meaningful gift, easy to share with a whole community; members resell at axto.io by auction, offer or fixed price, and withdraw to their wallets one by one or in bulk.' : `Browse by Gallery and Series${seriesOptions(key).length ? ` (${seriesOptions(key).map((x) => x[1]).join(', ')})` : ''}. Fixed price by rarity, from $1 (Classic) to $10,000 (Masterpiece).`} / ${KIND_NAME_ID[c.kind]}: ${c.max.toLocaleString('id-ID')} karya unik, edisi terbatas ${c.exclusive ? '10 per karya, harga tetap $1 di axto.io (koin AXTO).' : '1–10 per karya, harga tetap $1–$10.000 menurut kelangkaan; telusuri per Galeri & Seri.'}`,
+    description: `${name}: ${c.max.toLocaleString('en-US')} unique living artworks by AXTO. Every design is generated from a mathematically unique DNA — no duplicate designs, never reprinted — and issued as a limited edition of ${c.exclusive ? '10' : '1 to 10 (the rarer, the fewer)'}. ${c.exclusive ? 'Exclusive edition: fixed price $1 at axto.io in AXTO coin — a meaningful gift, easy to share with a whole community; members resell at axto.io by auction, offer or fixed price, and withdraw to their wallets one by one or in bulk.' : `Browse by Gallery and Series${seriesOptions(key).length ? ` (${seriesOptions(key).map((x) => x[1]).join(', ')})` : ''}. Fixed price by rarity, from $1 (Classic) to $250 (Masterpiece).`} / ${KIND_NAME_ID[c.kind]}: ${c.max.toLocaleString('id-ID')} karya unik, edisi terbatas ${c.exclusive ? '10 per karya, harga tetap $1 di axto.io (koin AXTO).' : '1–10 per karya, harga tetap $1–$250 menurut kelangkaan; telusuri per Galeri & Seri.'}`,
     image: `${base}/logo-512.png`,
     banner_image: `${base}/og/${key}.svg`,
     external_link: `${base}/en/c/${key}`,
@@ -336,9 +336,11 @@ export function renderPlayerLive(d, meta, ctx, opts) {
 
 /**
  * Penjelajah atas daftar tetap (etalase 5.000 acak per jenis, perintah pemilik #45). `from` = posisi 1-based dalam
- * daftar; saringan tier, seri dan surah (kaligrafi Al-Qur'an). Mengembalikan harga tetap OpenSea per karya.
+ * daftar; saringan tier, seri, surah (kaligrafi Al-Qur'an) dan harga (pemilik 24 Nov 2026: „hidupkan filter harga jika ada
+ * member ingin melihat NFT dengan harga tertentu" — `pmin`..`pmax` USD, sama = satu harga tertentu). Mengembalikan harga tetap
+ * OpenSea per karya.
  */
-export function browseList(key, ids, { from = 1, n = 60, tier = null, series = '', surah = 0 } = {}) {
+export function browseList(key, ids, { from = 1, n = 60, tier = null, series = '', surah = 0, pmin = 0, pmax = 0 } = {}) {
   const items = [];
   let i = Math.max(1, from);
   for (; i <= ids.length && items.length < n; i += 1) {
@@ -349,6 +351,8 @@ export function browseList(key, ids, { from = 1, n = 60, tier = null, series = '
     const ref = d.kind === 'quran' ? quranRef(d) : null;
     if (surah && !(ref && ref.series === 'ayah' && ref.surah === surah)) continue;
     const e = editionOf(key, id);
+    if (pmin && e.priceUsd < pmin) continue;
+    if (pmax && e.priceUsd > pmax) continue;
     items.push({ id, name: title(d, ref), tier: d.tier.rank, series: seriesKey(d), usd: e.priceUsd, ed: e.supply });
   }
   return { items, next: i <= ids.length ? i : null };

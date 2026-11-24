@@ -28,15 +28,21 @@
  *   log/coin/<hari>/…            peristiwa koin (buy_credit, cashout, cashout_paid, cashout_refund, …)
  *   cfg/coin.json                {priceCents, dexReleased} — diubah admin
  */
-import { readJSON, getJSON, createOnce, appendLog, listKeys } from './r2.js';
+import { readJSON, getJSON, createOnce, appendLog, listKeys, update } from './r2.js';
 
 export const NP_API = 'https://api.nowpayments.io';
-export const IPN_PATH = '/api/nowpayments/ipn';
+/** Webhook pembayaran (alamat lama tetap diterima untuk pembayaran yang dibuat sebelum 24 Nov 2026). */
+export const IPN_PATH = '/api/pay/ipn';
+export const IPN_PATHS = ['/api/pay/ipn', '/api/nowpayments/ipn'];
 /** 1 AXTO = 1.000.000 mikro di pembukuan internal (bilangan bulat, tanpa pecahan desimal). */
 export const MICRO = 1_000_000n;
 export const DEFAULT_PRICE_CENTS = 1000; // $10 per AXTO (harga presale)
 export const PENALTY_BEFORE_DEX = 50; // %
-export const LIMITS = { minBuyUsd: 10, maxBuyUsd: 10_000, minCashoutUsd: 20 };
+/** Pemilik, 24 Nov 2026: „Pembelian dan investasi axto minimum $1". Batas bawah sebenarnya per mata uang = minimum jaringan
+ *  gerbang pembayaran (mis. USDT TRON ±$10, BTC ±$4) — lihat minUsdFor(). */
+export const LIMITS = { minBuyUsd: 1, maxBuyUsd: 10_000, minCashoutUsd: 20 };
+/** Batas presale: 20.000.000 AXTO (harga tetap sampai terjual habis). */
+export const PRESALE_MICRO = 20_000_000n * 1_000_000n;
 
 /** Empat jalur bayar yang dipakai pemilik di NOWPayments. Kode dicocokkan ulang dengan GET /v1/merchant/coins. */
 export const CURRENCIES = {
@@ -57,31 +63,49 @@ export function validAddress(cur, a) {
 }
 
 // ---------------------------------------------------------------- perjanjian (wajib disetujui saat membeli)
-export const AGREEMENT_V = '2026-11-23.2';
+export const AGREEMENT_V = '2026-11-24.1';
 export const AGREEMENT = {
   id: [
-    'Koin AXTO adalah token utilitas untuk transaksi NFT di axto.io, bukan produk investasi; nilainya tidak dijamin dan tidak ada janji kenaikan harga.',
-    'Pembayaran diproses otomatis oleh NOWPayments (USDT TRC20, USDC BEP20, BTC, BNB BEP20). Koin masuk ke akun Anda setelah NOWPayments menyatakan pembayaran selesai.',
+    'AXTO adalah koin komunitas NFT axto.io — investasi bersama di dalam ekosistem karya seni digital yang hidup. Seperti setiap aset kripto, nilainya dapat naik maupun turun dan tidak dijamin; tidak ada janji keuntungan. Belilah sesuai kemampuan dan patuhi aturan di negara Anda.',
+    'Pembayaran diproses otomatis oleh gerbang pembayaran kripto mitra axto.io (USDT TRC20, USDC BEP20, BTC, BNB BEP20). Koin masuk ke akun Anda begitu pembayaran terkonfirmasi.',
     'Anda wajib membayar dari alamat wallet milik Anda sendiri yang Anda isi di formulir ini — bukan dari bursa (exchange) atau wallet orang lain.',
-    'Pencairan (penjualan kembali koin ke axto.io) HANYA dibayarkan ke alamat dan mata uang yang Anda pakai saat membeli. Tidak bisa ke alamat, wallet, atau rekening lain.',
-    'Pencairan sebelum koin AXTO dirilis ke DEX dipotong 50% dari nilainya pada harga presale. Setelah rilis DEX tidak ada potongan.',
-    'Nilai pencairan dihitung dalam USD lalu dikonversi NOWPayments ke mata uang pembelian pada kurs saat pencairan; biaya jaringan dipotong dari jumlah yang dikirim. Minimal pencairan $20.',
-    'Koin yang dicairkan dibeli kembali oleh axto.io (buyback) dan masuk ke wallet buyback axto.io; stok presale tidak bertambah. Bila payout gagal, koin dikembalikan utuh ke saldo Anda.',
+    'Koin yang Anda staking terkunci sampai masa kontraknya selesai; hadiah NFT-nya dikirim tanpa biaya gas ke alamat yang Anda cantumkan begitu kontrak selesai.',
     'Semua transaksi tercatat (alamat, jumlah, waktu, hash transaksi). axto.io dapat menahan transaksi yang terindikasi penipuan atau melanggar hukum.',
   ],
   en: [
-    'The AXTO coin is a utility token for NFT transactions on axto.io, not an investment product; its value is not guaranteed and no price increase is promised.',
-    'Payments are processed automatically by NOWPayments (USDT TRC20, USDC BEP20, BTC, BNB BEP20). Coins reach your account once NOWPayments reports the payment as finished.',
+    'AXTO is the community coin of the axto.io NFT museum — a shared investment inside an ecosystem of living digital art. Like every crypto asset, its value can rise or fall and is not guaranteed; no profit is promised. Buy within your means and follow the rules of your country.',
+    'Payments are processed automatically by axto.io\'s crypto payment partner (USDT TRC20, USDC BEP20, BTC, BNB BEP20). Coins reach your account as soon as the payment is confirmed.',
     'You must pay from a wallet address you own, entered in this form — not from an exchange or someone else\'s wallet.',
-    'A cash-out (selling coins back to axto.io) is paid ONLY to the address and currency you used to buy. It cannot go to any other address, wallet or bank account.',
-    'A cash-out before the AXTO coin is released to a DEX is reduced by 50% of its value at the presale price. After the DEX release there is no reduction.',
-    'The cash-out value is calculated in USD and converted by NOWPayments into the purchase currency at the rate of the moment; network fees are deducted from the amount sent. Minimum cash-out $20.',
-    'Coins you cash out are bought back by axto.io (buyback) and go to the axto.io buyback wallet; the presale stock does not grow back. If a payout fails, the coins are returned to your balance in full.',
+    'Coins you stake stay locked until the term ends; their NFT rewards are delivered gas-free to the address you name as soon as the term completes.',
     'Every transaction is recorded (addresses, amounts, times, transaction hashes). axto.io may hold transactions that indicate fraud or break the law.',
   ],
 };
+/**
+ * Pemilik, 24 Nov 2026: „perjanjian ini notif nya cukup di infokan saat member melakukan pembelian axto coin, kasih tambahan
+ * warning!!! Kami tidak mengharapkan ini terjadi. Pake bahasanya lebih elegan, jgn di expose di depan begitu." — ketentuan
+ * menjual kembali koin hanya tampil di jendela persetujuan saat membeli, sebagai peringatan yang santun.
+ */
+export const AGREEMENT_WARN = {
+  id: {
+    title: 'Perhatian — kami berharap ini tidak pernah Anda perlukan',
+    items: [
+      'Bila suatu saat Anda ingin menjual kembali koin AXTO kepada axto.io, dananya hanya dikirim ke alamat dan mata uang yang Anda pakai saat membeli — tidak ke alamat, wallet, atau rekening lain.',
+      'Sebelum koin AXTO dirilis ke DEX, penjualan kembali dipotong 50% dari nilainya pada harga presale; sesudah rilis DEX tanpa potongan. Nilai dihitung dalam USD lalu dikonversi ke mata uang pembelian pada kurs saat itu; biaya jaringan dipotong dari jumlah yang dikirim; minimal $20.',
+      'Koin yang dijual kembali tidak kembali ke stok presale. Bila pengiriman gagal, koin dikembalikan utuh ke saldo Anda.',
+    ],
+  },
+  en: {
+    title: 'Please note — we hope you will never need this',
+    items: [
+      'Should you ever wish to sell AXTO coins back to axto.io, the funds are sent only to the address and currency you used to buy — never to any other address, wallet or bank account.',
+      'Before the AXTO coin is released to a DEX, a sale back is reduced by 50% of its value at the presale price; after the DEX release there is no reduction. The value is calculated in USD and converted into the purchase currency at the rate of the moment; network fees are deducted from the amount sent; minimum $20.',
+      'Coins sold back do not return to the presale stock. If a payout fails, the coins are returned to your balance in full.',
+    ],
+  },
+};
 export async function agreementHash(lang) {
-  const text = `${AGREEMENT_V}\n${(AGREEMENT[lang] ?? AGREEMENT.en).join('\n')}`;
+  const w = AGREEMENT_WARN[lang] ?? AGREEMENT_WARN.en;
+  const text = `${AGREEMENT_V}\n${(AGREEMENT[lang] ?? AGREEMENT.en).join('\n')}\n${w.title}\n${w.items.join('\n')}`;
   return hex(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text)));
 }
 
@@ -257,19 +281,43 @@ export async function adjust(env, wallet, deltaMicro, ev, ref) {
 }
 
 // ---------------------------------------------------------------- beli
+const MIN_CACHE = new Map();
+/** Minimum beli (USD bulat ke atas) untuk satu mata uang: maks($1, minimum jaringan gerbang pembayaran + 10%). Cache 10 menit. */
+export async function minUsdFor(env, cur) {
+  const c = CURRENCIES[cur];
+  if (!c) return LIMITS.minBuyUsd;
+  const hit = MIN_CACHE.get(cur);
+  if (hit && Date.now() - hit.at < 600_000) return hit.v;
+  try {
+    const m = await np(env, '/v1/min-amount', { query: { currency_from: c.code, currency_to: c.code, fiat_equivalent: 'usd' } });
+    const f = Number(m?.fiat_equivalent);
+    if (Number.isFinite(f) && f > 0) {
+      const v = Math.max(LIMITS.minBuyUsd, Math.ceil(f * 1.1));
+      MIN_CACHE.set(cur, { at: Date.now(), v });
+      return v;
+    }
+  } catch { /* gerbang tidak menjawab: tidak di-cache, gerbang tetap menolak jumlah yang terlalu kecil */ }
+  return LIMITS.minBuyUsd;
+}
+
+/** Koin presale yang sudah terjual (mikro) — dihitung dari pembayaran yang terkonfirmasi, tidak berkurang saat dijual kembali. */
+export async function presaleSold(env) {
+  return BigInt((await readJSON(env.STORE, 'coin/presale.json').catch(() => null))?.soldMicro ?? '0');
+}
+
 export async function quote(env, { usd, cur }) {
   const c = CURRENCIES[cur];
   const cents = Math.round(Number(usd) * 100);
   if (!c) return { error: 'currency' };
   if (!(cents >= LIMITS.minBuyUsd * 100 && cents <= LIMITS.maxBuyUsd * 100)) return { error: 'amount', min: LIMITS.minBuyUsd, max: LIMITS.maxBuyUsd };
   const { priceCents } = await coinCfg(env);
-  const out = { usd: cents / 100, cur, label: c.label, coins: fmtCoins(microForCents(cents, priceCents)), priceUsd: priceCents / 100 };
+  const minUsd = await minUsdFor(env, cur);
+  const out = { usd: cents / 100, cur, label: c.label, coins: fmtCoins(microForCents(cents, priceCents)), priceUsd: priceCents / 100, minUsd };
+  if (cents < minUsd * 100) return { ...out, error: 'amount_min', min: minUsd };
   try {
     const e = await np(env, '/v1/estimate', { query: { amount: cents / 100, currency_from: 'usd', currency_to: c.code } });
     out.estimate = e?.estimated_amount ?? null;
-    const m = await np(env, '/v1/min-amount', { query: { currency_from: c.code, currency_to: c.code, fiat_equivalent: 'usd' } });
-    out.minPayUsd = m?.fiat_equivalent ?? null;
-  } catch (e) { out.npError = e.message; }
+  } catch { out.estimate = null; }
   return out;
 }
 
@@ -281,6 +329,13 @@ export async function buy(env, wallet, b, { lang, country, base }) {
   const payer = String(b.payer ?? '').trim();
   if (!validAddress(b.cur, payer)) return { error: 'payer_address' };
   if (b.agree !== true || b.agreementV !== AGREEMENT_V) return { error: 'agreement' };
+  const minUsd = await minUsdFor(env, b.cur);
+  if (cents < minUsd * 100) return { error: 'amount_min', min: minUsd };
+  // presale: harga tetap sampai 20.000.000 AXTO terjual (pembayaran yang sudah terkonfirmasi)
+  {
+    const { priceCents: pc } = await coinCfg(env);
+    if ((await presaleSold(env)) + microForCents(cents, pc) > PRESALE_MICRO) return { error: 'presale_closed' };
+  }
   // alamat ditanyakan langsung ke NOWPayments (format & jaringan) — sekaligus memastikan pencairan nanti bisa dikirim ke sana
   try { await np(env, '/v1/payout/validate-address', { method: 'POST', body: { address: payer, currency: c.code } }); } catch (e) {
     if (e.status && e.status < 500) return { error: 'payer_address' };
@@ -340,6 +395,7 @@ export async function applyPayment(env, orderId, payment) {
     actuallyPaid: payment.actually_paid ?? o.actuallyPaid ?? null,
     history: [...(o.history ?? []).slice(-30), { st, at: Date.now() }],
   }), (o) => ({ w: o.wallet, st: o.status, usd: String(o.usdCents), cur: o.cur }));
+  if (delta > 0n) await update(env.STORE, 'coin/presale.json', (cur) => ({ soldMicro: (BigInt(cur?.soldMicro ?? '0') + delta).toString(), at: Date.now() }));
   if (delta > 0n) await appendLog(env.STORE, 'coin', { ev: 'buy_credit', wallet: order.wallet, micro: delta.toString(), usdCents: order.usdCents, cur: order.cur, order: orderId, payer: order.payer, txid: payment.payin_hash ?? null });
   return { ok: true, credited: delta.toString(), status: st };
 }
@@ -428,7 +484,7 @@ export async function processCashouts(env, max = 10) {
         const bal = await np(env, '/v1/balance').catch(() => null);
         const have = Number(bal?.[rec.code]?.amount ?? bal?.[rec.code.toLowerCase()]?.amount ?? NaN);
         if (Number.isFinite(have) && have < amount + (Number.isFinite(feeAmt) ? feeAmt : 0)) {
-          await cas(env.STORE, key, (x) => (x.status === 'waiting_balance' ? undefined : { ...x, status: 'waiting_balance', lastError: `saldo NOWPayments ${rec.code} ${have} < ${amount}`, history: [...(x.history ?? []).slice(-30), { st: 'waiting_balance', at: Date.now() }] }), meta);
+          await cas(env.STORE, key, (x) => (x.status === 'waiting_balance' ? undefined : { ...x, status: 'waiting_balance', lastError: `saldo gerbang ${rec.code} ${have} < ${amount}`, history: [...(x.history ?? []).slice(-30), { st: 'waiting_balance', at: Date.now() }] }), meta);
           continue;
         }
         const batch = await np(env, '/v1/payout', { method: 'POST', bearer: true, body: { ipn_callback_url: `${base}${IPN_PATH}`, withdrawals: [{ address: rec.addr, currency: rec.code, amount, unique_external_id: rec.id, ipn_callback_url: `${base}${IPN_PATH}` }] } });
@@ -568,7 +624,7 @@ export async function adminView(env) {
     cfg: { ...cfg, priceUsd: cfg.priceCents / 100, penaltyPct: cfg.dexReleased ? 0 : PENALTY_BEFORE_DEX, agreementV: AGREEMENT_V },
     ipnUrl: `${env.BASE_URL || 'https://axto.io'}${IPN_PATH}`,
     ready: { api: !!env.NOWPAYMENTS_API_KEY, ipn: !!env.NOWPAYMENTS_IPN_SECRET, payout: payoutReady(env) },
-    totals: { members: accounts.length, heldByMembers: fmtCoins(held), soldViaNowpayments: fmtCoins(sold), boughtBack: fmtCoins(returned), usdIn: usdIn / 100, usdPaidOut: usdOut / 100, queue: queue.length },
+    totals: { members: accounts.length, heldByMembers: fmtCoins(held), soldViaGateway: fmtCoins(sold), presaleSold: fmtCoins((await presaleSold(env)).toString()), boughtBack: fmtCoins(returned), usdIn: usdIn / 100, usdPaidOut: usdOut / 100, queue: queue.length },
     // alamat privat (R2 private/config.json, tidak pernah di repo): wallet buyback & alamat setelmen NOWPayments
     buyback: { address: priv.buyback ?? null, coins: fmtCoins(returned) },
     settlement: priv.nowpaymentsSettlement ?? null,

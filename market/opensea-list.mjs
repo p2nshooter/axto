@@ -26,7 +26,8 @@ import { join } from 'node:path';
 import { createHmac, createDecipheriv } from 'node:crypto';
 import { ethers } from 'ethers';
 import { SHOWCASE_N, showcaseCandidate } from '../engine/src/showcase.js';
-import { OS_COLS, tokenOf, tokenInfo, nextToken } from '../engine/src/opensea.js';
+import { LIST_COLS, STAKE_COL, tokenOfCol, tokenInfo, nextToken } from '../engine/src/opensea.js';
+import { stakeFree, stakeShowcase } from '../engine/src/stake.js';
 
 const NETS = {
   8453: { rpc: 'https://mainnet.base.org', feed: '0x71041dddad3595F9CEd3DcCFBe3D1F4b0a16Bb70', name: 'Base', chain: 'base' },
@@ -47,6 +48,10 @@ const ABI = [
   'function exists(uint256 tokenId) view returns (bool)',
 ];
 
+/** Koleksi hadiah staking (engine/src/stake.js): dikirim wallet toko dengan transferBatch — gas oleh axto.io. */
+const STAKE_ABI = ['function transferBatch(address to, uint256[] tokenIds)', 'function ownerOf(uint256 tokenId) view returns (address)', 'function isApprovedForAll(address owner, address operator) view returns (bool)', 'function setApprovalForAll(address operator, bool approved)'];
+const CONDUIT = '0x1E0049783F008A0085193E00003D00cd54003c71'; // konduit OpenSea (Seaport)
+
 // ---------------------------------------------------------------- I/O sungguhan (R2 lewat wrangler, RPC, OpenSea SDK)
 export function realIO() {
   const tmp = mkdtempSync(join(tmpdir(), 'axto-os-'));
@@ -62,7 +67,17 @@ export function realIO() {
     writeFileSync(f, text);
     execFileSync('npx', ['--yes', 'wrangler@4.156.1', 'r2', 'object', 'put', bucketKey, '--file', f, '--content-type', 'application/json', '--remote'], { stdio: 'pipe' });
   };
-  return { r2get, r2put, sdk: async (wallet, chain) => { const { OpenSeaSDK } = await import('@opensea/sdk'); return new OpenSeaSDK(wallet, { chain, apiKey: process.env.OPENSEA_API_KEY }); } };
+  // API internal worker (HMAC sama dengan contracts/scripts/auto-deploy.mjs): antrean kirim hadiah staking
+  const stakeApi = async (method, path, payload) => {
+    const base = process.env.AXTO_API || 'https://axto.io';
+    const key = process.env.ENGINE_HMAC_KEY || createHmac('sha256', process.env.CLOUDFLARE_API_KEY || 'local').update('axto:ENGINE_HMAC_KEY').digest('hex');
+    const body = payload ? JSON.stringify(payload) : '';
+    const ts = Date.now();
+    const sig = createHmac('sha256', key).update(`${ts}.${body}`).digest('hex');
+    const r = await fetch(`${base}${path}`, { method, headers: { 'content-type': 'application/json', 'x-axto-ts': String(ts), 'x-axto-sig': sig }, body: method === 'GET' ? undefined : body });
+    return r.json();
+  };
+  return { r2get, r2put, stakeApi, sdk: async (wallet, chain) => { const { OpenSeaSDK } = await import('@opensea/sdk'); return new OpenSeaSDK(wallet, { chain, apiKey: process.env.OPENSEA_API_KEY }); } };
 }
 
 const encKey = () => createHmac('sha256', process.env.CLOUDFLARE_API_KEY || 'local').update('axto:DEPLOYER_ENC').digest();
@@ -115,13 +130,32 @@ export async function run({ io = realIO(), chainId: chainIn = Number(process.env
   for (const f of ['from', 'cur', 'out', 'until', 'pend']) st[f] ??= {};
   st.listed ??= 0; st.errors ??= []; st.minted ??= [];
   const save = () => io.r2put(stKey, JSON.stringify(st));
-  const cols = OS_COLS.filter((c) => ethers.isAddress(cfg.collections?.[c.key] ?? ''));
+  // 10 koleksi edisi 1–10 + 3 koleksi 1/1 (pemilik 24 Nov 2026) — koleksi staking TIDAK pernah dilisting
+  const cols = LIST_COLS.filter((c) => ethers.isAddress(cfg.collections?.[c.key] ?? ''));
   const head = await provider.getBlockNumber();
   const fee = await provider.getFeeData();
   const tip = fee.maxPriorityFeePerGas ?? 1_000_000n;
   const maxFee = (fee.maxFeePerGas ?? fee.gasPrice ?? 10_000_000n) * 2n;
   // nonce dikelola sendiri: beberapa transaksi berurutan dalam satu putaran (cetak edisi, teruskan hasil jual)
   let nonce = await provider.getTransactionCount(wallet.address, 'pending');
+
+  // 1b) sisa hadiah staking → pasar (pemilik 24 Nov 2026): begitu staking ditutup, token yang belum pernah diundikan ikut
+  // dilisting harga tetap (1/1, tier). Wallet toko menyetujui konduit OpenSea sekali untuk koleksi staking.
+  let stakePools = null;
+  const stakeAddr0 = cfg.collections?.stake;
+  if (ethers.isAddress(stakeAddr0 ?? '') && io.stakeApi) {
+    const ss = await io.stakeApi('GET', '/internal/stake/stok').catch(() => null);
+    if (ss && ss.open === false && ss.pools) {
+      const scol = new ethers.Contract(stakeAddr0, STAKE_ABI, wallet);
+      if (!(await scol.isApprovedForAll(wallet.address, CONDUIT))) {
+        const t = await scol.setApprovalForAll(CONDUIT, true, { maxFeePerGas: maxFee, maxPriorityFeePerGas: tip, nonce: nonce++ });
+        await t.wait();
+        log(`Staking ditutup: sisa hadiah dilepas ke pasar OpenSea (persetujuan konduit ${t.hash})`);
+      }
+      stakePools = ss.pools;
+      cols.push(STAKE_COL);
+    }
+  }
 
   // 2) penjualan: Transfer keluar dari wallet toko sejak blok terakhir → edisi berikutnya masuk antrean cetak
   const sold = {};
@@ -181,16 +215,44 @@ export async function run({ io = realIO(), chainId: chainIn = Number(process.env
     const works = [];
     let i = 0;
     for (; works.length < window && i < 10_000_000; i += 1) {
-      const w = showcaseCandidate(c.base, i);
-      if (!st.out[k][w]) works.push(w);
+      const w = c.stake ? stakeShowcase(i) : showcaseCandidate(c.base, i);
+      if (!st.out[k][w] && (!c.stake || stakeFree(w, stakePools))) works.push(w);
     }
-    win[k] = works.map((w) => st.cur[k][w] ?? tokenOf(w, 1)).filter((t) => !pend.has(t));
+    win[k] = works.map((w) => st.cur[k][w] ?? tokenOfCol(k, w, 1)).filter((t) => !pend.has(t));
     const keep = new Set(win[k].map(String));
     st.until[k] = Object.fromEntries(Object.entries(st.until[k]).filter(([t]) => keep.has(t)));
     summary[k] = { window: works.length, soldOut: Object.keys(st.out[k]).length, sold: sold[k] ?? 0, minted: minted[k] ?? 0 };
     if (!c.g) io.r2put(`axto-nft-data/os/showcase-${c.base}.json`, JSON.stringify({ c: c.base, ids: works, available: works.length, soldOut: summary[k].soldOut, at: new Date().toISOString() }));
   }
   save();
+
+  // 3b) hadiah staking koin AXTO yang jatuh tempo: kirim ke alamat penerima, gas dari wallet toko (gratis bagi member)
+  status.stake = { sent: 0 };
+  const stakeAddr = cfg.collections?.stake;
+  if (ethers.isAddress(stakeAddr ?? '') && io.stakeApi) {
+    const scol = new ethers.Contract(stakeAddr, STAKE_ABI, wallet);
+    const todo = await io.stakeApi('GET', '/internal/stake/kirim').catch((e) => ({ items: [], error: String(e?.message ?? e) }));
+    for (const it of todo.items ?? []) {
+      if (Date.now() - t0 > budgetMs) break;
+      if (!it.ids?.length || !ethers.isAddress(it.payout ?? '')) continue;
+      const owner0 = String(await scol.ownerOf(it.ids[0]).catch(() => '')).toLowerCase();
+      let tx = null;
+      if (owner0 === wallet.address.toLowerCase()) {
+        const gasLimit = BigInt(it.ids.length) * 60_000n + 80_000n;
+        if ((await provider.getBalance(wallet.address)) < gasLimit * maxFee) { status.stake.waiting = 'gas'; break; }
+        const t = await scol.transferBatch(it.payout, it.ids, { gasLimit, maxFeePerGas: maxFee, maxPriorityFeePerGas: tip, nonce: nonce++ });
+        await t.wait();
+        tx = t.hash;
+      } else if (owner0 !== it.payout.toLowerCase()) {
+        st.errors = [...st.errors.slice(-20), { at: new Date().toISOString(), stake: it.id, e: `pemilik token ${it.ids[0]} bukan wallet toko` }];
+        continue;
+      }
+      // batch yang sudah terkirim (tx null) tetap dicatat agar tidak dikirim ulang
+      await io.stakeApi('POST', '/internal/stake/terkirim', { id: it.id, tier: it.tier, offset: it.offset, count: it.ids.length, tx });
+      status.stake.sent += it.ids.length;
+      log(`Hadiah staking ${it.id}: ${it.ids.length} NFT ${it.tier} → ${it.payout}${tx ? ` (${tx})` : ' (sudah terkirim)'}`);
+    }
+  }
 
   // 6) teruskan hasil penjualan ke treasury, sisakan cadangan gas pencetakan edisi berikutnya
   const bal = await provider.getBalance(wallet.address);

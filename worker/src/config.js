@@ -9,9 +9,9 @@ export const NETWORKS = {
   84532: { name: 'Base Sepolia (uji)', rpc: 'https://sepolia.base.org', usdc: '0x036CbD53842c5426634e7929541eC2318f3dCF7e', feed: '0x4aDC67696bA383F43DD60A9e78F2C97Fbbfc7cb1', opensea: 'base_sepolia', explorer: 'https://sepolia.basescan.org' },
   8453: { name: 'Base', rpc: 'https://mainnet.base.org', usdc: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', feed: '0x71041dddad3595F9CEd3DcCFBe3D1F4b0a16Bb70', opensea: 'base', explorer: 'https://basescan.org' },
 };
-export const COL_KEYS = ['time', 'stamp', 'quran', 'model', 'ex-time', 'ex-stamp', 'ex-quran', 'ex-model', 'hadith', 'ex-hadith', 'g-time', 'g-stamp', 'g-quran', 'g-model', 'g-hadith'];
+export const COL_KEYS = ['time', 'stamp', 'quran', 'model', 'ex-time', 'ex-stamp', 'ex-quran', 'ex-model', 'hadith', 'ex-hadith', 'g-time', 'g-stamp', 'g-quran', 'g-model', 'g-hadith', 'stake', 'one-quran', 'one-hadith', 'one-stamp'];
 /** Koleksi yang ditambahkan belakangan (#49) boleh belum ada saat kontrak pertama disimpan — deployer menambahkannya bertahap. */
-export const LATE_KEYS = ['hadith', 'ex-hadith', 'g-time', 'g-stamp', 'g-quran', 'g-model', 'g-hadith'];
+export const LATE_KEYS = ['hadith', 'ex-hadith', 'g-time', 'g-stamp', 'g-quran', 'g-model', 'g-hadith', 'stake', 'one-quran', 'one-hadith', 'one-stamp'];
 const colVar = (c) => `COLLECTION_${c.replace('-', '_').toUpperCase()}`;
 
 let cache = { at: 0, cfg: null };
