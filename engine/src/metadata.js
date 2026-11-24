@@ -1,7 +1,7 @@
 /**
  * Metadata token (standar OpenSea) + konteks render. Semua deterministik dari dna().
  */
-import { collection, START_USD, OPENSEA_PRICE_USD } from './core.js';
+import { collection, START_USD, OPENSEA_PRICE_USD, kode } from './core.js';
 import { dna, traitNameId } from './dna.js';
 import { SURAH, juzStart, pageStart, globalFromAyah, ayahFromGlobal } from './catalog/quran.js';
 import { timeSvg, timePlayer, TIME_ANIM_CSS } from './render/time.js';
@@ -114,22 +114,21 @@ export async function renderCtx(d, provider = {}) {
 }
 
 export function title(d, ref) {
-  const id = `#${d.tokenId.toLocaleString('en-US')}`;
-  const ex = d.exclusive ? 'Exclusive ' : '';
+  const k = kode(d.key, d.tokenId); // OS-? (OpenSea) · AC-? (eksklusif, koin AXTO) — di depan nama
   const p = d.pick;
   switch (d.kind) {
-    case 'time': return `${ex}AXTO Time ${id} — ${p[1][1]} ${p[0][1]}`;
-    case 'stamp': return `${ex}${p[0][1]} · ${p[1][1]} ${p[6][4]} ${id}`;
-    case 'model': { const m = modelTraits(d); return `${ex}AXTO Model ${id} — ${m[1]} · ${m[2]}`; }
-    case 'hadith': { const r = hadithRef(d); return `${ex}Hadith ${r.nameEn} ${r.number} — ${p[0][1]} ${id}`; }
+    case 'time': return `${k} · AXTO Time — ${p[1][1]} ${p[0][1]}`;
+    case 'stamp': return `${k} · ${p[0][1]} · ${p[1][1]} ${p[6][4]}`;
+    case 'model': { const m = modelTraits(d); return `${k} · AXTO Model — ${m[1]} · ${m[2]}`; }
+    case 'hadith': { const r = hadithRef(d); return `${k} · Hadith ${r.nameEn} ${r.number} — ${p[0][1]}`; }
     case 'quran': {
       const r = ref ?? quranRef(d);
-      if (r.series === 'ayah') return `${ex}Quran ${r.surahLt} ${r.surah}:${r.ayah} — ${p[0][1]} ${id}`;
-      if (r.series === 'page') return `${ex}Mushaf Uthmani Page ${r.page} — ${p[0][1]} ${id}`;
-      if (r.series === 'juz') return `${ex}Quran Juz ${r.juz} — ${p[0][1]} ${id}`;
-      return `${ex}The Complete Quran Mushaf — ${p[2][1]} ${id}`;
+      if (r.series === 'ayah') return `${k} · Quran ${r.surahLt} ${r.surah}:${r.ayah} — ${p[0][1]}`;
+      if (r.series === 'page') return `${k} · Mushaf Uthmani Page ${r.page} — ${p[0][1]}`;
+      if (r.series === 'juz') return `${k} · Quran Juz ${r.juz} — ${p[0][1]}`;
+      return `${k} · The Complete Quran Mushaf — ${p[2][1]}`;
     }
-    default: return id;
+    default: return k;
   }
 }
 

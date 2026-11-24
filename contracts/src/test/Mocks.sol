@@ -82,4 +82,10 @@ contract MockTransferValidator {
         if (caller == from) return; // OTC
         if (!whitelisted[listOf[msg.sender]][caller]) revert CallerMustBeWhitelisted();
     }
+
+    /// @dev Varian ERC-721 (v3): caller, from, to, tokenId.
+    function validateTransfer(address caller, address from, address, uint256) external view {
+        if (caller == from) return; // OTC
+        if (!whitelisted[listOf[msg.sender]][caller]) revert CallerMustBeWhitelisted();
+    }
 }

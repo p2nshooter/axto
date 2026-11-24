@@ -1,7 +1,7 @@
 /** Isi halaman axto.io (server-rendered, dua bahasa manual). */
 import { T, PATHS } from './i18n.js';
 import { esc, altPath } from './html.js';
-import { COLLECTIONS } from '../../engine/src/core.js';
+import { COLLECTIONS, kode } from '../../engine/src/core.js';
 import { seriesOptions } from '../../engine/src/metadata.js';
 import { BANDS, EXCLUSIVE_SUPPLY } from '../../engine/src/editions.js';
 import { seriesLabel, surahInfo, BREAD } from './seo.js';
@@ -131,8 +131,8 @@ export function marketPage(lang, data, f) {
   const modes = [['', m.all], ...Object.entries(m.modes)].map(([k, l]) => `<a href="${altPath('market', lang)}?${q({ mode: k })}"${(f.mode ?? '') === k ? ' aria-current="true"' : ''}>${esc(l)}</a>`).join('');
   const sorts = Object.entries(m.sort).map(([k, l]) => `<a href="${altPath('market', lang)}?${q({ sort: k })}"${f.sort === k ? ' aria-current="true"' : ''}>${esc(l)}</a>`).join('');
   const row = (r) => `<li data-lid="${esc(r.lid)}"><a href="${nftPath(lang, r.c, r.id)}#pasar">
-    <img src="${img(r.c, r.id)}" alt="${esc(collName(lang, r.c))} #${r.id}" loading="lazy" width="300" height="300">
-    <span class="id">#${fmt(r.id, lang)}</span><span class="mode m-${esc(r.mode)}">${esc(m.modes[r.mode] ?? r.mode)}</span>
+    <img src="${img(r.c, r.id)}" alt="${esc(collName(lang, r.c))} ${kode(r.c, r.id)}" loading="lazy" width="300" height="300">
+    <span class="id">${kode(r.c, r.id)}</span><span class="mode m-${esc(r.mode)}">${esc(m.modes[r.mode] ?? r.mode)}</span>
     <span class="price">${esc(r.mode === 'auction' ? m.top : r.mode === 'offer' ? m.min : m.price)}: ${esc(r.price)} AXTO</span>
     <span class="meta">${fmt(r.qty, lang)} ${esc(m.left)} · ${esc(m.seller)} ${esc(r.seller)}</span>
     ${r.mode === 'auction' ? `<time data-countdown="${r.ends}"></time>` : ''}</a></li>`;
@@ -161,7 +161,7 @@ export function collectionPage(lang, c, o) {
   const pub = !COLLECTIONS[c].exclusive;
   // harga di kartu: eksklusif = $1 + sisa edisi (dari 10); publik = harga tetap OpenSea + jumlah edisi
   const tag = (it) => (pub ? `${it.usd ? `<span class="pr">$${fmt(it.usd, lang)}</span>` : ''}${it.ed ? `<span class="ed">${it.ed}×</span>` : ''}` : `<span class="pr">$1</span><span class="ed${it.left === 0 ? ' out' : ''}">${it.left ?? EXCLUSIVE_SUPPLY}/${EXCLUSIVE_SUPPLY}</span>`);
-  const tile = (it) => `<li data-id="${it.id}" data-tier="${it.tier}"${it.gpu ? ` class="g" data-g="${it.g}"` : ''}><a href="${nftPath(lang, c, it.id)}${it.gpu ? '?v=g' : ''}"><img src="${it.gpu ? `/gpu/${c}/${it.id}.png?v=2` : img(c, it.id)}" alt="${esc(it.name)}" loading="lazy" width="300" height="300"><span class="id">${it.gpu ? `G-${fmt(it.g, lang)}` : `#${fmt(it.id, lang)}`}</span><span class="nm">${esc(it.name)}</span><span class="tr t${it.tier}">${esc(TIER_NAMES[lang][it.tier])}</span>${tag(it)}</a></li>`;
+  const tile = (it) => `<li data-id="${it.id}" data-tier="${it.tier}"${it.gpu ? ` class="g" data-g="${it.g}"` : ''}><a href="${nftPath(lang, c, it.id)}${it.gpu ? '?v=g' : ''}"><img src="${it.gpu ? `/gpu/${c}/${it.id}.png?v=2` : img(c, it.id)}" alt="${esc(it.name)}" loading="lazy" width="300" height="300"><span class="id">${it.gpu ? kode(c, it.id, it.g) : kode(c, it.id)}</span><span class="nm">${esc(it.name.replace(/^(OS|AC)-\d+ · /, ''))}</span><span class="tr t${it.tier}">${esc(TIER_NAMES[lang][it.tier])}</span>${tag(it)}</a></li>`;
   const crumbs = o.crumbs ? `<nav class="crumbs" aria-label="breadcrumb">${o.crumbs.map(([n, h], i) => (i < o.crumbs.length - 1 ? `<a href="${h}">${esc(n)}</a>` : `<span aria-current="page">${esc(n)}</span>`)).join(' › ')}</nav>` : '';
   const gpuChip = !/model$/.test(c) ? `<a href="/${lang}/c/${c}?maker=gpu"${o.maker === 'gpu' ? ' aria-current="true"' : ''} class="gchip">${esc(t.opensea.gpu)} <small>${fmt(o.gpuCount ?? 0, lang)}</small></a>` : '';
   const exChips = !pub && gpuChip ? `<nav class="chips" aria-label="G-"><a href="/${lang}/c/${c}"${o.maker !== 'gpu' ? ' aria-current="true"' : ''}>${esc(lang === 'id' ? 'Semua' : 'All')} <small>${fmt(COLLECTIONS[c].max, lang)}</small></a>${gpuChip}</nav>` : '';
@@ -210,19 +210,19 @@ function buyBox(lang, c, id, meta, opensea, info) {
 /** Versi G- di bawah karya: karya G- baru = video animasi buatan GPU; karya G- lama = lukisan GPU aslinya, diam
  * (pemilik 24 Nov 2026: „Series G- yg sudah terlanjur di buat, kembalikan ke gambar aslinya tanpa animasi"). */
 function gpuFigure(lang, c, id, meta, info) {
-  const al = `${esc(meta.name)} — G-${info.gpuSerial}`;
+  const al = `${esc(meta.name)} — ${kode(c, id, info.gpuSerial)}`;
   const media = info.gpuAnim
     ? `<video src="/gpu/${c}/${id}.mp4?v=2" poster="/gpu/${c}/${id}.png?v=2" autoplay muted loop playsinline preload="metadata" width="768" height="768" aria-label="${al}"></video>`
     : `<img src="/gpu/${c}/${id}.png?v=2" alt="${al}" width="768" height="768" loading="lazy">`;
   const kata = info.gpuAnim ? (lang === 'id' ? 'Versi GPU — dilukis & dianimasikan GPU dari DNA karya ini' : 'GPU version — painted & animated by GPU from this work’s DNA') : (lang === 'id' ? 'Versi GPU — dilukis GPU dari DNA karya ini' : 'GPU version — painted by GPU from this work’s DNA');
-  return `<figure class="gpuv"><a href="?v=g">${media}</a><figcaption><b>G-${fmt(info.gpuSerial, lang)}</b> · ${esc(kata)}</figcaption></figure>`;
+  return `<figure class="gpuv"><a href="?v=g">${media}</a><figcaption><b>${kode(c, id, info.gpuSerial)}</b> · ${esc(kata)}</figcaption></figure>`;
 }
 
 function stageHtml(lang, c, id, meta, info) {
   const play = `<iframe src="/play/${c}/${id}" title="${esc(meta.name)}" loading="lazy" allow="autoplay; fullscreen" sandbox="allow-scripts allow-same-origin"></iframe>`;
   if (!info?.gpuSerial) return `<div class="stage">${play}</div>`;
   const g = Boolean(info.gpuFirst);
-  const gl = `G-${fmt(info.gpuSerial, lang)}`;
+  const gl = kode(c, id, info.gpuSerial);
   const tabs = `<nav class="stagetabs" aria-label="${esc(lang === 'id' ? 'Versi karya' : 'Artwork version')}"><a href="?v=g"${g ? ' aria-current="true"' : ''}>${esc(gl)} · ${esc(info.gpuAnim ? (lang === 'id' ? 'Animasi GPU' : 'GPU animation') : (lang === 'id' ? 'Lukisan GPU' : 'GPU painting'))}</a><a href="?v=a"${g ? '' : ' aria-current="true"'}>${esc(lang === 'id' ? 'Animasi asli' : 'Original animation')}</a></nav>`;
   const hidup = `<iframe src="/gplay/${c}/${id}" title="${esc(meta.name)} — ${esc(gl)}" loading="lazy" allow="fullscreen" sandbox="allow-scripts allow-same-origin"></iframe>`;
   return `<div class="stage${g ? ' gstage' : ''}">${g ? hidup : play}</div>${tabs}`;
@@ -406,7 +406,7 @@ export function adminPage(lang, ok) {
   <h2>${id ? 'Toko eksklusif & pasar member' : 'Exclusive shop & member market'}</h2>
   <div data-mk="admin" data-lang="${lang}"><p class="muted">…</p></div>
   <h2>${id ? 'Kontrak (deploy otomatis oleh sistem)' : 'Contracts (deployed automatically by the system)'}</h2>
-  <p>${id ? 'Sistem mendeploy koin AXTO dan 10 koleksi edisi (ERC-1155) dari wallet deployer khusus; kepemilikan langsung ke wallet pemilik. 5 koleksi OpenSea: karya dirilis ke wallet toko sistem (edisi 1–10, harga tetap $1–$10.000) dan dilisting otomatis. 5 koleksi eksklusif: dijual $1/edisi di axto.io, tercetak saat member WD. Royalti 10% ke treasury ditegakkan di rantai untuk semua koleksi.' : 'The system deploys the AXTO coin and 10 edition collections (ERC-1155) from a dedicated deployer wallet; ownership goes straight to the owner wallets. 5 OpenSea collections: works are released to the system store wallet (1–10 editions, fixed $1–$10,000) and listed automatically. 5 exclusive collections: sold at $1/edition on axto.io, minted when members withdraw. A 10% royalty to the treasury is enforced on-chain for every collection.'}</p>
+  <p>${id ? 'Sistem mendeploy koin AXTO dan 15 koleksi dari wallet deployer khusus; kepemilikan langsung ke wallet pemilik. 10 koleksi OpenSea (ERC-721): 5 publik + 5 seri G-, masing-masing 10 juta karya — edisi 1 semua karya (100 juta NFT) tercetak ke wallet toko sistem saat deploy, edisi berikutnya (1–10 per karya menurut kelangkaan, harga tetap $1–$10.000) dicetak otomatis saat edisi sebelumnya laku dan dilisting otomatis. 5 koleksi eksklusif (ERC-1155): dijual $1/edisi di axto.io, tercetak saat member WD. Royalti 10% ke treasury ditegakkan di rantai untuk semua koleksi.' : 'The system deploys the AXTO coin and 15 collections from a dedicated deployer wallet; ownership goes straight to the owner wallets. 10 OpenSea collections (ERC-721): 5 public + 5 G- series, 10 million works each — edition 1 of every work (100 million NFTs) is minted to the system store wallet at deploy, later editions (1–10 per work by rarity, fixed $1–$10,000) are minted automatically when the previous one sells and are listed automatically. 5 exclusive collections (ERC-1155): sold at $1/edition on axto.io, minted when members withdraw. A 10% royalty to the treasury is enforced on-chain for every collection.'}</p>
   <div id="deploy" data-lang="${lang}"><p class="muted">…</p></div>
   <section class="np" data-np="admin"><p class="muted">…</p></section></section>`;
 }

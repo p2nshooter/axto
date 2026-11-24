@@ -33,7 +33,7 @@ export function gpuPlayer(d, meta, ctx, o) {
     }
   }
   const hint = 'Geser untuk memutar · ketuk untuk jeda';
-  return `<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(meta.name)} — G-${o.g}</title><style${n}>html,body{margin:0;height:100%;background:#05060c;overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none}
+  return `<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(meta.name)} — ${esc(o.kode ?? `G-${o.g}`)}</title><style${n}>html,body{margin:0;height:100%;background:#05060c;overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none}
 #s{position:absolute;left:50%;top:50%;width:100vmin;height:100vmin;transform:translate(-50%,-50%);perspective:1100px;cursor:grab}
 #s:active{cursor:grabbing}
 #k{position:absolute;inset:3%;transform-style:preserve-3d;transform:rotateX(var(--rx,0deg)) rotateY(var(--ry,0deg));transition:transform .35s cubic-bezier(.2,.7,.2,1);border-radius:14px;overflow:hidden;box-shadow:0 24px 60px rgba(0,0,0,.55)}
@@ -44,7 +44,7 @@ video{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;backgr
 .ht{position:absolute;left:50%;bottom:5%;transform:translateX(-50%);padding:.35em .9em;border-radius:999px;background:rgba(5,6,12,.72);color:#e8e6df;font:500 clamp(10px,2.2vmin,14px) system-ui;pointer-events:none;transition:opacity .6s;white-space:nowrap}
 .jeda .ht::after{content:' · dijeda'}
 @media (prefers-reduced-motion:reduce){#k{transition:none}}
-${css}</style></head><body><div id="s" tabindex="0" role="application" aria-label="${esc(meta.name)} — G-${o.g}. ${hint}"><div id="k"><video id="v" src="${esc(o.video)}" poster="${esc(o.img)}" autoplay muted loop playsinline preload="auto"></video>${panel}</div><span class="g">G-${o.g}</span><div class="bar"><i id="pr"></i></div><div class="ht" id="ht">${hint}</div></div>
+${css}</style></head><body><div id="s" tabindex="0" role="application" aria-label="${esc(meta.name)} — ${esc(o.kode ?? `G-${o.g}`)}. ${hint}"><div id="k"><video id="v" src="${esc(o.video)}" poster="${esc(o.img)}" autoplay muted loop playsinline preload="auto"></video>${panel}</div><span class="g">${esc(o.kode ?? `G-${o.g}`)}</span><div class="bar"><i id="pr"></i></div><div class="ht" id="ht">${hint}</div></div>
 <script${n}>(()=>{const S=document.getElementById('s'),K=document.getElementById('k'),V=document.getElementById('v'),PR=document.getElementById('pr'),HT=document.getElementById('ht'),PN=document.getElementById('pn');
 const diam=matchMedia('(prefers-reduced-motion: reduce)').matches;
 const miring=(x,y)=>{if(diam)return;K.style.setProperty('--ry',(x*16).toFixed(2)+'deg');K.style.setProperty('--rx',(-y*16).toFixed(2)+'deg')};
@@ -77,7 +77,7 @@ V.play().catch(()=>{});})();</script></body></html>`;
  * hanya lukisan GPU aslinya, diam — tanpa video, tanpa skrip, tanpa jarum/panel/teks tempelan.
  */
 export function gpuGambar(meta, o) {
-  return `<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(meta.name)} — G-${o.g}</title><style${o.nonce ? ` nonce="${o.nonce}"` : ''}>html,body{margin:0;height:100%;background:#05060c;overflow:hidden}
+  return `<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(meta.name)} — ${esc(o.kode ?? `G-${o.g}`)}</title><style${o.nonce ? ` nonce="${o.nonce}"` : ''}>html,body{margin:0;height:100%;background:#05060c;overflow:hidden}
 img{position:absolute;left:50%;top:50%;width:100vmin;height:100vmin;transform:translate(-50%,-50%);object-fit:contain}
-.g{position:absolute;left:calc(50% - 50vmin + 2.5vmin);top:calc(50% - 50vmin + 2.5vmin);padding:.25em .75em;border-radius:999px;background:rgba(13,42,32,.86);color:#9be3c4;font:700 clamp(10px,2.4vmin,15px) system-ui;border:1px solid #2a5a52}</style></head><body><img src="${esc(o.img)}" alt="${esc(meta.name)} — G-${o.g}"><span class="g">G-${o.g}</span></body></html>`;
+.g{position:absolute;left:calc(50% - 50vmin + 2.5vmin);top:calc(50% - 50vmin + 2.5vmin);padding:.25em .75em;border-radius:999px;background:rgba(13,42,32,.86);color:#9be3c4;font:700 clamp(10px,2.4vmin,15px) system-ui;border:1px solid #2a5a52}</style></head><body><img src="${esc(o.img)}" alt="${esc(meta.name)} — ${esc(o.kode ?? `G-${o.g}`)}"><span class="g">${esc(o.kode ?? `G-${o.g}`)}</span></body></html>`;
 }

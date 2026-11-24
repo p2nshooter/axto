@@ -19,13 +19,25 @@ interface ICreatorToken {
     function setTransferValidator(address validator) external;
 }
 
+/// @notice Bagian CreatorTokenTransferValidator v3 (Limit Break, terverifikasi di Base 0x721C…cd1B) untuk ERC-721.
 interface ITransferValidator {
-    function validateTransfer(address caller, address from, address to, uint256 tokenId) external view;
+    function validateTransfer(address caller, address from, address to, uint256 tokenId) external;
+    function createList(string calldata name) external returns (uint120 id);
+    function addAccountsToWhitelist(uint120 id, address[] calldata accounts) external;
+    function applyListToCollection(address collection, uint120 id) external;
+    function setTokenTypeOfCollection(address collection, uint16 tokenType) external;
+    function isAccountWhitelistedByCollection(address collection, address account) external view returns (bool);
 }
 
 /**
  * @title AxtoCollection
- * @notice Koleksi 1/1 AXTO (TIME, STAMP, QURAN, MODEL, dan edisi eksklusif). Token lahir lewat:
+ * @notice Koleksi OpenSea AXTO (ERC-721 + ERC-2309). Keputusan pemilik 24 Nov 2026: 10 koleksi × 10 juta karya (5 publik +
+ *  5 seri G-), setiap karya 1–10 edisi (harga $1–$10.000 menurut kelangkaan), dana deploy hanya ±0,0015 ETH:
+ *  - EDISI 1 semua karya tercetak saat deploy (premint, token 1..stride) ke wallet toko → langsung tampil di OpenSea;
+ *  - edisi berikutnya dicetak otomatis oleh minter sistem saat edisi sebelumnya laku (gas dari hasil penjualan).
+ *    Nomor token edisi e karya k = (e − 1) × stride + k — tanpa penyimpanan tambahan; edisi e hanya bisa dicetak bila
+ *    edisi e − 1 karya yang sama sudah ada (urut, tidak bisa melompat), maksimal 10 edisi (maxSupply = 10 × stride).
+ *  Token lahir lewat:
  *  - premint saat deploy (koleksi publik, perintah pemilik #30): token 1..premint langsung milik wallet admin (kustodi)
  *    → tampil di profil OpenSea pemilik; diumumkan dengan event ERC-2309 `ConsecutiveTransfer` (maks. 5.000 per event,
  *    hanya di konstruktor sesuai ERC-721). AuctionHouse diberi izin (operator) sejak konstruktor untuk memindahkan token
@@ -45,6 +57,8 @@ contract AxtoCollection is ERC721, ERC2981, Ownable2Step, Pausable, EIP712, ICre
     uint256 public immutable premint;
     address public immutable custody;
     uint256 public constant CONSECUTIVE_BATCH = 5000;
+    /// @notice Jumlah karya per koleksi (= premint, edisi 1); 0 = tanpa aturan edisi.
+    uint256 public immutable editionStride;
     uint256 public totalMinted;
     address public signer;
     bool public metadataFrozen;
@@ -54,6 +68,8 @@ contract AxtoCollection is ERC721, ERC2981, Ownable2Step, Pausable, EIP712, ICre
     string private _base;
     string private _contractURI;
     address private _validator;
+    /// @notice Daftar marketplace pembayar royalti milik koleksi ini di validator (0 = belum dibuat).
+    uint120 public operatorListId;
 
     event SignerUpdated(address signer);
     event MinterUpdated(address minter, bool allowed);
@@ -67,6 +83,7 @@ contract AxtoCollection is ERC721, ERC2981, Ownable2Step, Pausable, EIP712, ICre
     error VoucherUsed();
     error BadSignature();
     error Frozen();
+    error PreviousEditionMissing();
 
     struct Config {
         string name;
@@ -80,12 +97,18 @@ contract AxtoCollection is ERC721, ERC2981, Ownable2Step, Pausable, EIP712, ICre
         uint256 premint; // jumlah token 1..premint yang dicetak saat deploy
         address operator; // AuctionHouse: diizinkan memindahkan token kustodi ke pemenang yang membayar; boleh 0
         address signer; // signer voucher WD (edisi eksklusif); boleh 0
+        address minter; // minter sistem (wallet toko) untuk edisi berikutnya; boleh 0
+        uint256 editionStride; // jumlah karya (= premint); 0 = tanpa aturan edisi
+        address validator; // CreatorTokenTransferValidator v3: royalti 10% ditegakkan sejak deploy; 0 = tanpa penegakan
+        address[] operators; // marketplace yang diizinkan (konduit OpenSea, Payment Processor)
     }
 
     /// @notice Semua pengaturan di konstruktor → owner (wallet admin) tidak perlu mengirim transaksi apa pun.
     constructor(Config memory c) ERC721(c.name, c.symbol) Ownable(c.owner) EIP712(c.name, "1") {
         require(c.maxSupply > 0 && c.royaltyReceiver != address(0) && c.premint <= c.maxSupply, "config");
         require(c.premint == 0 || c.custody != address(0), "custody");
+        require(c.editionStride == 0 || (c.editionStride == c.premint && c.maxSupply % c.editionStride == 0 && c.maxSupply / c.editionStride <= 10), "edisi");
+        editionStride = c.editionStride;
         maxSupply = c.maxSupply;
         premint = c.premint;
         custody = c.custody;
@@ -104,6 +127,29 @@ contract AxtoCollection is ERC721, ERC2981, Ownable2Step, Pausable, EIP712, ICre
             if (c.operator != address(0) && c.operator != c.custody) _setApprovalForAll(c.custody, c.operator, true);
         }
         if (c.signer != address(0)) emit SignerUpdated(c.signer);
+        if (c.minter != address(0)) {
+            minters[c.minter] = true;
+            emit MinterUpdated(c.minter, true);
+        }
+        if (c.validator != address(0) && c.validator.code.length > 0 && c.operators.length > 0) _setupValidator(c.validator, c.operators);
+    }
+
+    /// @dev Royalti ditegakkan sejak deploy (pemilik 23 Nov 2026: „ketika di wd … dijual ke manapun, axto.io tetap
+    ///      mendapatkan 10%"): buat daftar marketplace milik koleksi, terapkan, verifikasi; hanya bila semua berhasil
+    ///      penegakan diaktifkan. Tidak pernah membatalkan deploy (bila gagal, koleksi tetap jalan tanpa penegakan).
+    function _setupValidator(address v, address[] memory ops) private {
+        ITransferValidator val = ITransferValidator(v);
+        uint120 id;
+        try val.createList("AXTO royalty-enforcing marketplaces") returns (uint120 x) { id = x; } catch { return; }
+        try val.addAccountsToWhitelist(id, ops) {} catch { return; }
+        try val.applyListToCollection(address(this), id) {} catch { return; }
+        try val.setTokenTypeOfCollection(address(this), 721) {} catch {}
+        for (uint256 i; i < ops.length; ++i) {
+            try val.isAccountWhitelistedByCollection(address(this), ops[i]) returns (bool ok) { if (!ok) return; } catch { return; }
+        }
+        operatorListId = id;
+        _validator = v;
+        emit TransferValidatorUpdated(address(0), v);
     }
 
     /// @dev Token premint yang belum pernah berpindah tetap milik kustodi.
@@ -140,6 +186,7 @@ contract AxtoCollection is ERC721, ERC2981, Ownable2Step, Pausable, EIP712, ICre
 
     function _mintChecked(address to, uint256 tokenId) private {
         if (tokenId == 0 || tokenId > maxSupply) revert BadTokenId();
+        if (editionStride != 0 && tokenId > editionStride && _ownerOf(tokenId - editionStride) == address(0)) revert PreviousEditionMissing();
         unchecked {
             ++totalMinted;
         }
@@ -148,6 +195,13 @@ contract AxtoCollection is ERC721, ERC2981, Ownable2Step, Pausable, EIP712, ICre
 
     function exists(uint256 tokenId) external view returns (bool) {
         return _ownerOf(tokenId) != address(0);
+    }
+
+    /// @notice Karya (1..stride) dan nomor edisi (1..10) sebuah token.
+    function editionInfo(uint256 tokenId) external view returns (uint256 work, uint256 edition) {
+        if (editionStride == 0 || tokenId == 0 || tokenId > maxSupply) revert BadTokenId();
+        work = ((tokenId - 1) % editionStride) + 1;
+        edition = (tokenId - 1) / editionStride + 1;
     }
 
     // ---------------------------------------------------------------- metadata
@@ -209,7 +263,7 @@ contract AxtoCollection is ERC721, ERC2981, Ownable2Step, Pausable, EIP712, ICre
     }
 
     function getTransferValidationFunction() external pure returns (bytes4, bool) {
-        return (ITransferValidator.validateTransfer.selector, true);
+        return (ITransferValidator.validateTransfer.selector, false);
     }
 
     function setTransferValidator(address v) external onlyOwner {
@@ -219,7 +273,9 @@ contract AxtoCollection is ERC721, ERC2981, Ownable2Step, Pausable, EIP712, ICre
 
     function _update(address to, uint256 tokenId, address auth) internal override returns (address from) {
         from = _ownerOf(tokenId);
-        if (from != address(0) && to != address(0) && _validator != address(0)) {
+        // kirim langsung oleh pemilik token sendiri tetap boleh (pemilik: „Biarin TF langsung antar wallet mah");
+        // perpindahan oleh marketplace diperiksa validator: hanya marketplace pembayar royalti
+        if (from != address(0) && to != address(0) && _validator != address(0) && msg.sender != from && msg.sender != _validator) {
             ITransferValidator(_validator).validateTransfer(msg.sender, from, to, tokenId);
         }
         return super._update(to, tokenId, auth);

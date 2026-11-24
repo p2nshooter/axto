@@ -1,8 +1,8 @@
 /**
- * Uji mesin listing OpenSea (desain akhir 23 Nov 2026: edisi 1–10, harga tetap $1–$10.000, tanpa lelang) di ganache:
- * wallet toko memegang edisi yang dirilis kontrak AxtoEditions, listing dikirim lewat SDK tiruan (tanpa jaringan),
- * stok dibaca dari saldo on-chain, karya habis hilang dari etalase, stok menipis → rilis otomatis, hasil jual → treasury
- * dari R2 privat.
+ * Uji mesin listing OpenSea (keputusan pemilik 24 Nov 2026: 10 koleksi ERC-721 × 10 juta karya, edisi 1 tercetak saat
+ * deploy, edisi berikutnya otomatis saat laku, harga tetap $1–$10.000, tanpa lelang) di ganache: kontrak AxtoCollection
+ * sungguhan dengan premint 10 juta, listing lewat SDK tiruan (tanpa jaringan), penjualan dibaca dari event Transfer,
+ * edisi berikutnya dicetak wallet toko, karya habis diganti calon berikutnya, hasil jual → treasury dari R2 privat.
  */
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -10,8 +10,9 @@ import { readFileSync } from 'node:fs';
 import { createHmac, createCipheriv, randomBytes } from 'node:crypto';
 import ganache from 'ganache';
 import { ethers } from 'ethers';
-import { run, usdToEth, usdToWei, listingFor, RELEASE_LOW, RELEASE_STEP } from '../opensea-list.mjs';
-import { edition, designOf, releaseSupplies, BANDS } from '../../engine/src/editions.js';
+import { run, usdToEth, usdToWei, listingFor, RESERVE } from '../opensea-list.mjs';
+import { tokenOf, tokenInfo, WORKS } from '../../engine/src/opensea.js';
+import { showcaseCandidate } from '../../engine/src/showcase.js';
 
 const art = (n) => JSON.parse(readFileSync(new URL(`../../contracts/out/${n}.json`, import.meta.url), 'utf8'));
 const seal = (pk) => {
@@ -23,8 +24,8 @@ const seal = (pk) => {
 };
 const TREASURY = '0x' + '7e'.repeat(20); // fiktif — alamat asli hanya ada di R2 privat
 const CONDUIT = '0x1E0049783F008A0085193E00003D00cd54003c71';
-const FIRST = RELEASE_LOW + 50; // rilis awal kecil agar tes cepat (produksi: 5.000)
-let server, provider, deployer, store, buyer, col, feed, R2, posted;
+const WIN = 40; // karya terlisting per koleksi di uji (produksi 5.000)
+let server, provider, deployer, store, buyer, col, gcol, feed, R2, posted;
 
 before(async () => {
   delete process.env.CLOUDFLARE_API_KEY;
@@ -33,17 +34,16 @@ before(async () => {
   await server.listen(18546);
   provider = new ethers.JsonRpcProvider('http://127.0.0.1:18546');
   [deployer, store, buyer] = [0, 1, 2].map((i) => ethers.HDNodeWallet.fromPhrase(mnemonic, undefined, `m/44'/60'/0'/0/${i}`).connect(provider));
-  let n = await provider.getTransactionCount(deployer.address, 'latest');
-  const f = (name) => new ethers.ContractFactory(art(name).abi, art(name).bytecode, deployer);
-  col = await (await f('AxtoEditions').deploy({ name: 'AXTO Time', symbol: 'AXTIME', owner: buyer.address, royaltyReceiver: TREASURY, baseURI: 'https://axto.io/api/edition/time/', contractURI: 'https://axto.io/api/contract/time', custody: store.address, operator: CONDUIT, releaser: deployer.address, signer: ethers.ZeroAddress, maxId: 10_000_000, editionCap: 0, validator: ethers.ZeroAddress, operators: [] }, { nonce: n++ })).waitForDeployment();
-  for (let from = 1; from <= FIRST; from += 2500) await (await col.release(releaseSupplies('time', from, Math.min(2500, FIRST - from + 1)), { nonce: n++ })).wait();
-  feed = await (await f('MockFeed').deploy(2500n * 10n ** 8n, { nonce: n++ })).waitForDeployment();
-  const cfg = JSON.stringify({ chainId: 8453, standard: 'erc1155', released: { time: FIRST }, store: store.address, collections: { time: await col.getAddress() } });
+  const f = new ethers.ContractFactory(art('AxtoCollection').abi, art('AxtoCollection').bytecode, deployer);
+  const cfg721 = (k, name, sym) => ({ name, symbol: sym, maxSupply: WORKS * 10, owner: buyer.address, royaltyReceiver: TREASURY, baseURI: `https://axto.io/api/token/${k}/`, contractURI: `https://axto.io/api/contract/${k}`, custody: store.address, premint: WORKS, operator: CONDUIT, signer: ethers.ZeroAddress, minter: store.address, editionStride: WORKS, validator: ethers.ZeroAddress, operators: [] });
+  col = await (await f.deploy(cfg721('time', 'AXTO Time', 'AXTIME'), { gasLimit: 30_000_000 })).waitForDeployment();
+  gcol = await (await f.deploy(cfg721('g-time', 'AXTO G- Time', 'AXGTIME'), { gasLimit: 30_000_000 })).waitForDeployment();
+  feed = await (await new ethers.ContractFactory(art('MockFeed').abi, art('MockFeed').bytecode, deployer).deploy(2500n * 10n ** 8n)).waitForDeployment();
+  const cfg = JSON.stringify({ chainId: 8453, standard: 'erc721-editions', works: WORKS, store: store.address, collections: { time: await col.getAddress(), 'g-time': await gcol.getAddress() } });
   R2 = {
     'axto-nft-data/cfg/contracts-8453.json': cfg,
     'axto-nft-data/cfg/active.json': cfg,
     'axto-vault-data/store.enc': seal(store.privateKey),
-    'axto-vault-data/deployer.enc': seal(deployer.privateKey),
     'axto-nft-data/private/config.json': JSON.stringify({ wallets: { treasury: TREASURY } }),
   };
   posted = [];
@@ -56,101 +56,84 @@ const io = () => ({
   feed: null,
   fakeListing: { createBulkListings: async ({ listings, accountAddress }) => { posted.push(...listings.map((l) => ({ ...l, accountAddress }))); return { successful: listings, failed: [] }; } },
 });
-const go = async (extra = {}) => { const x = io(); x.feed = await feed.getAddress(); return run({ io: x, chainId: 8453, rpc: 'http://127.0.0.1:18546', log: () => {}, ...extra }); };
+const go = async (extra = {}) => { const x = io(); x.feed = await feed.getAddress(); return run({ io: x, chainId: 8453, rpc: 'http://127.0.0.1:18546', log: () => {}, window: WIN, ...extra }); };
+const winWorks = (n = WIN) => Array.from({ length: n }, (_, i) => showcaseCandidate('time', i));
 
-test('USD → ETH dibulatkan ke atas 6 desimal; harga total habis dibagi jumlah edisi (beli sebagian sah)', () => {
+test('USD → ETH dibulatkan ke atas 6 desimal; listing ERC-721 satu token, harga dari edisi karyanya', () => {
   assert.equal(usdToEth(10, 2500n * 10n ** 8n), '0.004');
   assert.equal(usdToEth(25, 3000n * 10n ** 8n), '0.008334');
   assert.equal(usdToEth(1000, 1700n * 10n ** 8n), '0.588236');
-  const l = listingFor('time', '0x' + '11'.repeat(20), 3, 7, 3000n * 10n ** 8n, 1);
-  const wei = ethers.parseEther(l.amount);
-  assert.equal(wei % 7n, 0n);
-  assert.equal(wei / 7n, usdToWei(edition('time', designOf('time', 3)).priceUsd, 3000n * 10n ** 8n));
-  for (const bps of [50n, 100n, 250n, 1000n]) assert.equal(((wei * bps) / 10_000n) % 7n, 0n, `biaya ${bps} bps tetap bulat per satuan`);
+  const t = tokenOf(42, 1);
+  const l = listingFor('g-quran', '0x' + '11'.repeat(20), t, 3000n * 10n ** 8n, 1);
+  assert.deepEqual(l.asset, { tokenAddress: '0x' + '11'.repeat(20), tokenId: String(t) });
+  assert.equal(ethers.parseEther(l.amount), usdToWei(tokenInfo('g-quran', t).priceUsd, 3000n * 10n ** 8n));
+  assert.throws(() => listingFor('time', '0x' + '11'.repeat(20), 0, 3000n * 10n ** 8n, 1));
 });
 
-test('putaran pertama: semua karya rilis dilisting harga tetap, quantity = edisi, ditandatangani wallet toko', async () => {
+test('putaran pertama: edisi 1 karya etalase (urutan acak) dilisting harga tetap di kedua koleksi, ditandatangani wallet toko', async () => {
   const r = await go({ budgetMs: 60_000 });
+  assert.equal(r.made, WIN * 2);
   const show = JSON.parse(R2['axto-nft-data/os/showcase-time.json']);
-  assert.equal(show.released, FIRST);
-  assert.equal(show.available, FIRST);
-  assert.equal(show.ids.length, Math.min(FIRST, 5000));
-  assert.deepEqual(show.ids.slice(0, 20), Array.from({ length: 20 }, (_, i) => designOf('time', i + 1)));
-  assert.equal(r.made, FIRST);
-  assert.equal(r.collections.time.soldUnits, 0);
-  assert.deepEqual(r.releasedNow, {});
-  for (const l of posted.slice(0, 60)) {
-    const k = Number(l.asset.tokenId);
-    const e = edition('time', designOf('time', k));
-    assert.equal(l.accountAddress, store.address);
-    assert.equal(l.quantity, e.supply);
-    assert.equal(l.amount, ethers.formatEther(usdToWei(e.priceUsd, 2500n * 10n ** 8n) * BigInt(e.supply)));
-    assert.ok(BANDS[e.rank].price.includes(e.priceUsd));
-    assert.ok(l.expirationTime > Date.now() / 1000 + 29 * 86400);
-    assert.equal(l.priceUsd, undefined, 'hanya parameter SDK yang dikirim');
+  assert.deepEqual(show.ids, winWorks());
+  assert.equal(R2['axto-nft-data/os/showcase-g-time.json'], undefined, 'etalase situs hanya untuk koleksi publik');
+  const mine = posted.filter((p) => p.asset.tokenAddress === col.target);
+  assert.deepEqual(mine.map((p) => Number(p.asset.tokenId)), winWorks().map((w) => tokenOf(w, 1)));
+  assert.ok(posted.every((p) => p.accountAddress === store.address && Number(p.amount) > 0));
+  assert.equal(JSON.parse(R2['axto-nft-data/cfg/opensea.json']).step, 'berjalan');
+  posted.length = 0;
+  assert.equal((await go()).made, 0, 'putaran berikutnya tidak melisting ulang');
+});
+
+test('laku di OpenSea: edisi berikutnya dicetak & dilisting; karya yang edisi terakhirnya laku diganti calon berikutnya', async () => {
+  const works = winWorks();
+  const multi = works.find((w) => tokenInfo('time', tokenOf(w, 1)).supply >= 2);
+  // karya dengan edisi 1 saja (Mahakarya) — bila tidak ada di etalase uji, pakai edisi terakhir karya multi
+  const single = works.find((w) => tokenInfo('time', tokenOf(w, 1)).supply === 1);
+  const asStore = col.connect(store);
+  await (await asStore.transferFrom(store.address, buyer.address, tokenOf(multi, 1))).wait(); // seperti eksekusi order OpenSea
+  if (single) await (await asStore.transferFrom(store.address, buyer.address, tokenOf(single, 1))).wait();
+  await buyer.sendTransaction({ to: store.address, value: ethers.parseEther('0.01') }); // hasil penjualan masuk wallet toko
+  posted.length = 0;
+  const r = await go({ budgetMs: 60_000 });
+  assert.equal(r.sold.time, single ? 2 : 1);
+  assert.equal(r.minted.time, 1);
+  assert.equal(await col.ownerOf(tokenOf(multi, 2)), store.address, 'edisi 2 tercetak ke wallet toko');
+  const ids = posted.filter((p) => p.asset.tokenAddress === col.target).map((p) => Number(p.asset.tokenId));
+  assert.ok(ids.includes(tokenOf(multi, 2)), 'edisi 2 langsung dilisting');
+  const show = JSON.parse(R2['axto-nft-data/os/showcase-time.json']);
+  if (single) {
+    assert.ok(!show.ids.includes(single), 'karya habis keluar dari etalase');
+    assert.equal(show.ids.length, WIN);
+    assert.ok(ids.includes(tokenOf(showcaseCandidate('time', WIN), 1)), 'diganti calon berikutnya');
   }
-  const status = JSON.parse(R2['axto-nft-data/cfg/opensea.json']);
-  assert.equal(status.step, 'berjalan');
-  assert.equal(status.store, store.address);
-  assert.equal(status.listedTotal, FIRST);
-  // putaran berikutnya: tidak ada yang perlu diperbarui
-  posted = [];
-  assert.equal((await go()).made, 0);
+  // hasil penjualan → treasury, cadangan gas cetak tetap di wallet toko
+  assert.ok(r.swept && Number(r.swept.eth) > 0);
+  const left = await provider.getBalance(store.address);
+  assert.ok(left >= RESERVE && left < RESERVE + ethers.parseEther('0.001'), `sisa ${ethers.formatEther(left)}`);
 });
 
-test('terjual di OpenSea: edisi berkurang, karya habis keluar dari etalase, stok menipis → rilis otomatis, hasil jual → treasury', async () => {
-  await (await buyer.sendTransaction({ to: store.address, value: ethers.parseEther('0.05') })).wait(); // gas uji (di dunia nyata dibayar pembeli)
-  const C = col.connect(store);
-  let sn = await provider.getTransactionCount(store.address, 'latest'); // nonce eksplisit (cache RPC ethers 250 ms)
-  const k1 = 1; const s1 = edition('time', designOf('time', k1)).supply;
-  const k2 = 2; const s2 = edition('time', designOf('time', k2)).supply;
-  await (await C.safeTransferFrom(store.address, buyer.address, k1, s1, '0x', { nonce: sn++ })).wait(); // habis
-  await (await C.safeTransferFrom(store.address, buyer.address, k2, 1, '0x', { nonce: sn++ })).wait(); // terjual 1 edisi
-  // habiskan 60 karya lagi agar tersedia < RELEASE_LOW → rilis berikutnya
-  const ids = []; const amts = [];
-  for (let k = 3; k <= 62; k += 1) { ids.push(k); amts.push(edition('time', designOf('time', k)).supply); }
-  await (await C.safeBatchTransferFrom(store.address, buyer.address, ids, amts, '0x', { nonce: sn++ })).wait();
-  await (await buyer.sendTransaction({ to: store.address, value: ethers.parseEther('0.01') })).wait(); // hasil jual masuk
-  const bal = async (a) => BigInt(await provider.send('eth_getBalance', [a, 'latest']));
-  const before = await bal(TREASURY);
-  posted = [];
-  const r = await go({ budgetMs: 60_000 });
-  assert.equal(r.releasedNow.time, RELEASE_STEP);
-  assert.equal(Number(await col.released()), FIRST + RELEASE_STEP);
-  const show = JSON.parse(R2['axto-nft-data/os/showcase-time.json']);
-  assert.equal(show.released, FIRST + RELEASE_STEP);
-  assert.equal(show.available, FIRST + RELEASE_STEP - 61);
-  assert.ok(!show.ids.includes(designOf('time', k1)), 'karya habis keluar dari etalase');
-  assert.ok(show.ids.includes(designOf('time', k2)), 'karya tersisa tetap di etalase');
-  assert.equal(r.collections.time.soldUnits, s1 + 1 + amts.reduce((a, b) => a + b, 0));
-  // karya baru langsung dilisting; karya lama tidak dilisting ulang (order Seaport menerima beli sebagian)
-  assert.equal(posted.length, RELEASE_STEP);
-  assert.ok(posted.every((l) => Number(l.asset.tokenId) > FIRST));
-  // jumlah rilis tercatat untuk worker (peta karya → token id)
-  assert.equal(JSON.parse(R2['axto-nft-data/cfg/active.json']).released.time, FIRST + RELEASE_STEP);
-  assert.equal(JSON.parse(R2['axto-nft-data/cfg/contracts-8453.json']).released.time, FIRST + RELEASE_STEP);
-  assert.ok(r.swept && Number(r.swept.eth) > 0.009, JSON.stringify(r.swept));
-  assert.ok((await bal(TREASURY)) - before > ethers.parseEther('0.009'));
-});
-
-test('admin menjeda listing: stok & etalase tetap diproses, tidak ada listing baru', async () => {
+test('edisi terakhir: tidak ada edisi ke-(supply+1); admin menjeda listing; tanpa kontrak ERC-721 hanya menunggu', async () => {
+  const works = winWorks();
+  const w = works.find((x) => tokenInfo('time', tokenOf(x, 1)).supply === 2 || tokenInfo('time', tokenOf(x, 1)).supply === 3);
+  if (w) {
+    const s = tokenInfo('time', tokenOf(w, 1)).supply;
+    const asStore = col.connect(store);
+    for (let e = 1; e <= s; e += 1) {
+      if (!(await col.exists(tokenOf(w, e)))) await go();
+      await (await asStore.transferFrom(store.address, buyer.address, tokenOf(w, e))).wait();
+      await (await buyer.sendTransaction({ to: store.address, value: ethers.parseEther('0.01') })).wait(); // hasil jual = gas cetak
+    }
+    await go();
+    assert.equal(await col.exists(tokenOf(w, s + 1)), false, 'tidak melebihi jumlah edisi karya');
+    assert.ok(!JSON.parse(R2['axto-nft-data/os/showcase-time.json']).ids.includes(w));
+  }
   R2['axto-nft-data/cfg/opensea-pause.json'] = JSON.stringify({ paused: true });
-  posted = [];
-  const r = await go();
-  assert.equal(r.waiting, 'paused');
+  posted.length = 0;
+  assert.equal((await go()).waiting, 'paused');
   assert.equal(posted.length, 0);
-  assert.ok(R2['axto-nft-data/os/showcase-time.json']);
-  assert.match(JSON.parse(R2['axto-nft-data/cfg/opensea.json']).step, /dijeda/);
   delete R2['axto-nft-data/cfg/opensea-pause.json'];
-});
-
-test('tanpa kontrak edisi aktif: hanya status menunggu, tidak ada listing', async () => {
-  const saved = R2['axto-nft-data/cfg/contracts-8453.json'];
-  delete R2['axto-nft-data/cfg/contracts-8453.json'];
-  posted = [];
-  assert.equal((await go()).waiting, 'contracts');
-  R2['axto-nft-data/cfg/contracts-8453.json'] = JSON.stringify({ ...JSON.parse(saved), standard: 'erc721' });
+  const old = R2['axto-nft-data/cfg/contracts-8453.json'];
+  R2['axto-nft-data/cfg/contracts-8453.json'] = JSON.stringify({ ...JSON.parse(old), standard: 'erc1155' });
   assert.equal((await go()).waiting, 'standard');
-  assert.equal(posted.length, 0);
-  R2['axto-nft-data/cfg/contracts-8453.json'] = saved;
+  R2['axto-nft-data/cfg/contracts-8453.json'] = old;
 });

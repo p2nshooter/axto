@@ -9,9 +9,9 @@ export const NETWORKS = {
   84532: { name: 'Base Sepolia (uji)', rpc: 'https://sepolia.base.org', usdc: '0x036CbD53842c5426634e7929541eC2318f3dCF7e', feed: '0x4aDC67696bA383F43DD60A9e78F2C97Fbbfc7cb1', opensea: 'base_sepolia', explorer: 'https://sepolia.basescan.org' },
   8453: { name: 'Base', rpc: 'https://mainnet.base.org', usdc: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', feed: '0x71041dddad3595F9CEd3DcCFBe3D1F4b0a16Bb70', opensea: 'base', explorer: 'https://basescan.org' },
 };
-export const COL_KEYS = ['time', 'stamp', 'quran', 'model', 'ex-time', 'ex-stamp', 'ex-quran', 'ex-model', 'hadith', 'ex-hadith'];
+export const COL_KEYS = ['time', 'stamp', 'quran', 'model', 'ex-time', 'ex-stamp', 'ex-quran', 'ex-model', 'hadith', 'ex-hadith', 'g-time', 'g-stamp', 'g-quran', 'g-model', 'g-hadith'];
 /** Koleksi yang ditambahkan belakangan (#49) boleh belum ada saat kontrak pertama disimpan — deployer menambahkannya bertahap. */
-export const LATE_KEYS = ['hadith', 'ex-hadith'];
+export const LATE_KEYS = ['hadith', 'ex-hadith', 'g-time', 'g-stamp', 'g-quran', 'g-model', 'g-hadith'];
 const colVar = (c) => `COLLECTION_${c.replace('-', '_').toUpperCase()}`;
 
 let cache = { at: 0, cfg: null };
@@ -36,8 +36,9 @@ export async function saveContracts(env, admin, body) {
   if (!net) return { ok: false, error: 'chain' };
   // vesting/lock opsional: sejak perintah #39 seluruh koin di wallet koin pemilik (dibagi sendiri)
   const keys = COL_KEYS.filter((k) => !LATE_KEYS.includes(k) || body.collections?.[k]);
-  // desain akhir 23 Nov 2026 (ERC-1155 edisi): hanya token + 10 koleksi; AuctionHouse/AxtoSale tidak lagi dideploy
-  const editions = body.standard === 'erc1155';
+  // desain akhir: hanya token + koleksi; AuctionHouse/AxtoSale tidak lagi dideploy. 23 Nov 2026: ERC-1155 edisi;
+  // 24 Nov 2026: 10 koleksi OpenSea ERC-721 (edisi 1 tercetak saat deploy) + 5 eksklusif ERC-1155 = 'erc721-editions'
+  const editions = body.standard === 'erc1155' || body.standard === 'erc721-editions';
   const all = [body.token, ...(editions ? [] : [body.sale, body.auctionHouse]), ...(body.vesting ? [body.vesting] : []), ...(body.lock ? [body.lock] : []), ...keys.map((k) => body.collections?.[k])];
   if (!all.every(isAddress)) return { ok: false, error: 'address' };
   const rpc = async (method, params) => {
@@ -58,7 +59,7 @@ export async function saveContracts(env, admin, body) {
   // ronde pertama: segel saat ini juga, live 1 jam kemudian (lelang 72 jam mulai $1) — tidak diubah bila disimpan ulang
   const genesis = prev?.chainId === chainId && prev?.genesis ? prev.genesis : Math.ceil((Date.now() + 65 * 60_000) / 60_000) * 60_000;
   const released = Object.fromEntries(Object.entries(body.released ?? {}).filter(([k, v]) => COL_KEYS.includes(k) && Number.isSafeInteger(v) && v >= 0));
-  const cfg = { chainId, standard: editions ? 'erc1155' : 'erc721', released, token: body.token, sale: editions ? null : body.sale, auctionHouse: editions ? null : body.auctionHouse, store: isAddress(body.store) ? body.store : null, vesting: body.vesting ?? null, lock: body.lock ?? null, usdc: net.usdc, collections: Object.fromEntries(keys.map((k) => [k, body.collections[k]])), genesis, savedAt: Date.now(), by: admin };
+  const cfg = { chainId, standard: editions ? body.standard : 'erc721', works: Number.isSafeInteger(body.works) ? body.works : null, released, token: body.token, sale: editions ? null : body.sale, auctionHouse: editions ? null : body.auctionHouse, store: isAddress(body.store) ? body.store : null, vesting: body.vesting ?? null, lock: body.lock ?? null, usdc: net.usdc, collections: Object.fromEntries(keys.map((k) => [k, body.collections[k]])), genesis, savedAt: Date.now(), by: admin };
   await putJSON(env.STORE, `cfg/contracts-${chainId}.json`, cfg);
   await putJSON(env.STORE, 'cfg/active.json', cfg);
   await appendLog(env.STORE, 'admin', { ev: 'contracts', chainId, by: admin });

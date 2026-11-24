@@ -12,7 +12,7 @@ import { edition, designOf } from '../../engine/src/editions.js';
 import { hadithRef } from '../../engine/src/render/hadith.js';
 import { gpuPlayer, gpuGambar } from '../../engine/src/render/gpu-player.js';
 import { collectionSeo, seriesSeo, surahSeo, hubSeo, breadcrumb, itemList, seriesLabel, surahInfo, BREAD } from './seo.js';
-import { COLLECTIONS, sha256Hex } from '../../engine/src/core.js';
+import { COLLECTIONS, sha256Hex, kode } from '../../engine/src/core.js';
 import { canonical } from '../../engine/src/dna.js';
 import { MODELS } from '../../engine/src/catalog/model.js';
 import { LANGS, T, PATHS, LEGACY, pickLang, pageFromSlug } from './i18n.js';
@@ -30,6 +30,7 @@ import * as COIN from './coin.js';
 import * as SHOP from './shop.js';
 import * as GPUP from './gpu.js';
 import { QA_V, promptFor as gpuPrompt } from '../../engine/src/gpu.js';
+import * as OSX from '../../engine/src/opensea.js';
 import { hadithItem, translateHadith } from './translate.js';
 
 export { Ledger };
@@ -78,7 +79,8 @@ async function gpuSet(env, c) {
   const serial = Object.fromEntries(ids.map((x) => [x, doc.serial?.[x]]));
   const anim = new Set(ids.filter(baru));
   const qa = Object.fromEntries(semua.filter(baru).map((x) => [x, doc.qa[x]]));
-  const v = { at: Date.now(), ids, serial, bersih: new Set(semua), anim, qa, by: {} };
+  const serialAll = Object.fromEntries(semua.map((x) => [x, doc.serial?.[x]]));
+  const v = { at: Date.now(), ids, serial, serialAll, bersih: new Set(semua), anim, qa, by: {} };
   GPU.set(c, v);
   return v;
 }
@@ -195,6 +197,23 @@ async function api(request, env, ctx, url) {
       return json({ ...meta, external_url: `${env.BASE_URL}/en/nft/${c}/${design}`, properties: { design, edition_size: e.supply, price_usd: e.priceUsd, tier: e.tier } }, 200, { 'cache-control': IMMUTABLE, 'access-control-allow-origin': '*' });
     });
   }
+  // metadata token koleksi OpenSea ERC-721 (pemilik 24 Nov 2026; tokenURI = /api/token/<koleksi>/<token>): 10 koleksi
+  // (5 publik + 5 seri G-), token = (edisi − 1) × 10 jt + karya, edisi 1–10 menurut kelangkaan (engine/src/opensea.js).
+  // Seri G-: lukisan GPU bila sudah ada, selain itu karya aslinya (cache singkat agar penggantian cepat terlihat).
+  m = /^\/api\/token\/([a-z-]+)\/(\d+)$/.exec(p);
+  if (m && OSX.osCol(m[1])) {
+    const info = OSX.tokenInfo(m[1], Number(m[2]));
+    if (!info) return json({ error: 'not_found' }, 404);
+    const meta = metadata(info.base, info.work, env.BASE_URL);
+    let gpu = null;
+    if (info.g) {
+      const gs = await gpuSet(env, info.base);
+      if (gs.bersih.has(info.work)) gpu = { img: `${env.BASE_URL}/gpu/${info.base}/${info.work}.png?v=${QA_V}`, anim: gs.anim.has(info.work) ? `${env.BASE_URL}/gplay/${info.base}/${info.work}` : null, serial: Number(gs.serialAll?.[info.work] ?? 0) };
+    }
+    return json(OSX.tokenMetadata(info, meta, env.BASE_URL, gpu), 200, { 'cache-control': info.g ? 'public, max-age=3600' : IMMUTABLE, 'access-control-allow-origin': '*' });
+  }
+  m = /^\/api\/contract\/(g-[a-z]+)$/.exec(p);
+  if (m && OSX.osCol(m[1])) return json(OSX.gContractMetadata(contractMetadata(OSX.osCol(m[1]).base, env.BASE_URL), m[1], env.BASE_URL), 200, { 'cache-control': 'public, max-age=86400', 'access-control-allow-origin': '*' });
   m = /^\/api\/contract\/([a-z-]+)$/.exec(p);
   if (m && COLLECTIONS[m[1]]) return json(contractMetadata(m[1], env.BASE_URL), 200, { 'cache-control': IMMUTABLE, 'access-control-allow-origin': '*' });
 
@@ -361,7 +380,7 @@ async function api(request, env, ctx, url) {
     const b = await readBody(request, 8192);
     const r = await saveContracts(env, s.wallet, b);
     if (r.ok) {
-      try { await vault(env, 'setConfig', { chainId: r.cfg.chainId, standard: r.cfg.standard, auctionHouse: r.cfg.auctionHouse, sale: r.cfg.sale, usdc: r.cfg.usdc, rpc: NETWORKS[r.cfg.chainId].rpc }); } catch (e) { r.vault = String(e.message); }
+      try { await vault(env, 'setConfig', { chainId: r.cfg.chainId, standard: r.cfg.standard === 'erc721-editions' ? 'erc1155' : r.cfg.standard /* vault hanya menandatangani WD eksklusif (ERC-1155) */, auctionHouse: r.cfg.auctionHouse, sale: r.cfg.sale, usdc: r.cfg.usdc, rpc: NETWORKS[r.cfg.chainId].rpc }); } catch (e) { r.vault = String(e.message); }
     }
     return json(r, r.ok ? 200 : 400);
   }
@@ -435,7 +454,7 @@ async function api(request, env, ctx, url) {
     if (!(await engineAuth(request, env, body))) return json({ error: 'auth' }, 401);
     const r = await saveContracts(env, env.ADMIN_WALLET, JSON.parse(body));
     if (r.ok) {
-      try { await vault(env, 'setConfig', { chainId: r.cfg.chainId, standard: r.cfg.standard, auctionHouse: r.cfg.auctionHouse, sale: r.cfg.sale, usdc: r.cfg.usdc, rpc: NETWORKS[r.cfg.chainId].rpc }); } catch (e) { r.vault = String(e.message); }
+      try { await vault(env, 'setConfig', { chainId: r.cfg.chainId, standard: r.cfg.standard === 'erc721-editions' ? 'erc1155' : r.cfg.standard /* vault hanya menandatangani WD eksklusif (ERC-1155) */, auctionHouse: r.cfg.auctionHouse, sale: r.cfg.sale, usdc: r.cfg.usdc, rpc: NETWORKS[r.cfg.chainId].rpc }); } catch (e) { r.vault = String(e.message); }
     }
     return json(r, r.ok ? 200 : 400);
   }
@@ -464,6 +483,7 @@ async function api(request, env, ctx, url) {
 /** Kontrak edisi: karya → token id OpenSea (urutan rilis k), untuk karya yang sudah dirilis. Peta dibuat sekali per isolate. */
 const RELEASE_MAP = new Map();
 function tokenIdOf(env, c, design) {
+  // ERC-721 edisi (24 Nov 2026): edisi 1 setiap karya tercetak saat deploy, token = nomor karya
   if (env.STANDARD !== 'erc1155') return design;
   const released = Number(JSON.parse(env.RELEASED || '{}')[c] ?? 0);
   let hit = RELEASE_MAP.get(c);
@@ -502,7 +522,7 @@ async function gpuPlay(env, c, id, origin) {
   const meta = metadata(c, id, env.BASE_URL);
   const H = { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'public, max-age=300', 'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer' };
   // karya G- lama: lukisan GPU aslinya saja, diam, tanpa animasi & tanpa tempelan apa pun
-  if (!gs.anim.has(id)) return new Response(gpuGambar(meta, { img: `/gpu/${c}/${id}.png?v=${QA_V}`, g: Number(gs.serial[id] ?? 0) }), { headers: H });
+  if (!gs.anim.has(id)) return new Response(gpuGambar(meta, { img: `/gpu/${c}/${id}.png?v=${QA_V}`, g: Number(gs.serial[id] ?? 0), kode: kode(c, id, Number(gs.serial[id] ?? 0)) }), { headers: H });
   let ctx = {};
   let ref = '';
   if (d.kind === 'quran' || d.kind === 'hadith') {
@@ -510,7 +530,7 @@ async function gpuPlay(env, c, id, origin) {
     if (d.kind === 'quran' && ctx.surah) ref = ctx.ayah ? `${ctx.surahLt ?? ''} · ${ctx.surah}:${ctx.ayah}` : `${ctx.surahLt ?? ''}`;
     if (d.kind === 'hadith') { const hr = hadithRef(d); ref = `${hr.nameId} · No. ${hr.number}`; }
   }
-  const html = gpuPlayer(d, meta, ctx, { img: `/gpu/${c}/${id}.png?v=${QA_V}`, video: `/gpu/${c}/${id}.mp4?v=${QA_V}`, g: Number(gs.serial[id] ?? 0), ref, qa: gs.qa[id] ?? null });
+  const html = gpuPlayer(d, meta, ctx, { img: `/gpu/${c}/${id}.png?v=${QA_V}`, video: `/gpu/${c}/${id}.mp4?v=${QA_V}`, g: Number(gs.serial[id] ?? 0), kode: kode(c, id, Number(gs.serial[id] ?? 0)), ref, qa: gs.qa[id] ?? null });
   return new Response(html, { headers: H });
 }
 
@@ -644,7 +664,7 @@ async function html(request, env, ctx, url) {
       const inStock = sc.set.has(id);
       if (d.kind === 'hadith') {
         const hr = hadithRef(d);
-        meta.name = lang === 'id' ? `Hadits ${hr.nameId} Nomor ${hr.number} — ${d.pick[0][2]} #${id.toLocaleString('id-ID')}` : meta.name;
+        meta.name = lang === 'id' ? `${kode(c, id)} · Hadits ${hr.nameId} Nomor ${hr.number} — ${d.pick[0][2]}` : meta.name;
       }
       const offer = os ? { '@type': 'Offer', priceCurrency: 'USD', price: usd, availability: 'https://schema.org/InStock', url: os, seller: { '@type': 'Organization', name: 'AXTO' } } : { '@type': 'Offer', priceCurrency: 'USD', price: usd, availability: 'https://schema.org/PreOrder', url: `${base}/${lang}/nft/${c}/${id}`, seller: { '@type': 'Organization', name: 'AXTO' } };
       const product = { '@context': 'https://schema.org', '@type': 'Product', name: meta.name, image: meta.image, description: meta.description.slice(0, 500), sku: `${c}-${id}`, category: gal[1], brand: { '@type': 'Brand', name: 'AXTO' }, offers: offer };

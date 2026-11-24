@@ -11,7 +11,7 @@ if (box) {
   fetch('/api/admin/setup', { credentials: 'same-origin' }).then((r) => r.json()).then((s) => {
     if (s.error) { say(id ? 'Masuk dulu dengan wallet admin (tombol Hubungkan wallet), lalu muat ulang.' : 'Sign in with the admin wallet first, then reload.'); return; }
     if (s.active) {
-      say(`✅ ${id ? 'Kontrak aktif di' : 'Contracts live on'} ${s.networks[s.active.chainId]?.name} · ${s.active.standard === 'erc1155' ? (id ? 'koleksi edisi ERC-1155' : 'ERC-1155 edition collections') : 'ERC-721'} · AXTO ${s.active.token}`, 'ok');
+      say(`✅ ${id ? 'Kontrak aktif di' : 'Contracts live on'} ${s.networks[s.active.chainId]?.name} · ${s.active.standard === 'erc721-editions' ? (id ? '10 koleksi OpenSea ERC-721 (100 jt NFT edisi 1) + 5 eksklusif ERC-1155' : '10 OpenSea ERC-721 collections (100M edition-1 NFTs) + 5 exclusive ERC-1155') : s.active.standard === 'erc1155' ? (id ? 'koleksi edisi ERC-1155' : 'ERC-1155 edition collections') : 'ERC-721'} · AXTO ${s.active.token}`, 'ok');
       const ul = el('ul');
       for (const [k, a] of Object.entries(s.active.collections ?? {})) {
         const li = el('li', `${k}: `);
