@@ -163,12 +163,19 @@ export const STAKE_SETS = {
  * 100 juta karya 1/1 baru di OpenSea (pemilik, 24 Nov 2026: „klo bikin 100jt lg 1/1 ke opensea" → 3 koleksi besar). Sama
  * seperti STAKE_SETS, desain diambil SESUDAH jatah publik dalam permutasi yang sama, dan sesudah 20 jt nomor pertama yang
  * dicadangkan untuk staking (`skip`) → tidak pernah sama dengan karya publik, hadiah staking, atau sesamanya.
+ *
+ * Tiap tema dibagi DUA kontrak (±16,7 jt karya): jaringan Base menolak transaksi di atas 16.777.216 gas (EIP-7825, upgrade
+ * Azul 28 Mei 2026), sedangkan premint 33,3 jt karya dalam satu konstruktor butuh ±20,2 jt gas. Bagian II memakai nomor
+ * desain SESUDAH bagian I (`skip` + jumlah karya bagian I) → tetap satu urutan, tidak ada desain kembar.
  */
-export const ONE_SETS = {
-  'one-quran': { key: 'one-quran', kind: 'quran', max: 33_333_334, salt: 'axto/one-quran/v1', exclusive: false, one: true, after: 'quran', skip: 20_000_000, symbol: 'AX1QURAN' },
-  'one-hadith': { key: 'one-hadith', kind: 'hadith', max: 33_333_333, salt: 'axto/one-hadith/v1', exclusive: false, one: true, after: 'hadith', skip: 20_000_000, symbol: 'AX1HADITH' },
-  'one-stamp': { key: 'one-stamp', kind: 'stamp', max: 33_333_333, salt: 'axto/one-stamp/v1', exclusive: false, one: true, after: 'stamp', skip: 20_000_000, symbol: 'AX1STAMP' },
-};
+const ONE_HALF = { quran: [16_666_667, 16_666_667], hadith: [16_666_667, 16_666_666], stamp: [16_666_667, 16_666_666] };
+const ONE_SYM = { quran: 'AX1QURAN', hadith: 'AX1HADITH', stamp: 'AX1STAMP' };
+export const ONE_SETS = Object.fromEntries(Object.entries(ONE_HALF).flatMap(([kind, [a, b]]) => [
+  [`one-${kind}`, { key: `one-${kind}`, kind, max: a, salt: `axto/one-${kind}/v1`, exclusive: false, one: true, after: kind, skip: 20_000_000, symbol: ONE_SYM[kind] }],
+  [`one-${kind}-2`, { key: `one-${kind}-2`, kind, max: b, salt: `axto/one-${kind}/v1`, exclusive: false, one: true, after: kind, skip: 20_000_000 + a, symbol: `${ONE_SYM[kind]}2` }],
+]));
+/** Batas gas per transaksi di Base (EIP-7825). Setiap transaksi deploy harus jauh di bawahnya. */
+export const TX_GAS_CAP = 16_777_216;
 /** Nomor „sesudah publik" yang dicadangkan untuk koleksi staking (kontrak staking maks. 50 jt → ≤ 16,7 jt per himpunan). */
 export const STAKE_RESERVED = 20_000_000;
 

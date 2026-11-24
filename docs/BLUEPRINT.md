@@ -25,3 +25,12 @@ Aturan kerja yang terbuka untuk kontributor:
 - **Gas ditanggung axto.io** dari wallet gas `0x2AB7f55Be9412a42556484Cf38Fd9B91fA34Fed8` (`market/gas-relay.mjs`, kunci
   hanya GitHub Secret `GAS_WALLET_PRIVATE_KEY`): WD member dikirim tanpa gas member; wallet toko diisi ulang dari wallet gas.
   Jual ulang di Pasar Member bebas gas (fee 10%); jual di OpenSea gas oleh pemiliknya, royalti 10% tetap.
+- **Semua penerimaan terpusat di akun penampung** (pemilik, 24 Nov 2026: „hasil penjualan di opensea dan penjualan di axto.io
+  dan fee nya langsung masuk ke indodax saja … Semua ter central"): pembayaran member masuk ke alamat deposit akun penampung;
+  royalti 10% semua koleksi masuk wallet toko sistem lalu, bersama hasil penjualan OpenSea, diteruskan mesin OpenSea ke alamat
+  deposit ETH jaringan Base akun penampung (transfer biasa, minimal 0,01 ETH, dicatat `pay/sweep/<tx>` agar tidak dikira
+  pembayaran member). Alamat itu belum dibuat → sementara ke treasury. Gas tetap dari wallet gas `0x2AB7…`.
+- **Batas gas per transaksi Base** (EIP-7825, 16.777.216 gas sejak upgrade Azul 28 Mei 2026): tiap transaksi deploy diperkirakan
+  dulu dan ditolak sebelum dikirim bila > 15 jt gas. Koleksi 1/1 Qur'an, Hadits dan Prangko masing-masing dua kontrak (I & II,
+  ±16,7 jt karya, ±11,6 jt gas); total tetap 100 jt karya, desain bagian II melanjutkan nomor bagian I. Deploy lengkap
+  terukur 179.393.879 gas (22 koleksi + koin), dana pemilik 0,00145539 ETH cukup pada harga gas ±0,006 gwei.
