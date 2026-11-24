@@ -51,9 +51,9 @@ before(async () => {
   token = await deploy('AxtoToken', owner.address, [owner.address], [E(100_000_000)], []); // di tes: semua ke owner
   sale = await deploy('AxtoSale', owner.address, await token.getAddress(), await usdc.getAddress(), await feed.getAddress(), treasury.address, signerW.address, owner.address);
   house = await deploy('AxtoAuctionHouse', owner.address, treasury.address, signerW.address, [await usdc.getAddress(), await token.getAddress()], await token.getAddress(), BANK);
-  col = await deploy('AxtoCollection', { name: 'AXTO Time', symbol: 'AXTIME', maxSupply: 2_000_000, owner: owner.address, royaltyReceiver: treasury.address, baseURI: 'https://axto.io/api/meta/time/', contractURI: 'https://axto.io/api/contract/time', custody: owner.address, premint: 2_000_000, operator: await house.getAddress(), signer: ethers.ZeroAddress });
+  col = await deploy('AxtoCollection', { name: 'AXTO Time', symbol: 'AXTIME', maxSupply: 2_000_000, owner: owner.address, royaltyReceiver: treasury.address, baseURI: 'https://axto.io/api/meta/time/', contractURI: 'https://axto.io/api/contract/time', custody: owner.address, premint: 2_000_000, operator: await house.getAddress(), signer: ethers.ZeroAddress, minter: ethers.ZeroAddress, editionStride: 0, validator: ethers.ZeroAddress, operators: [] });
   premintRcpt = await provider.getTransactionReceipt(col.deploymentTransaction().hash);
-  colEx = await deploy('AxtoCollection', { name: 'AXTO Exclusive Time', symbol: 'AXXTIME', maxSupply: 50_000, owner: owner.address, royaltyReceiver: treasury.address, baseURI: 'https://axto.io/api/meta/ex-time/', contractURI: 'https://axto.io/api/contract/ex-time', custody: ethers.ZeroAddress, premint: 0, operator: ethers.ZeroAddress, signer: signerW.address });
+  colEx = await deploy('AxtoCollection', { name: 'AXTO Exclusive Time', symbol: 'AXXTIME', maxSupply: 50_000, owner: owner.address, royaltyReceiver: treasury.address, baseURI: 'https://axto.io/api/meta/ex-time/', contractURI: 'https://axto.io/api/contract/ex-time', custody: ethers.ZeroAddress, premint: 0, operator: ethers.ZeroAddress, signer: signerW.address, minter: ethers.ZeroAddress, editionStride: 0, validator: ethers.ZeroAddress, operators: [] });
   vest = await deploy('AxtoVesting', await token.getAddress(), owner.address, E(3_000_000));
   lock = await deploy('AxtoLock', await token.getAddress(), treasury.address);
   // distribusi persis seperti skrip deploy
@@ -234,7 +234,7 @@ test('ERC-721C tidur secara bawaan (#48 zero hand: OpenSea langsung bisa menjual
   assert.equal(await col.supportsInterface(ethers.toBeHex(id, 4)), false);
   assert.equal(await col.supportsInterface('0x2a55205a'), true); // ERC-2981
   const [sel, isView] = await col.getTransferValidationFunction();
-  assert.equal(isView, true);
+  assert.equal(isView, false, 'validator v3 (Limit Break) untuk ERC-721: validateTransfer bukan view');
   assert.equal(sel, ethers.id('validateTransfer(address,address,address,uint256)').slice(0, 10));
 });
 
@@ -253,4 +253,26 @@ test('listing DEX setelah 365 hari; vesting tim 10%/tahun; lock 5 tahun', async 
   // ganache 7: eth_estimateGas dengan field nonce gagal setelah evm_increaseTime besar (tanpa nonce lolos) → gas eksplisit
   await (await lock.release({ gasLimit: 120_000 })).wait();
   assert.equal(await token.balanceOf(await lock.getAddress()), 0n);
+});
+
+test('koleksi OpenSea edisi (pemilik 24 Nov 2026): edisi 1 semua karya tercetak saat deploy, edisi berikutnya urut oleh minter sistem', async () => {
+  const W = 1000; // karya per koleksi di uji (produksi 10.000.000)
+  const ed = await deploy('AxtoCollection', { name: 'AXTO Time', symbol: 'AXTIME', maxSupply: W * 10, owner: owner.address, royaltyReceiver: treasury.address, baseURI: 'https://axto.io/api/meta/time/', contractURI: 'https://axto.io/api/contract/time', custody: carol.address, premint: W, operator: bob.address, signer: ethers.ZeroAddress, minter: carol.address, editionStride: W, validator: ethers.ZeroAddress, operators: [] });
+  assert.equal(await ed.ownerOf(1), carol.address);
+  assert.equal(await ed.ownerOf(W), carol.address);
+  await revert(ed.ownerOf(W + 5));
+  assert.equal(await ed.balanceOf(carol.address), BigInt(W));
+  assert.equal(await ed.isApprovedForAll(carol.address, bob.address), true, 'konduit pasar disetujui sejak deploy');
+  assert.deepEqual([...(await ed.editionInfo(W + 5))].map(Number), [5, 2]);
+  // edisi 2 karya 5 (token W + 5) oleh minter sistem
+  await (await ed.connect(carol).mintBatch(carol.address, [W + 5])).wait();
+  assert.equal(await ed.ownerOf(W + 5), carol.address);
+  // edisi 3 karya 7 tanpa edisi 2 → ditolak (urut)
+  await revert(ed.connect(carol).mintBatch(carol.address, [2 * W + 7]));
+  // melewati 10 edisi → ditolak; bukan minter → ditolak; edisi 1 tidak bisa dicetak ulang
+  await revert(ed.connect(carol).mintBatch(carol.address, [10 * W + 1]));
+  await revert(ed.connect(alice).mintBatch(alice.address, [W + 6]));
+  await revert(ed.connect(carol).mintBatch(carol.address, [3]));
+  // konfigurasi edisi yang tidak konsisten ditolak saat deploy
+  await revert(deploy('AxtoCollection', { name: 'X', symbol: 'X', maxSupply: W * 11, owner: owner.address, royaltyReceiver: treasury.address, baseURI: 'x', contractURI: 'x', custody: carol.address, premint: W, operator: ethers.ZeroAddress, signer: ethers.ZeroAddress, minter: carol.address, editionStride: W, validator: ethers.ZeroAddress, operators: [] }));
 });

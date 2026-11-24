@@ -182,3 +182,5 @@ input.sm{width:5.5em}.btn.sm{padding:5px 12px;font-size:.88em}
 .stagetabs{display:flex;gap:6px;margin:8px 0 0;flex-wrap:wrap}.stagetabs a{padding:5px 12px;border:1px solid var(--line);border-radius:999px;font-size:.88em;text-decoration:none;color:inherit}.stagetabs a[aria-current]{background:#0d2a20;border-color:#2a5a52;color:#9be3c4;font-weight:700}
 
 .bp{margin:12px 0;border:1px solid var(--line);border-radius:12px;padding:10px 14px;background:var(--panel)}.bp-text{white-space:pre-wrap;word-break:break-word;max-height:70vh;overflow:auto;font-size:.88em;line-height:1.5}
+/* alamat wallet/kontrak panjang (0x…) tidak boleh melebarkan halaman di ponsel */
+main p,main td,main th,main dd,main li,main code,main pre{overflow-wrap:anywhere}.split{table-layout:fixed}

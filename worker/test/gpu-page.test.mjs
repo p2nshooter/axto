@@ -21,6 +21,8 @@ test('halaman karya dari kartu G- (?v=g): panggung = lukisan GPU, bukan animasi 
 test('kartu seri G- menaut ke versi GPU halaman karya', () => {
   const html = P.collectionPage('id', 'ex-hadith', { produced: 1, from: 1, first: { items: [{ id: 42, tier: 0, name: 'X', gpu: true, g: 3 }], next: null }, crumbs: [['Beranda', '/id']], maker: 'gpu', gpuCount: 1 });
   assert.match(html, /<li data-id="42"[^>]*class="g" data-g="3"><a href="[^"]*\/nft\/ex-hadith\/42\?v=g"><img src="\/gpu\/ex-hadith\/42\.png\?v=2"/);
+  // kode NFT (pemilik 24 Nov 2026): eksklusif koin AXTO = AC-?, karya GPU = AC-G-? (nomor seri lukisan GPU)
+  assert.match(html, /<span class="id">AC-G-3<\/span>/);
 });
 
 test('halaman publik tidak pernah menyebut penyedia GPU (rahasia perusahaan)', () => {

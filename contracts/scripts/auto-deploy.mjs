@@ -8,9 +8,11 @@
  * 2. Status publik (alamat, saldo, kebutuhan gas, langkah) → axto-nft-data/cfg/deployer.json → tampil di Portal admin.
  * 3. Saldo cukup → deploy berurutan, kepemilikan langsung ke wallet pemilik sejak konstruktor:
  *    - AxtoToken 100.000.000 → presale 20 jt · vesting/DEX 30 jt · hold 30 jt · bank 20 jt (+ wallet buyback tepercaya);
- *    - 5 koleksi OpenSea AxtoEditions (ERC-1155): wallet toko sistem = kustodi, konduit OpenSea disetujui sejak
- *      konstruktor; rilis pertama RELEASE_N karya per koleksi (supply 1–10 dari tier, engine/src/editions.js);
- *    - 5 koleksi eksklusif AxtoEditions: 10.000 karya × 10 edisi, tercetak saat member WD dengan voucher vault.
+ *    - 10 koleksi OpenSea AxtoCollection (ERC-721 + ERC-2309, keputusan pemilik 24 Nov 2026, engine/src/opensea.js):
+ *      5 publik + 5 kembaran seri G-, masing-masing 10.000.000 karya. EDISI 1 semua karya tercetak di konstruktor ke
+ *      wallet toko (100 jt NFT langsung di OpenSea, ±7,7 jt gas per koleksi); edisi berikutnya (1–10 per karya) dicetak
+ *      wallet toko saat edisi sebelumnya laku (market/opensea-list.mjs). Konduit OpenSea disetujui sejak konstruktor;
+ *    - 5 koleksi eksklusif AxtoEditions (ERC-1155): 10.000 karya × 10 edisi, tercetak saat member WD dengan voucher vault.
  * 4. Selesai → POST /internal/contracts (HMAC) → worker memverifikasi on-chain & menyimpan + vault setConfig.
  *
  * ENV: CLOUDFLARE_API_KEY, CLOUDFLARE_EMAIL, CLOUDFLARE_ACCOUNT_ID, CHAIN_ID (8453 | 84532), [AXTO_API]
@@ -22,7 +24,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHmac, createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 import { ethers } from 'ethers';
-import { releaseSupplies } from '../../engine/src/editions.js';
+import { OS_COLS, WORKS, MAX_EDITIONS } from '../../engine/src/opensea.js';
 import { collection } from '../../engine/src/core.js';
 
 const ADMIN = '0x38Cd3F76a132f70b12C9E4ea6aDAFaCF62483166';
@@ -36,13 +38,12 @@ const NETS = {
   8453: { rpc: 'https://mainnet.base.org', usdc: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', feed: '0x71041dddad3595F9CEd3DcCFBe3D1F4b0a16Bb70', name: 'Base' },
   84532: { rpc: 'https://sepolia.base.org', usdc: '0x036CbD53842c5426634e7929541eC2318f3dCF7e', feed: '0x4aDC67696bA383F43DD60A9e78F2C97Fbbfc7cb1', name: 'Base Sepolia' },
 };
-/** [kunci, nama, simbol] — koleksi OpenSea (edisi 1–10) lalu eksklusif axto.io (10 edisi). Urutan tetap. */
-const OPENSEA_COLS = [['time', 'AXTO Time', 'AXTIME'], ['stamp', 'AXTO Stamp', 'AXSTAMP'], ['quran', "AXTO Qur'an", 'AXQURAN'], ['model', 'AXTO Model', 'AXMODEL'], ['hadith', 'AXTO Hadith', 'AXHADITH']];
+/** [kunci, nama, simbol] — 10 koleksi OpenSea ERC-721 (5 publik + 5 seri G-) lalu eksklusif axto.io (10 edisi). Urutan tetap. */
+const OPENSEA_COLS = OS_COLS.map((c) => [c.key, c.name, c.symbol]);
 const EXCLUSIVE_COLS = [['ex-time', 'AXTO Exclusive Time', 'AXXTIME'], ['ex-stamp', 'AXTO Exclusive Stamp', 'AXXSTAMP'], ['ex-quran', "AXTO Exclusive Qur'an", 'AXXQURAN'], ['ex-model', 'AXTO Exclusive Model', 'AXXMODEL'], ['ex-hadith', 'AXTO Exclusive Hadith', 'AXXHADITH']];
 const COLS = [...OPENSEA_COLS, ...EXCLUSIVE_COLS];
-/** Rilis pertama per koleksi OpenSea (karya), dikirim per RELEASE_BATCH dalam satu transaksi. */
-export const RELEASE_N = Number(process.env.RELEASE_N || 5000);
-const RELEASE_BATCH = 2500;
+/** Karya per koleksi OpenSea (= edisi 1 yang tercetak saat deploy). Uji lokal boleh mengecilkannya. */
+export const OS_WORKS = Number(process.env.OS_WORKS || WORKS);
 /** Konduit OpenSea (Seaport) — sama di semua jaringan; disetujui sejak konstruktor agar listing tanpa transaksi persetujuan. */
 export const OPENSEA_CONDUIT = '0x1E0049783F008A0085193E00003D00cd54003c71';
 /**
@@ -58,8 +59,9 @@ export const ROYALTY_OPERATORS = [
   '0x9A1D00bEd7CD04BCDA516d721A596eb22Aac6834',
   '0x0E00009d00d1000069ed00A908e00081F5006008',
 ].map((a) => ethers.getAddress(a.toLowerCase()));
-/** Gas terukur di ganache untuk seluruh urutan ini (lihat test/auto-deploy.test.mjs), dibulatkan ke atas. */
-export const TOTAL_GAS = BigInt(process.env.TOTAL_GAS_OVERRIDE || 90_000_000); // terukur ±86,9 jt di ganache (test/auto-deploy.test.mjs), termasuk daftar operator royalti
+/** Gas terukur di ganache untuk seluruh urutan ini (lihat test/auto-deploy.test.mjs), dibulatkan ke atas: token + 10 koleksi
+ *  OpenSea dengan edisi 1 (10 × ±7,7 jt) + 5 koleksi eksklusif + daftar operator royalti. */
+export const TOTAL_GAS = BigInt(process.env.TOTAL_GAS_OVERRIDE || 105_000_000);
 
 const LOCAL = !!process.env.LOCAL_RPC;
 const CHAIN = Number(process.env.CHAIN_ID || 8453);
@@ -183,12 +185,16 @@ async function main() {
   }
   const STORE = st.store;
 
+  // Dana pemilik pas-pasan (±0,0015 ETH, 24 Nov 2026): kebutuhan dihitung dari harga gas yang BENAR-BENAR dibayar
+  // (base fee blok terakhir + tip), bukan batas maxFee (≈ 2× base fee). Tiap transaksi tetap memakai maxFee biasa; bila
+  // saldo habis di tengah, deploy berhenti dan dilanjutkan otomatis begitu dana ditambah (state per langkah di R2 privat).
   const fee = await provider.getFeeData();
-  const maxFee = fee.maxFeePerGas ?? fee.gasPrice ?? 10_000_000n;
+  const head = await provider.getBlock('latest');
+  const tip = fee.maxPriorityFeePerGas ?? 1_000_000n;
+  const paid = (head?.baseFeePerGas ?? fee.gasPrice ?? 10_000_000n) + tip;
   const spent = BigInt(st.gasUsed ?? 0);
   const left = TOTAL_GAS > spent ? TOTAL_GAS - spent : 0n;
-  // maxFee (≈ 2× base fee) × 1,2 + cadangan biaya data L1; deploy bisa dilanjutkan bertahap bila saldo kurang di tengah
-  const need = (left * maxFee * 6n) / 5n + ethers.parseEther('0.0001');
+  const need = (left * paid * 5n) / 4n + ethers.parseEther('0.00002'); // +25% cadangan + biaya data L1 (kecil)
   const bal = await provider.getBalance(me);
   const status = (step, extra = {}) => {
     const s = { address: me, store: st.store, chainId, network: net.name, balance: ethers.formatEther(bal), need: ethers.formatEther(need), step, at: new Date().toISOString(), ...extra };
@@ -245,35 +251,27 @@ async function main() {
   st.collections = st.collections ?? {};
   for (const [k, name, sym] of COLS) {
     if (st.collections[k]) continue;
-    const ex = k.startsWith('ex-');
-    const cfg = {
-      name, symbol: sym, owner: ADMIN, royaltyReceiver: TREASURY,
-      baseURI: `${BASE}/api/edition/${k}/`, contractURI: `${BASE}/api/contract/${k}`,
-      custody: ex ? ethers.ZeroAddress : STORE, operator: ex ? ethers.ZeroAddress : OPENSEA_CONDUIT,
-      releaser: ex ? ethers.ZeroAddress : me, signer: ex ? signer : ethers.ZeroAddress,
-      maxId: collection(k).max, editionCap: ex ? 10 : 0,
-      validator: TRANSFER_VALIDATOR, operators: ROYALTY_OPERATORS,
-    };
-    st.collections[k] = await deploy(`col:${k}`, 'AxtoEditions', cfg);
+    if (k.startsWith('ex-')) {
+      // eksklusif axto.io: ERC-1155, 10 edisi per karya, tercetak saat member WD (gas member)
+      const cfg = {
+        name, symbol: sym, owner: ADMIN, royaltyReceiver: TREASURY,
+        baseURI: `${BASE}/api/edition/${k}/`, contractURI: `${BASE}/api/contract/${k}`,
+        custody: ethers.ZeroAddress, operator: ethers.ZeroAddress, releaser: ethers.ZeroAddress, signer,
+        maxId: collection(k).max, editionCap: 10, validator: TRANSFER_VALIDATOR, operators: ROYALTY_OPERATORS,
+      };
+      st.collections[k] = await deploy(`col:${k}`, 'AxtoEditions', cfg);
+    } else {
+      // OpenSea: ERC-721 + ERC-2309 — edisi 1 semua karya tercetak di konstruktor ke wallet toko (kustodi & minter)
+      const cfg = {
+        name, symbol: sym, maxSupply: OS_WORKS * MAX_EDITIONS, owner: ADMIN, royaltyReceiver: TREASURY,
+        baseURI: `${BASE}/api/token/${k}/`, contractURI: `${BASE}/api/contract/${k}`,
+        custody: STORE, premint: OS_WORKS, operator: OPENSEA_CONDUIT, signer: ethers.ZeroAddress,
+        minter: STORE, editionStride: OS_WORKS, validator: TRANSFER_VALIDATOR, operators: ROYALTY_OPERATORS,
+      };
+      st.collections[k] = await deploy(`col:${k}`, 'AxtoCollection', cfg);
+    }
     delete st[`col:${k}`];
     save();
-  }
-  // rilis pertama: RELEASE_N karya acak per koleksi OpenSea, supply 1–10 dari tier (engine/src/editions.js)
-  st.released = st.released ?? {};
-  for (const [k] of OPENSEA_COLS) {
-    const C = new ethers.Contract(st.collections[k], art('AxtoEditions').abi, wallet);
-    while ((st.released[k] ?? 0) < RELEASE_N) {
-      const from = (st.released[k] ?? 0) + 1;
-      const n = Math.min(RELEASE_BATCH, RELEASE_N - from + 1);
-      const onChain = Number(await C.released());
-      if (onChain >= from + n - 1) { st.released[k] = onChain; save(); continue; } // sudah terkirim di putaran lalu
-      if (onChain !== from - 1) { st.released[k] = onChain; save(); continue; }
-      status(`rilis ${k} ${from}-${from + n - 1}`);
-      await track(C.release(releaseSupplies(k, from, n), { nonce: nonce++ }));
-      st.released[k] = from + n - 1;
-      save();
-      log(`✓ rilis ${k} ${from}-${from + n - 1}`);
-    }
   }
   const T = new ethers.Contract(token, art('AxtoToken').abi, wallet);
   await step('trust:treasury', (o) => T.setTrusted(TREASURY, true, o));
@@ -283,7 +281,7 @@ async function main() {
   save();
   if (!LOCAL) { st.verified = await verifyAll(chainId, st); save(); }
 
-  const body = JSON.stringify({ chainId, token, store: STORE, collections: st.collections, standard: 'erc1155', released: st.released });
+  const body = JSON.stringify({ chainId, token, store: STORE, collections: st.collections, standard: 'erc721-editions', works: OS_WORKS });
   if (!LOCAL) {
     const key = process.env.ENGINE_HMAC_KEY || createHmac('sha256', process.env.CLOUDFLARE_API_KEY).update('axto:ENGINE_HMAC_KEY').digest('hex');
     const ts = Date.now();

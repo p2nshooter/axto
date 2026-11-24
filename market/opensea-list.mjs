@@ -1,24 +1,22 @@
 /**
- * Mesin penjualan OpenSea otomatis — desain akhir pemilik 23 Nov 2026:
- *   „NFT yg akan di upload ke open sea … supply nya dari 1-10, harga dari $1-$10k tergantung kelangkaan … Harga tetap
- *    saja, jgn auction … pastikan di opensea jg SEO nya kuat".
- * Dijalankan workflow opensea-list.yml tiap jam. Tanpa operator, tanpa gas untuk listing:
+ * Mesin penjualan OpenSea otomatis — keputusan pemilik 24 Nov 2026 (engine/src/opensea.js):
+ *   „100jt NFT dengan suplly 1-10 per series dan harga $1-$10000" · „Edisi 1 dulu, sisanya otomatis" ·
+ *   „5 koleksi seri G- × 10 juta" · „Harga tetap saja, jgn auction" (23 Nov).
+ * Dijalankan workflow opensea-list.yml tiap jam. Tanpa operator; listing tanpa gas (tanda tangan Seaport):
  *
- *  1. Kunci wallet toko sistem (kustodi kontrak edisi AxtoEditions) dibuka dari bucket privat vault
+ *  1. Kunci wallet toko sistem (kustodi & minter 10 koleksi ERC-721) dibuka dari bucket privat vault
  *     (axto-vault-data/store.enc, AES-256-GCM, kunci diturunkan dari CLOUDFLARE_API_KEY). Tidak pernah ke repo/log.
- *  2. Stok dibaca langsung dari rantai: released() + balanceOfBatch(wallet toko, id) per koleksi. Sisa edisi = saldo
- *     wallet toko; terjual = edisi − sisa (tidak perlu menebak dari log, tidak bisa salah hitung).
- *  3. Etalase axto.io „Di OpenSea" (sampai 5.000 karya per jenis yang masih tersedia, urutan rilis = urutan acak etalase)
- *     → R2 axto-nft-data/os/showcase-<c>.json (dibaca worker). Yang habis otomatis hilang dari etalase.
- *  4. Bila karya tersedia tinggal < RELEASE_LOW, rilis berikutnya (RELEASE_STEP id) dikirim oleh wallet perilis
- *     (deployer, kunci di vault) — gas diisi dari hasil penjualan bila kurang. Jumlah rilis dicatat ke cfg worker.
- *  5. Listing HARGA TETAP per edisi (USD → ETH memakai Chainlink ETH/USD di Base): satu order Seaport per token dengan
- *     quantity = sisa edisi dan harga total = harga satuan × quantity (pembeli boleh membeli sebagian). Satu tanda tangan
- *     Seaport bulk per batch. Listing kedaluwarsa sendiri setelah 30 hari lalu diperbarui (harga ETH terbaru). Tanpa lelang.
- *  6. ETH hasil penjualan di wallet toko diteruskan ke treasury pemilik (alamat dari R2 privat, bukan dari repo).
+ *  2. Penjualan dibaca dari rantai: event Transfer keluar dari wallet toko sejak blok terakhir yang dipindai.
+ *  3. Edisi berikutnya karya yang laku (sampai 1–10 edisi menurut kelangkaan) dicetak wallet toko lewat mintBatch —
+ *     gas dibayar dari hasil penjualan yang masuk ke wallet toko. Karya yang edisi terakhirnya laku keluar dari etalase.
+ *  4. Etalase per koleksi = WINDOW karya pertama dalam urutan acak etalase (showcase.js) yang belum habis; untuk koleksi
+ *     publik ditulis ke R2 axto-nft-data/os/showcase-<c>.json (dibaca worker).
+ *  5. Listing HARGA TETAP per token (USD → ETH memakai Chainlink ETH/USD di Base, satu tanda tangan Seaport bulk per
+ *     batch), kedaluwarsa sendiri setelah 30 hari lalu diperbarui dengan harga ETH terbaru. Tanpa lelang.
+ *  6. ETH hasil penjualan di atas cadangan gas pencetakan diteruskan ke treasury pemilik (alamat dari R2 privat).
  *  7. Status ringkas → axto-nft-data/cfg/opensea.json (Portal admin).
  *
- * ENV: CLOUDFLARE_API_KEY, CLOUDFLARE_EMAIL, CLOUDFLARE_ACCOUNT_ID, OPENSEA_API_KEY, CHAIN_ID (8453), [BUDGET_MIN]
+ * ENV: CLOUDFLARE_API_KEY, CLOUDFLARE_EMAIL, CLOUDFLARE_ACCOUNT_ID, OPENSEA_API_KEY, CHAIN_ID (8453), [BUDGET_MIN], [OS_WINDOW]
  * Uji lokal tanpa R2/OpenSea: lihat test/opensea-list.test.mjs (semua I/O disuntikkan lewat `io`).
  */
 import { readFileSync, writeFileSync, mkdtempSync } from 'node:fs';
@@ -27,9 +25,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHmac, createDecipheriv } from 'node:crypto';
 import { ethers } from 'ethers';
-import { SHOWCASE_KEYS, SHOWCASE_N } from '../engine/src/showcase.js';
-import { collection } from '../engine/src/core.js';
-import { edition, designOf, releaseSupplies } from '../engine/src/editions.js';
+import { SHOWCASE_N, showcaseCandidate } from '../engine/src/showcase.js';
+import { OS_COLS, tokenOf, tokenInfo, nextToken } from '../engine/src/opensea.js';
 
 const NETS = {
   8453: { rpc: 'https://mainnet.base.org', feed: '0x71041dddad3595F9CEd3DcCFBe3D1F4b0a16Bb70', name: 'Base', chain: 'base' },
@@ -38,16 +35,16 @@ const NETS = {
 export const LIST_DAYS = 30; // listing kedaluwarsa sendiri (tanpa gas pembatalan), lalu diperbarui dengan harga ETH terbaru
 const RENEW_BEFORE = 3 * 86_400; // perbarui listing 3 hari sebelum kedaluwarsa
 const BATCH = 100; // satu tanda tangan Seaport bulk per 100 listing
-const READ_CHUNK = 500; // id per panggilan balanceOfBatch
-export const RELEASE_LOW = 4_000; // rilis lagi bila karya tersedia per koleksi < 4.000
-export const RELEASE_STEP = 1_000; // id per rilis lanjutan
-const RELEASE_GAS = 3_000_000n; // batas gas satu rilis 1.000 id (terukur ±1,2 jt)
+export const WINDOW = Number(process.env.OS_WINDOW || SHOWCASE_N); // karya terlisting per koleksi
+const MINT_BATCH = 200; // edisi berikutnya per transaksi mintBatch
+const MINT_GAS = (n) => 60_000n + 60_000n * BigInt(n); // batas gas mintBatch (terukur ±35 rb per token)
+const LOG_CHUNK = 5_000; // blok per eth_getLogs
+export const RESERVE = ethers.parseEther('0.0005'); // cadangan gas pencetakan edisi berikutnya di wallet toko
 const SWEEP_MIN = ethers.parseEther('0.002'); // teruskan ke treasury bila saldo wallet toko ≥ 0,002 ETH
 const ABI = [
-  'function released() view returns (uint256)',
-  'function releaser() view returns (address)',
-  'function balanceOfBatch(address[] accounts, uint256[] ids) view returns (uint256[])',
-  'function release(bytes supplies)',
+  'event Transfer(address indexed from, address indexed to, uint256 indexed tokenId)',
+  'function mintBatch(address to, uint256[] tokenIds)',
+  'function exists(uint256 tokenId) view returns (bool)',
 ];
 
 // ---------------------------------------------------------------- I/O sungguhan (R2 lewat wrangler, RPC, OpenSea SDK)
@@ -76,8 +73,7 @@ export function openSealed(s) {
   return Buffer.concat([d.update(Buffer.from(j.ct, 'base64')), d.final()]).toString('utf8');
 }
 
-/** USD → wei, dibulatkan ke atas ke kelipatan 1e12 (6 desimal ETH) dengan harga ETH/USD 8 desimal dari Chainlink.
- *  Kelipatan 1e12 menjaga biaya basis-poin tetap bulat per satuan, sehingga pembelian sebagian (1 dari N edisi) sah di Seaport. */
+/** USD → wei, dibulatkan ke atas ke kelipatan 1e12 (6 desimal ETH) dengan harga ETH/USD 8 desimal dari Chainlink. */
 export function usdToWei(usd, ethUsd8) {
   const wei = (BigInt(usd) * 10n ** 26n + ethUsd8 - 1n) / ethUsd8; // usd × 1e18 × 1e8 / harga
   const step = 10n ** 12n;
@@ -85,37 +81,26 @@ export function usdToWei(usd, ethUsd8) {
 }
 export const usdToEth = (usd, ethUsd8) => ethers.formatEther(usdToWei(usd, ethUsd8));
 
-/** Satu baris listing ERC-1155: quantity = sisa edisi, amount = harga satuan × quantity (total order). */
-export function listingFor(c, address, k, qty, ethUsd8, expirationTime) {
-  const e = edition(c, designOf(c, k));
-  return { asset: { tokenAddress: address, tokenId: String(k) }, quantity: qty, amount: ethers.formatEther(usdToWei(e.priceUsd, ethUsd8) * BigInt(qty)), expirationTime, priceUsd: e.priceUsd };
-}
-
-/** Saldo kustodi untuk id 1..n (balanceOfBatch per 500). */
-async function balances(C, holder, n) {
-  const out = new Array(n + 1).fill(0);
-  for (let a = 1; a <= n; a += READ_CHUNK) {
-    const ids = [];
-    for (let k = a; k <= Math.min(n, a + READ_CHUNK - 1); k += 1) ids.push(k);
-    const bal = await C.balanceOfBatch(ids.map(() => holder), ids);
-    ids.forEach((k, i) => { out[k] = Number(bal[i]); });
-  }
-  return out;
+/** Satu listing ERC-721 harga tetap untuk token `tokenId` koleksi `key` (harga dari edisi karya itu). */
+export function listingFor(key, address, tokenId, ethUsd8, expirationTime) {
+  const i = tokenInfo(key, tokenId);
+  if (!i) throw new RangeError(`token ${key}#${tokenId} tidak sah`);
+  return { asset: { tokenAddress: address, tokenId: String(tokenId) }, amount: usdToEth(i.priceUsd, ethUsd8), expirationTime, priceUsd: i.priceUsd };
 }
 
 /** Satu putaran kerja. io disuntikkan agar bisa diuji tanpa R2/OpenSea. */
-export async function run({ io = realIO(), chainId: chainIn = Number(process.env.CHAIN_ID || 8453), rpc, now = () => Math.floor(Date.now() / 1000), budgetMs = Number(process.env.BUDGET_MIN || 45) * 60_000, log = console.log } = {}) {
+export async function run({ io = realIO(), chainId: chainIn = Number(process.env.CHAIN_ID || 8453), rpc, now = () => Math.floor(Date.now() / 1000), budgetMs = Number(process.env.BUDGET_MIN || 45) * 60_000, window = WINDOW, log = console.log } = {}) {
   const t0 = Date.now();
   const net = NETS[chainIn] ?? { rpc, feed: null, name: 'lokal', chain: 'base' };
-  const provider = new ethers.JsonRpcProvider(rpc ?? net.rpc);
+  // tanpa cache permintaan ethers (bawaan 250 ms): saldo & nonce harus segar di antara transaksi berurutan
+  const provider = new ethers.JsonRpcProvider(rpc ?? net.rpc, undefined, { cacheTimeout: -1 });
   const chainId = Number((await provider.getNetwork()).chainId);
-  const cfgKey = `axto-nft-data/cfg/contracts-${chainId}.json`;
-  const cfgText = io.r2get(cfgKey);
+  const cfgText = io.r2get(`axto-nft-data/cfg/contracts-${chainId}.json`);
   const status = { chainId, network: net.name, at: new Date().toISOString() };
   const putStatus = (extra) => io.r2put('axto-nft-data/cfg/opensea.json', JSON.stringify({ ...status, ...extra }));
   if (!cfgText) { putStatus({ step: 'menunggu kontrak' }); log('Kontrak belum aktif — tidak ada yang dilisting.'); return { waiting: 'contracts' }; }
   const cfg = JSON.parse(cfgText);
-  if (cfg.standard !== 'erc1155') { putStatus({ step: 'menunggu kontrak edisi (ERC-1155)' }); log('Kontrak aktif bukan kontrak edisi — tidak ada yang dilisting.'); return { waiting: 'standard' }; }
+  if (cfg.standard !== 'erc721-editions') { putStatus({ step: 'menunggu kontrak edisi ERC-721' }); log('Kontrak aktif bukan kontrak edisi ERC-721 — tidak ada yang dilisting.'); return { waiting: 'standard' }; }
   const sealed = io.r2get('axto-vault-data/store.enc');
   if (!sealed) throw new Error('kunci wallet toko tidak ada di vault');
   const wallet = new ethers.Wallet(openSealed(sealed), provider);
@@ -127,97 +112,99 @@ export async function run({ io = realIO(), chainId: chainIn = Number(process.env
 
   const stKey = `axto-vault-data/opensea-${chainId}.json`;
   const st = JSON.parse(io.r2get(stKey) || '{}');
-  st.until ??= {}; st.listed ??= 0; st.errors ??= []; st.releases ??= [];
+  for (const f of ['from', 'cur', 'out', 'until', 'pend']) st[f] ??= {};
+  st.listed ??= 0; st.errors ??= []; st.minted ??= [];
   const save = () => io.r2put(stKey, JSON.stringify(st));
-  const cols = SHOWCASE_KEYS.filter((c) => ethers.isAddress(cfg.collections?.[c] ?? ''));
+  const cols = OS_COLS.filter((c) => ethers.isAddress(cfg.collections?.[c.key] ?? ''));
+  const head = await provider.getBlockNumber();
+  const fee = await provider.getFeeData();
+  const tip = fee.maxPriorityFeePerGas ?? 1_000_000n;
+  const maxFee = (fee.maxFeePerGas ?? fee.gasPrice ?? 10_000_000n) * 2n;
+  // nonce dikelola sendiri: beberapa transaksi berurutan dalam satu putaran (cetak edisi, teruskan hasil jual)
+  let nonce = await provider.getTransactionCount(wallet.address, 'pending');
 
-  // 2) stok dari rantai
-  const stock = {};
+  // 2) penjualan: Transfer keluar dari wallet toko sejak blok terakhir → edisi berikutnya masuk antrean cetak
+  const sold = {};
   for (const c of cols) {
-    const C = new ethers.Contract(cfg.collections[c], ABI, provider);
-    const released = Number(await C.released());
-    stock[c] = { C, released, bal: await balances(C, wallet.address, released) };
-  }
-
-  // 4) rilis lanjutan bila stok menipis (wallet perilis = deployer; gas diisi dari hasil penjualan bila kurang)
-  const releasedNow = {};
-  const low = cols.filter((c) => {
-    const s = stock[c];
-    const avail = s.bal.reduce((n, b, k) => n + (k > 0 && b > 0 ? 1 : 0), 0);
-    return avail < RELEASE_LOW && s.released < collection(c).max;
-  });
-  if (low.length) {
-    const sealedDep = io.r2get('axto-vault-data/deployer.enc');
-    const rel = sealedDep ? new ethers.Wallet(openSealed(sealedDep), provider) : null;
-    const fee = await provider.getFeeData();
-    const maxFee = (fee.maxFeePerGas ?? fee.gasPrice ?? 10_000_000n) * 2n;
-    for (const c of low) {
-      const s = stock[c];
-      if (!rel || (await s.C.releaser()).toLowerCase() !== rel.address.toLowerCase()) { status.release = 'wallet perilis tidak cocok'; break; }
-      const need = RELEASE_GAS * maxFee;
-      const have = await provider.getBalance(rel.address);
-      if (have < need) {
-        const storeBal = await provider.getBalance(wallet.address);
-        const topUp = need * 3n - have;
-        if (storeBal < topUp + 21_000n * maxFee) { status.release = 'menunggu gas untuk rilis'; break; }
-        await (await wallet.sendTransaction({ to: rel.address, value: topUp, gasLimit: 21_000n, maxFeePerGas: maxFee, maxPriorityFeePerGas: fee.maxPriorityFeePerGas ?? 1_000_000n })).wait();
-        log(`Gas rilis diisi ${ethers.formatEther(topUp)} ETH dari hasil penjualan.`);
+    const k = c.key;
+    for (const f of ['cur', 'out', 'until']) st[f][k] ??= {};
+    st.pend[k] ??= [];
+    const C = new ethers.Contract(cfg.collections[k], ABI, provider);
+    if (st.from[k] === undefined) { st.from[k] = head; continue; } // putaran pertama: belum ada listing, belum ada penjualan
+    sold[k] = 0;
+    for (let a = st.from[k] + 1; a <= head; a += LOG_CHUNK) {
+      const b = Math.min(head, a + LOG_CHUNK - 1);
+      for (const ev of await C.queryFilter(C.filters.Transfer(wallet.address, null), a, b)) {
+        const t = Number(ev.args.tokenId);
+        const i = tokenInfo(k, t);
+        if (!i) continue;
+        sold[k] += 1;
+        delete st.until[k][t];
+        const nx = nextToken(k, t);
+        if (nx) { st.cur[k][i.work] = nx; if (!st.pend[k].includes(nx)) st.pend[k].push(nx); }
+        else { st.out[k][i.work] = true; delete st.cur[k][i.work]; }
       }
-      const n = Math.min(RELEASE_STEP, collection(c).max - s.released);
-      const tx = await s.C.connect(rel).release(releaseSupplies(c, s.released + 1, n), { gasLimit: RELEASE_GAS, maxFeePerGas: maxFee, maxPriorityFeePerGas: fee.maxPriorityFeePerGas ?? 1_000_000n });
-      await tx.wait();
-      for (let k = s.released + 1; k <= s.released + n; k += 1) s.bal[k] = edition(c, designOf(c, k)).supply;
-      s.released += n;
-      releasedNow[c] = n;
-      st.releases.push({ c, n, to: s.released, tx: tx.hash, at: new Date().toISOString() });
-      st.releases = st.releases.slice(-50);
-      log(`Rilis ${c}: +${n} karya (total ${s.released}) — ${tx.hash}`);
+      st.from[k] = b;
     }
-    if (Object.keys(releasedNow).length) {
-      // catat jumlah rilis untuk worker (peta karya → token id OpenSea)
-      const upd = (key) => { const t = io.r2get(key); if (!t) return; const j = JSON.parse(t); if (Number(j.chainId) !== chainId) return; j.released = { ...(j.released ?? {}), ...Object.fromEntries(cols.map((c) => [c, stock[c].released])) }; io.r2put(key, JSON.stringify(j)); };
-      upd(cfgKey);
-      upd('axto-nft-data/cfg/active.json');
-    }
-  }
-
-  // 3) etalase: karya yang masih tersedia (urutan rilis) → worker
-  const summary = {};
-  for (const c of cols) {
-    const s = stock[c];
-    const avail = [];
-    let soldUnits = 0;
-    let editions = 0;
-    for (let k = 1; k <= s.released; k += 1) {
-      const sup = edition(c, designOf(c, k)).supply;
-      editions += sup;
-      soldUnits += sup - s.bal[k];
-      if (s.bal[k] > 0) avail.push(k);
-    }
-    s.avail = avail;
-    const ids = avail.slice(0, SHOWCASE_N).map((k) => designOf(c, k));
-    io.r2put(`axto-nft-data/os/showcase-${c}.json`, JSON.stringify({ c, ids, released: s.released, available: avail.length, soldOut: s.released - avail.length, editions, soldUnits, at: new Date().toISOString() }));
-    const keep = new Set(avail);
-    st.until[c] = Object.fromEntries(Object.entries(st.until[c] ?? {}).filter(([k]) => keep.has(Number(k))));
-    summary[c] = { released: s.released, available: avail.length, soldOut: s.released - avail.length, editions, soldUnits };
   }
   save();
 
-  // 6) teruskan hasil penjualan ke treasury (alamat dari R2 privat)
+  // 3) cetak edisi berikutnya (gas dari hasil penjualan di wallet toko)
+  const minted = {};
+  for (const c of cols) {
+    const k = c.key;
+    const C = new ethers.Contract(cfg.collections[k], ABI, wallet);
+    while (st.pend[k].length) {
+      const batch = [];
+      for (const t of st.pend[k].slice(0, MINT_BATCH)) if (!(await C.exists(t))) batch.push(t);
+      if (batch.length) {
+        const gas = MINT_GAS(batch.length);
+        if ((await provider.getBalance(wallet.address)) < gas * maxFee) { status.mint = 'menunggu hasil penjualan untuk gas cetak edisi berikutnya'; break; }
+        const tx = await C.mintBatch(wallet.address, batch, { gasLimit: gas, maxFeePerGas: maxFee, maxPriorityFeePerGas: tip, nonce: nonce++ });
+        await tx.wait();
+        minted[k] = (minted[k] ?? 0) + batch.length;
+        st.minted.push({ c: k, n: batch.length, tx: tx.hash, at: new Date().toISOString() });
+        st.minted = st.minted.slice(-50);
+        log(`Edisi berikutnya ${k}: +${batch.length} (${tx.hash})`);
+      }
+      st.pend[k] = st.pend[k].slice(MINT_BATCH);
+      save();
+    }
+  }
+
+  // 4) etalase: WINDOW karya pertama (urutan acak etalase) yang belum habis; token terlisting = edisi yang sedang dijual
+  const win = {};
+  const summary = {};
+  for (const c of cols) {
+    const k = c.key;
+    const pend = new Set(st.pend[k]);
+    const works = [];
+    let i = 0;
+    for (; works.length < window && i < 10_000_000; i += 1) {
+      const w = showcaseCandidate(c.base, i);
+      if (!st.out[k][w]) works.push(w);
+    }
+    win[k] = works.map((w) => st.cur[k][w] ?? tokenOf(w, 1)).filter((t) => !pend.has(t));
+    const keep = new Set(win[k].map(String));
+    st.until[k] = Object.fromEntries(Object.entries(st.until[k]).filter(([t]) => keep.has(t)));
+    summary[k] = { window: works.length, soldOut: Object.keys(st.out[k]).length, sold: sold[k] ?? 0, minted: minted[k] ?? 0 };
+    if (!c.g) io.r2put(`axto-nft-data/os/showcase-${c.base}.json`, JSON.stringify({ c: c.base, ids: works, available: works.length, soldOut: summary[k].soldOut, at: new Date().toISOString() }));
+  }
+  save();
+
+  // 6) teruskan hasil penjualan ke treasury, sisakan cadangan gas pencetakan edisi berikutnya
   const bal = await provider.getBalance(wallet.address);
   if (treasury && bal >= SWEEP_MIN) {
-    const fee = await provider.getFeeData();
-    const gasPrice = (fee.maxFeePerGas ?? fee.gasPrice ?? 10_000_000n) * 2n;
-    const reserve = 21_000n * gasPrice + ethers.parseEther('0.0002'); // cadangan kecil: isi gas rilis berikutnya
+    const reserve = 21_000n * maxFee + RESERVE;
     if (bal > reserve) {
-      const tx = await wallet.sendTransaction({ to: treasury, value: bal - reserve, gasLimit: 21_000n, maxFeePerGas: gasPrice, maxPriorityFeePerGas: fee.maxPriorityFeePerGas ?? 1_000_000n });
+      const tx = await wallet.sendTransaction({ to: treasury, value: bal - reserve, gasLimit: 21_000n, maxFeePerGas: maxFee, maxPriorityFeePerGas: tip, nonce: nonce++ });
       await tx.wait();
       status.swept = { eth: ethers.formatEther(bal - reserve), tx: tx.hash };
       log(`Hasil penjualan ${ethers.formatEther(bal - reserve)} ETH → treasury (${tx.hash})`);
     }
   } else if (!treasury && bal >= SWEEP_MIN) status.sweep = 'alamat treasury belum ada di R2 privat';
 
-  const base = { collections: summary, sold: Object.fromEntries(cols.map((c) => [c, summary[c].soldUnits])), releases: st.releases.slice(-10), releasedNow };
+  const base = { collections: summary, minted, sold };
   // 5) listing harga tetap. Zero hand admin (#48): berjalan sendiri; admin hanya BISA menjeda (cfg/opensea-pause.json).
   const pause = JSON.parse(io.r2get('axto-nft-data/cfg/opensea-pause.json') || '{}');
   if (pause.paused) { putStatus({ step: 'dijeda admin', ...base }); log('Listing dijeda dari Portal admin.'); return { waiting: 'paused', ...base, swept: status.swept ?? null }; }
@@ -232,35 +219,35 @@ export async function run({ io = realIO(), chainId: chainIn = Number(process.env
   let made = 0;
   const failed = [];
   const timeLeft = () => Date.now() - t0 < budgetMs;
-  const listBatch = async (c, ks) => {
-    const listings = ks.map((k) => listingFor(c, cfg.collections[c], k, stock[c].bal[k], ethUsd8, expiration)).map(({ priceUsd, ...l }) => l);
+  const listBatch = async (k, ts) => {
+    const listings = ts.map((t) => listingFor(k, cfg.collections[k], t, ethUsd8, expiration)).map(({ priceUsd, ...l }) => l);
     const r = await sdk.createBulkListings({ listings, accountAddress: wallet.address, continueOnError: true });
     const bad = new Set((r.failed ?? []).map((f) => f.index));
-    ks.forEach((k, i) => { if (!bad.has(i)) { st.until[c] ??= {}; st.until[c][k] = expiration; } });
-    for (const f of (r.failed ?? []).slice(0, 3)) failed.push(`${c}#${ks[f.index]}: ${String(f.error?.message ?? f.error).slice(0, 160)}`);
-    made += ks.length - bad.size;
-    st.listed += ks.length - bad.size;
+    ts.forEach((t, i) => { if (!bad.has(i)) st.until[k][t] = expiration; });
+    for (const f of (r.failed ?? []).slice(0, 3)) failed.push(`${k}#${ts[f.index]}: ${String(f.error?.message ?? f.error).slice(0, 160)}`);
+    made += ts.length - bad.size;
+    st.listed += ts.length - bad.size;
     save();
   };
-  // urutan rilis (= urutan acak etalase), bergiliran antar jenis agar semua koleksi tampil sejak awal
-  const due = Object.fromEntries(cols.map((c) => [c, stock[c].avail.filter((k) => !(st.until[c]?.[k] > now() + RENEW_BEFORE))]));
-  for (let i = 0; timeLeft() && cols.some((c) => due[c].length > i); i += BATCH) {
+  // urutan etalase, bergiliran antar koleksi agar semua koleksi tampil sejak awal
+  const due = Object.fromEntries(cols.map((c) => [c.key, win[c.key].filter((t) => !(st.until[c.key][t] > now() + RENEW_BEFORE))]));
+  for (let i = 0; timeLeft() && cols.some((c) => due[c.key].length > i); i += BATCH) {
     for (const c of cols) {
       if (!timeLeft()) break;
-      const ks = due[c].slice(i, i + BATCH);
-      if (ks.length) await listBatch(c, ks);
+      const ts = due[c.key].slice(i, i + BATCH);
+      if (ts.length) await listBatch(c.key, ts);
     }
   }
   st.errors = failed.slice(0, 10);
   save();
-  const showcase = Object.fromEntries(cols.map((c) => [c, Object.keys(st.until[c] ?? {}).length]));
-  putStatus({ step: 'berjalan', listedThisRun: made, listedTotal: st.listed, showcase, showcaseTarget: SHOWCASE_N, ...base, errors: st.errors });
+  const showcase = Object.fromEntries(cols.map((c) => [c.key, Object.keys(st.until[c.key] ?? {}).length]));
+  putStatus({ step: 'berjalan', listedThisRun: made, listedTotal: st.listed, showcase, showcaseTarget: window, ...base, errors: st.errors });
   log(`Listing baru: ${made} · terlisting ${JSON.stringify(showcase)} · gagal ${failed.length}`);
   return { made, showcase, ...base, swept: status.swept ?? null, errors: failed };
 }
 
 if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).href) {
   run().then((r) => {
-    if (process.env.GITHUB_STEP_SUMMARY && r) writeFileSync(process.env.GITHUB_STEP_SUMMARY, `## Listing OpenSea otomatis (harga tetap, edisi 1–10)\n\n${r.waiting ? `Menunggu: ${r.waiting}` : `Listing baru: ${r.made} · terlisting: ${JSON.stringify(r.showcase)} · terjual (edisi): ${JSON.stringify(r.sold)}`}\n`, { flag: 'a' });
+    if (process.env.GITHUB_STEP_SUMMARY && r) writeFileSync(process.env.GITHUB_STEP_SUMMARY, `## Listing OpenSea otomatis (ERC-721, edisi 1–10, harga tetap)\n\n${r.waiting ? `Menunggu: ${r.waiting}` : `Listing baru: ${r.made} · terlisting: ${JSON.stringify(r.showcase)} · terjual: ${JSON.stringify(r.sold)} · edisi baru dicetak: ${JSON.stringify(r.minted)}`}\n`, { flag: 'a' });
   }).catch((e) => { console.error(e.shortMessage || e.message || e); process.exit(1); });
 }

@@ -35,6 +35,8 @@ instant, no gas. Withdraw to your wallet one by one or in bulk whenever you like
 
 - 5 koleksi eksklusif × 10.000 karya × 10 edisi = 500.000 edisi, $1 per edisi (0,1 AXTO).
 - Pasar member: harga tetap, lelang, penawaran, harga tetap + penawaran; penjual menerima 90%.
-- Koleksi publik: Jam Hidup, Prangko Semesta, Kaligrafi Al-Qur'an, Figur Model, Kaligrafi Hadits — dijual di OpenSea
-  (jaringan Base) dengan harga tetap; sebutkan „segera hadir di OpenSea" sampai kontrak aktif.
+- Koleksi publik: Jam Hidup, Prangko Semesta, Kaligrafi Al-Qur'an, Figur Model, Kaligrafi Hadits — masing-masing 10 juta
+  karya, ditambah 5 kembaran seri G- (versi lukisan GPU) = **100 juta karya di OpenSea** (jaringan Base). Setiap karya
+  1–10 edisi menurut kelangkaan, harga tetap $1–$10.000; edisi berikutnya muncul otomatis begitu edisi sebelumnya
+  terjual. Sebutkan „segera hadir di OpenSea" sampai kontrak aktif.
 - Teks Al-Qur'an disalin apa adanya dari mushaf Utsmani riwayat Hafs; tidak pernah dibuat mesin.

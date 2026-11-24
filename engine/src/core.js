@@ -129,6 +129,16 @@ export const COLLECTIONS = {
   'ex-hadith': { key: 'ex-hadith', kind: 'hadith', max: 10_000, salt: 'axto/ex-hadith/v1', exclusive: true, symbol: 'AXXHADITH' },
 };
 
+/**
+ * Kode NFT (pemilik 24 Nov 2026: „NFT exclusive yg transaksi dengan axto coin kasih nama depanya AC, klo di bikin pake GPU
+ * AC-G-?, klo bukan make GPU langsung AC-?; yg langsung ke opensea OS-?, yg make GPU OS-G-?" — ? = nomor urut NFT itu
+ * lahir/keluar dari produksi): karya biasa = nomor karya; karya GPU = nomor seri G- (urutan lukisan GPU).
+ */
+export function kode(key, id, g = 0) {
+  const pre = COLLECTIONS[key]?.exclusive ? 'AC' : 'OS';
+  return g ? `${pre}-G-${g}` : `${pre}-${id}`;
+}
+
 export function collection(key) {
   const c = COLLECTIONS[key];
   if (!c) throw new Error(`Koleksi tidak dikenal: ${key}`);

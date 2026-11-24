@@ -1,4 +1,7 @@
 // AXTO klien: hubungkan wallet (EIP-1193), masuk SIWE, hitung mundur, profil member, penjelajah koleksi. Toko/pasar/WD: /market.js. Tanpa innerHTML dari data.
+/** Kode NFT (pemilik 24 Nov 2026): OS-? koleksi OpenSea, AC-? eksklusif koin AXTO, OS-G-?/AC-G-? karya GPU (? = nomor lahir). */
+const kodeNft = (c, id, g) => `${String(c).startsWith('ex-') ? 'AC' : 'OS'}-${g ? `G-${g}` : id}`;
+const tanpaKode = (name) => String(name ?? '').replace(/^(OS|AC)-\d+ · /, '');
 const lang = document.documentElement.lang.startsWith('id') ? 'id' : 'en';
 const L = {
   id: { connected: 'Terhubung', noWallet: 'Pasang MetaMask atau wallet EVM lain.', err: 'Gagal', save: 'Tersimpan', logout: 'Keluar', ended: 'Berakhir', d: 'h' },
@@ -149,9 +152,9 @@ if (ex) {
     a.href = `/${lang}/nft/${c}/${it.id}${it.gpu ? '?v=g' : ''}`;
     const im = document.createElement('img');
     Object.assign(im, { src: it.gpu ? `/gpu/${c}/${it.id}.png?v=2` : `/img/${c}/${it.id}.svg?v=9`, alt: it.name, loading: 'lazy', width: 300, height: 300 });
-    const id = document.createElement('span'); id.className = 'id'; id.textContent = it.gpu ? `G-${fmtN(it.g)}` : `#${fmtN(it.id)}`;
+    const id = document.createElement('span'); id.className = 'id'; id.textContent = kodeNft(c, it.id, it.gpu ? it.g : 0);
     if (it.gpu) { li.classList.add('g'); li.dataset.g = String(it.g); }
-    const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = it.name;
+    const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = tanpaKode(it.name);
     const tr = document.createElement('span'); tr.className = `tr t${it.tier}`; tr.textContent = I.tiers?.[it.tier] ?? '';
     a.append(im, id, nm, tr);
     if (it.usd) { const pr = document.createElement('span'); pr.className = 'pr'; pr.textContent = `$${fmtN(it.usd)}`; a.append(pr); }
@@ -214,8 +217,8 @@ if (ex) {
     const g = li.classList.contains('g');
     // seri G-: player hidup dari lukisan GPU yang sama dengan kartunya (jarum jam bergerak, cap pos, teks Arab asli)
     gim.hidden = true; gim.removeAttribute('src'); fr.hidden = false; fr.src = g ? `/gplay/${c}/${id}` : `/play/${c}/${id}`;
-    const nm = li.querySelector('.nm')?.textContent ?? `#${id}`;
-    nameEl.textContent = g ? `G-${fmtN(li.dataset.g || li.querySelector('.id')?.textContent?.replace(/\D/g, '') || 0)} · ${nm}` : nm;
+    const nm = li.querySelector('.nm')?.textContent ?? '';
+    nameEl.textContent = `${kodeNft(c, id, g ? li.dataset.g : 0)} · ${nm}`;
     det.href = `/${lang}/nft/${c}/${id}${g ? '?v=g' : ''}`;
     pk.hidden = false;
     document.documentElement.classList.add('peeking');
