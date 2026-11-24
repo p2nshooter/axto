@@ -68,17 +68,16 @@ async function gpuSet(env, c) {
   if (hit && Date.now() - hit.at < 120_000) return hit;
   let doc = null;
   try { doc = await readJSON(env.STORE, `os/gpu-${c}.json`); } catch { doc = null; }
-  // Pemilik 24 Nov 2026: „Series G- yg sudah terlanjur di buat, kembalikan ke gambar aslinya tanpa animasi" — karya G- LAMA
-  // (tanpa cap mutu) tampil sebagai lukisan GPU aslinya, diam; karya bertanda situs lain tetap disembunyikan sampai dilukis
-  // ulang (nomor seri tetap). Karya G- BARU (cap mutu QA_V, src/gpu.js) tampil hanya setelah videonya dibuat GPU (doc.vid)
-  // dan diputar di player interaktif — „hasil NFT 100% sudah keluar dengan animasi yg interaktif".
+  // Pemilik 24 Nov 2026: „OS-G-4 masih diem saja, baru yg OS-G-5 yg punya animasi" · „hasil NFT 100% sudah keluar dengan
+  // animasi yg interaktif" — seri G- tampil HANYA bila lolos mutu (cap QA_V, src/gpu.js; karya lama yang gambar aslinya lolos
+  // juga diberi cap) DAN videonya sudah dibuat GPU (doc.vid). Tidak ada lagi karya G- diam; karya lama lain menunggu
+  // dianimasikan / dilukis ulang dengan nomor seri yang sama.
   const baru = (x) => doc?.qa?.[x]?.v === QA_V;
-  const lama = (x) => GPUP.lamaTampil(doc, c, x);
-  const semua = Array.isArray(doc?.ids) ? doc.ids.filter((x) => Number.isSafeInteger(x) && x >= 1 && x <= COLLECTIONS[c].max && (lama(x) || baru(x))) : [];
-  const ids = semua.filter((x) => lama(x) || doc?.vid?.[x] === true);
+  const semua = Array.isArray(doc?.ids) ? doc.ids.filter((x) => Number.isSafeInteger(x) && x >= 1 && x <= COLLECTIONS[c].max && baru(x)) : [];
+  const ids = semua.filter((x) => doc?.vid?.[x] === true);
   const serial = Object.fromEntries(ids.map((x) => [x, doc.serial?.[x]]));
-  const anim = new Set(ids.filter(baru));
-  const qa = Object.fromEntries(semua.filter(baru).map((x) => [x, doc.qa[x]]));
+  const anim = new Set(ids);
+  const qa = Object.fromEntries(semua.map((x) => [x, doc.qa[x]]));
   const serialAll = Object.fromEntries(semua.map((x) => [x, doc.serial?.[x]]));
   const v = { at: Date.now(), ids, serial, serialAll, bersih: new Set(semua), anim, qa, by: {} };
   GPU.set(c, v);
@@ -124,7 +123,7 @@ function assetProvider(env, origin) {
 }
 
 /** Versi render: naikkan saat tampilan karya berubah → cache tepi lama otomatis tidak terpakai. */
-const RENDER_V = '12';
+const RENDER_V = '13';
 async function cached(request, ctx, make) {
   const cache = caches.default;
   const u = new URL(request.url);

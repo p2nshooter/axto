@@ -149,7 +149,7 @@ test('#49 hadits: 10 jt publik & 10.000 eksklusif tanpa kembar, teks sama persis
   }
 });
 
-test('jgn ada logo apapun di semua karya (pemilik, 24 Nov 2026): tidak ada tanda „AXTO", logo atau tanda air di dalam gambar', async () => {
+test('jgn ada logo/label apapun di semua karya (pemilik, 24 Nov 2026): tanpa tanda „AXTO", lencana EXCLUSIVE, logo atau tanda air', async () => {
   const { animatedSvg, renderCtx } = await import('../src/metadata.js');
   for (const k of Object.keys(COLLECTIONS)) {
     for (const id of [1, 42, 777]) {
@@ -157,7 +157,7 @@ test('jgn ada logo apapun di semua karya (pemilik, 24 Nov 2026): tidak ada tanda
       const s = animatedSvg(d, await renderCtx(d, fsProvider));
       // teks yang TAMPIL (isi <text>/<textPath>) — nama fon seperti 'AXTO Amiri' tidak tampil
       const tampil = [...s.matchAll(/<text(?:Path)?\b[^>]*>([^<]*)</g)].map((m) => m[1]).join(' ');
-      assert.doesNotMatch(tampil, /AXTO|©|logo|watermark/i, `${k}#${id} membawa tanda/logo`);
+      assert.doesNotMatch(tampil, /AXTO|©|logo|watermark|EXCLUSIVE|LIVE · 1\/1/i, `${k}#${id} membawa tanda/logo/label`);
     }
   }
 });

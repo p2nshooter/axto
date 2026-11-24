@@ -117,7 +117,7 @@ const AMB = {
   postmark: (P) => {
     const cx = R(760 + P.J() * 80);
     const cy = R(180 + P.J() * 80);
-    return { over: `<defs><path id="mxpm" d="M${cx - 70} ${cy}a70 70 0 1 1 140 0a70 70 0 1 1 -140 0"/></defs><g class="mxpm" opacity=".5" fill="none" stroke="${P.A}" stroke-width="3"><circle cx="${cx}" cy="${cy}" r="86"/><circle cx="${cx}" cy="${cy}" r="56"/><text font-family="monospace" font-size="15" fill="${P.A}" stroke="none" letter-spacing="3"><textPath href="#mxpm">LIVE · 1/1 · LIVE · 1/1 · LIVE ·</textPath></text></g>`, css: `.mxpm{transform-origin:${cx}px ${cy}px;animation:mxpm ${R(14 * P.T)}s linear infinite ${P.D === 'reverse' ? 'reverse' : 'normal'}}@keyframes mxpm{to{transform:rotate(360deg)}}` };
+    return { over: `<defs><path id="mxpm" d="M${cx - 70} ${cy}a70 70 0 1 1 140 0a70 70 0 1 1 -140 0"/></defs><g class="mxpm" opacity=".5" fill="none" stroke="${P.A}" stroke-width="3"><circle cx="${cx}" cy="${cy}" r="86"/><circle cx="${cx}" cy="${cy}" r="56"/><path d="M${cx - 70} ${cy}a70 70 0 1 1 140 0a70 70 0 1 1 -140 0" stroke-width="2" stroke-dasharray="3 9"/></g>`, css: `.mxpm{transform-origin:${cx}px ${cy}px;animation:mxpm ${R(14 * P.T)}s linear infinite ${P.D === 'reverse' ? 'reverse' : 'normal'}}@keyframes mxpm{to{transform:rotate(360deg)}}` };
   },
 };
 

@@ -5,10 +5,11 @@
  * interaktif" · „Series G- yg sudah terlanjur di buat, kembalikan ke gambar aslinya tanpa animasi" · lalu „Hati2, jgn ada logo
  * apapun di semua karya termasuk GPU, dan pastikan karya2 terbarunya punya animasi dan interaktif, klo bisa karya lama yg statik
  * di bikin ulang biar punya animasi dan interaktif seperti karya yg sudah ada". Maka:
- *  - Karya G- LAMA tidak dihapus. Ia tampil sebagai lukisan aslinya (diam) HANYA setelah pemeriksa mesin menyatakannya bersih
- *    dari logo, tanda air, merek, tanda tangan & tulisan. Yang berlogo (daftar BERLOGO dari pemeriksaan mata, atau ditolak
- *    pemeriksa, atau bertanda situs lain) disembunyikan dan dilukis ulang lebih dulu; sesudah itu SEMUA karya lama dilukis
- *    ulang bergantian dengan karya baru — nomor seri G- tetap — supaya semuanya beranimasi & interaktif.
+ *  - Karya G- LAMA tidak dihapus, tetapi TIDAK PERNAH tampil diam lagi (pemilik: „OS-G-4 masih diem saja, baru yg OS-G-5
+ *    yg punya animasi"). Gambar aslinya diperiksa mutu penuh oleh mesin (sama dengan karya baru: tanpa tulisan/logo/tanda
+ *    air, simetris, utuh, nilai ≥ 8, panel kosong untuk Qur'an & hadits). Lolos → diberi cap `qa` (model „asli") dan GPU
+ *    langsung membuat videonya dari gambar asli itu. Tidak lolos, berlogo (daftar BERLOGO) atau bertanda situs lain →
+ *    dilukis ulang dengan nomor seri G- yang sama. Antrean lukis ulang bergantian per tick dengan karya baru.
  *  - Lukisan (baru atau ulang) dibuat FLUX.2 [klein] (Workers AI) dari prompt v2, lalu DIPERIKSA mesin (Gemma 4):
  *    tanpa tulisan/angka/logo/tanda air, simetris & di tengah, tidak cacat, subjek benar, nilai ≥ 8/10, dan untuk Qur'an &
  *    hadits panel tengah kosong yang posisinya diukur (agar ayat ASLI diletakkan tepat di dalamnya). Gagal → dibuang &
@@ -48,15 +49,18 @@ const GAGAL_MAKS = 3;
 const GAGAL_ULANG = 8;
 /** Karya lama yang diperiksa mesin per tick (tanpa jatah lukis; ±15 neuron per pemeriksaan). */
 const CEK_PER_TICK = 3;
+/** Versi pemeriksaan karya lama: v2 = pemeriksaan mutu penuh (yang lolos langsung dianimasikan GPU). */
+const CEK_V = 2;
 
 const lama = (doc, id) => !doc?.qa?.[id];
-/** Karya lama yang wajib disembunyikan & dilukis ulang lebih dulu: bertanda situs lain, berlogo, atau ditolak pemeriksa. */
-export const lamaBerlogo = (doc, c, id) => lama(doc, id) && (PERLU_ULANG.has(String(doc?.by?.[id] ?? '')) || (BERLOGO[c] ?? []).includes(Number(id)) || doc?.cek?.[id]?.bersih === false);
-/**
- * Karya lama boleh tampil (gambar aslinya, diam) HANYA bila pemeriksa mesin sudah menyatakannya bersih dari logo, tanda air,
- * merek, tanda tangan dan tulisan — belum diperiksa = belum tampil.
- */
-export const lamaTampil = (doc, c, id) => lama(doc, id) && !lamaBerlogo(doc, c, id) && doc?.cek?.[id]?.bersih === true;
+/** Karya lama yang harus dilukis ulang (nomor seri tetap): bertanda situs lain, berlogo, atau ditolak pemeriksa. */
+export const lamaBerlogo = (doc, c, id) => {
+  if (!lama(doc, id)) return false;
+  const k = doc?.cek?.[id];
+  return PERLU_ULANG.has(String(doc?.by?.[id] ?? '')) || (BERLOGO[c] ?? []).includes(Number(id)) || k?.bersih === false || (k?.v === CEK_V && !k.lolos);
+};
+/** Karya lama yang belum diperiksa mutu penuh (dan bukan calon lukis ulang). */
+export const lamaBelumDicek = (doc, c, id) => lama(doc, id) && !lamaBerlogo(doc, c, id) && doc?.cek?.[id]?.v !== CEK_V;
 const tanggal = (now) => new Date(now).toISOString().slice(0, 10);
 const kunciJatah = (now) => `os/gpu-jatah/${tanggal(now)}.json`;
 const batasHarian = (env) => { const n = Number(env.GPU_HARIAN); return Number.isInteger(n) && n >= 0 && n <= 60 ? n : GPU_HARIAN; };
@@ -149,6 +153,7 @@ export async function periksa(env, c, bytes) {
   const k = c.replace(/^ex-/, '');
   const butuhPanel = k === 'quran' || k === 'hadith';
   const tanya = `You are the strict art director of a premium digital art gallery. This AI-generated image should show ${SUBJEK[k]}.
+Look at the WHOLE image very carefully, including the corners, the edges and any small print.
 Reply with ONLY one JSON object and nothing else:
 {"text": true if ANY letters, numbers, digits, words, pseudo-writing, calligraphy, signature, logo or watermark is visible anywhere in the image,
 "symmetric": true only if the main object is centred and close to perfectly left-right symmetrical,
@@ -172,51 +177,36 @@ Reply with ONLY one JSON object and nothing else:
   return putusan(c, j);
 }
 
-/** Putusan pemeriksa logo untuk karya lama (murni): bersih hanya bila pemeriksa tegas menjawab tidak ada tanda apa pun. */
-export const putusanCek = (j) => ({ bersih: j?.mark === false });
-
-/** Pemeriksa logo untuk karya G- LAMA (sudah tersimpan): logo, tanda air, merek, tanda tangan, cap bertulisan, tulisan apa pun. */
-export async function cekLama(env, bytes) {
-  const tanya = `You check artworks for a museum that NEVER shows logos. Look at the WHOLE image very carefully, including the corners, the edges and any small print.
-Reply with ONLY one JSON object and nothing else:
-{"mark": true if ANY logo, watermark, signature, brand or company name, copyright sign, website name, resolution label (like "8K"), seal or emblem with letters, or ANY written word, pseudo-word or letters in any script (Latin, Arabic or other) is visible anywhere — plain clock numerals alone do not count; otherwise false}`;
-  const url = `data:${jenisGambar(bytes)};base64,${Buffer.from(bytes).toString('base64')}`;
-  const out = await env.AI.run(MODEL_QA, {
-    messages: [{ role: 'user', content: [{ type: 'text', text: tanya }, { type: 'image_url', image_url: { url } }] }],
-    max_tokens: 60,
-    temperature: 0,
-    chat_template_kwargs: { enable_thinking: false },
-  });
-  const m = /\{[\s\S]*\}/.exec(teksJawaban(out));
-  let j = null;
-  try { j = m ? JSON.parse(m[0]) : null; } catch { j = null; }
-  return j ? putusanCek(j) : null;
-}
-
 /**
- * Periksa karya lama yang belum diperiksa (maks. CEK_PER_TICK per tick). Hasil `cek[id] = {bersih, at}` (CAS). Karya yang
- * tidak bersih tetap tersembunyi dan masuk antrean lukis ulang lebih dulu.
+ * Periksa mutu penuh karya lama yang belum diperiksa (maks. CEK_PER_TICK per tick), memakai gambar aslinya yang tersimpan.
+ * Lolos → cap `qa` (model „asli") → GPU membuat videonya dari gambar asli. Tidak lolos → masuk antrean lukis ulang.
  */
 async function periksaLama(env, docs, now) {
   let n = 0;
   for (const c of GPU_KEYS) {
-    for (const id of docs[c].ids ?? []) {
+    const urut = [...(docs[c].ids ?? [])].sort((a, b) => Number(docs[c].serial?.[a] ?? Infinity) - Number(docs[c].serial?.[b] ?? Infinity));
+    for (const id of urut) {
       if (n >= CEK_PER_TICK) return n;
-      if (!lama(docs[c], id) || lamaBerlogo(docs[c], c, id) || docs[c].cek?.[id]) continue;
+      if (!lamaBelumDicek(docs[c], c, id)) continue;
       const o = await env.STORE.get(`gpu/${c}/${id}.png`);
-      let hasil = { bersih: false, alasan: 'gambar hilang' };
+      let q = { lolos: false, alasan: ['gambar hilang'] };
       if (o) {
         try {
-          hasil = (await cekLama(env, new Uint8Array(await o.arrayBuffer()))) ?? null;
+          q = await periksa(env, c, new Uint8Array(await o.arrayBuffer()));
         } catch (e) {
           if (alokasiHabis(pesan(e))) { await tandaiHabis(env.STORE, now); return n; }
-          hasil = null;
+          q = null;
         }
       }
       n += 1;
-      if (!hasil) continue; // jawaban rusak → diperiksa lagi tick berikutnya
+      if (!q || q.mentah) continue; // galat / jawaban rusak → diperiksa lagi tick berikutnya
       const at = new Date(now).toISOString();
-      const doc = await update(env.STORE, `os/gpu-${c}.json`, (cur) => (cur?.ids?.includes(id) ? { ...cur, cek: { ...(cur.cek ?? {}), [id]: { ...hasil, at } } } : undefined));
+      const doc = await update(env.STORE, `os/gpu-${c}.json`, (cur) => {
+        if (!cur?.ids?.includes(id) || cur.qa?.[id]) return undefined;
+        const cek = { ...(cur.cek ?? {}), [id]: { v: CEK_V, lolos: q.lolos, ...(q.lolos ? {} : { alasan: q.alasan.join(', ') }), at } };
+        const qa = q.lolos ? { ...(cur.qa ?? {}), [id]: { v: QA_V, nilai: q.nilai, model: 'asli', ...(q.panel ? { panel: q.panel, nada: q.nada } : {}) } } : cur.qa;
+        return { ...cur, cek, ...(qa ? { qa } : {}) };
+      });
       if (doc) docs[c] = doc;
     }
   }
@@ -245,9 +235,8 @@ export async function lukisGratis(env, c, id, prompt, { now = Date.now(), rata =
 /**
  * Satu tick cron (pemilik, 24 Nov 2026: „jgn ada logo apapun di semua karya termasuk GPU, dan pastikan karya2 terbarunya punya
  * animasi dan interaktif, klo bisa karya lama yg statik di bikin ulang biar punya animasi dan interaktif"):
- *  0. periksa logo karya lama yang belum diperiksa (tanpa jatah lukis);
- *  1. lukis ulang karya lama berlogo / bertanda situs lain (tersembunyi) lebih dulu — nomor seri G- tetap;
- *  2. lalu bergantian per tick: lukis ulang karya lama yang masih diam (nomor seri tetap) ⇄ satu karya baru.
+ *  0. periksa mutu penuh gambar asli karya lama yang belum diperiksa (tanpa jatah lukis) — lolos → langsung dianimasikan GPU;
+ *  1. bergantian per tick: lukis ulang karya lama yang berlogo / ditolak / bertanda situs lain (nomor seri tetap) ⇄ karya baru.
  * Semua lewat lukis + periksa mutu (tanpa tulisan/logo); hasilnya tampil setelah GPU membuat videonya (player interaktif).
  */
 export async function gpuTick(env, { now = Date.now() } = {}) {
@@ -275,14 +264,10 @@ async function lukisTick(env, docs, now) {
   };
   const seri = (c) => (x) => Number(docs[c].serial?.[x] ?? Infinity);
   const pertama = (c, saring) => [...(docs[c].ids ?? [])].filter(saring).sort((a, b) => seri(c)(a) - seri(c)(b))[0];
-  // 1) karya lama berlogo / bertanda situs lain (tersembunyi) dilukis ulang lebih dulu, nomor seri kecil dulu
-  for (const c of GPU_KEYS) {
-    const id = pertama(c, (x) => lamaBerlogo(docs[c], c, x) && (docs[c].gagal?.[x] ?? 0) < GAGAL_ULANG);
-    if (id !== undefined) return lukisUlang(c, id);
-  }
-  const ulangDiam = async () => {
+  // karya lama yang harus dilukis ulang (berlogo / ditolak pemeriksa / bertanda situs lain), nomor seri kecil dulu
+  const ulang = async () => {
     for (const c of GPU_KEYS) {
-      const id = pertama(c, (x) => lama(docs[c], x) && (docs[c].gagal?.[x] ?? 0) < GAGAL_MAKS);
+      const id = pertama(c, (x) => lamaBerlogo(docs[c], c, x) && (docs[c].gagal?.[x] ?? 0) < GAGAL_ULANG);
       if (id !== undefined) return lukisUlang(c, id);
     }
     return null;
@@ -300,9 +285,9 @@ async function lukisTick(env, docs, now) {
     }
     return null;
   };
-  // 2) bergantian per tick (cron 5 menit): karya lama yang masih diam ⇄ karya baru; bila satu jalur kosong, jalur lain
+  // bergantian per tick (cron 5 menit): lukis ulang karya lama ⇄ karya baru; bila satu jalur kosong, jalur lain
   const giliranUlang = Math.floor(now / 300_000) % 2 === 0;
-  const urutan = giliranUlang ? [ulangDiam, baru] : [baru, ulangDiam];
+  const urutan = giliranUlang ? [ulang, baru] : [baru, ulang];
   for (const jalan of urutan) {
     const r = await jalan();
     if (r) return r;

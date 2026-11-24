@@ -2,7 +2,7 @@
 // mutu, hanya yang lolos masuk seri; jatah gratis harian disebar 24 jam (R2 CAS, tidak dobel).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { gpuTick, ambilJatah, lukisGratis, putusan, putusanCek, lamaTampil, lamaBerlogo, BERLOGO, MODEL, MODEL_QA, MODEL_CADANGAN } from '../src/gpu.js';
+import { gpuTick, ambilJatah, lukisGratis, putusan, lamaBerlogo, lamaBelumDicek, BERLOGO, MODEL, MODEL_QA, MODEL_CADANGAN } from '../src/gpu.js';
 import { candidates, QA_V } from '../../engine/src/gpu.js';
 
 function fakeR2() {
@@ -27,8 +27,8 @@ const BAGUS = { text: false, symmetric: true, deformed: false, subject: true, qu
 const JAM = (h, mnt = 0) => Date.UTC(2026, 10, 24, h, mnt);
 const PNG_LAMA = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47]), Buffer.alloc(2_000, 5)]);
 const gambarLama = (env, c, id) => env.STORE.m.set(`gpu/${c}/${id}.png`, { body: 'lama', raw: PNG_LAMA, etag: `g${id}` });
-/** Workers AI tiruan: FLUX.2 klein (multipart) melukis, Gemma 4 memeriksa mutu (`nilai()`) & logo karya lama (`cek(id)`). */
-function aiTiruan(nilai = () => BAGUS, cek = () => ({ mark: false })) {
+/** Workers AI tiruan: FLUX.2 klein (multipart) melukis, Gemma 4 memeriksa mutu dengan jawaban `nilai()`. */
+function aiTiruan(nilai = () => BAGUS) {
   const log = [];
   return {
     log,
@@ -39,7 +39,6 @@ function aiTiruan(nilai = () => BAGUS, cek = () => ({ mark: false })) {
         const [t, im] = inp.messages[0].content;
         assert.match(t.text, /ONLY one JSON object/);
         assert.match(im.image_url.url, /^data:image\/png;base64,/);
-        if (/"mark"/.test(t.text)) return { response: JSON.stringify(cek()) };
         return { response: `\`\`\`json\n${JSON.stringify(nilai())}\n\`\`\`` };
       }
       throw new Error(`model tak terduga ${model}`);
@@ -48,59 +47,57 @@ function aiTiruan(nilai = () => BAGUS, cek = () => ({ mark: false })) {
 }
 const envDengan = (ai) => ({ STORE: fakeR2(), AI: ai, GPU_HARIAN: '36' });
 
-test('karya G- lama: tampil hanya setelah pemeriksa mesin menyatakannya bersih; bertanda situs lain dilukis ulang lebih dulu (nomor seri sama)', async () => {
+test('karya G- lama: gambar aslinya diperiksa mutu penuh; lolos → cap mutu „asli" (lalu dianimasikan GPU), tidak pernah tampil diam', async () => {
   const env = envDengan(aiTiruan());
   const [a, b] = candidates('stamp');
   env.STORE.m.set('os/gpu-stamp.json', { body: JSON.stringify({ ids: [a, b], serial: { [a]: 1, [b]: 2 }, by: { [a]: 'huggingface-ulyah', [b]: 'pollinations' } }), etag: 'x1' });
   gambarLama(env, 'stamp', a);
-  const sebelum = JSON.parse(env.STORE.m.get('os/gpu-stamp.json').body);
-  assert.equal(lamaTampil(sebelum, 'stamp', a), false, 'belum diperiksa = belum tampil');
-  const r = await gpuTick(env, { now: JAM(23, 55) });
-  assert.deepEqual(r.dibuat, { c: 'stamp', id: b, g: 2, ulang: true, nilai: 9 });
+  assert.equal(lamaBelumDicek(JSON.parse(env.STORE.m.get('os/gpu-stamp.json').body), 'stamp', a), true);
+  const r = await gpuTick(env, { now: JAM(23, 50) }); // giliran lukis ulang
   assert.equal(r.dicek, 1);
+  assert.deepEqual(r.dibuat, { c: 'stamp', id: b, g: 2, ulang: true, nilai: 9 }, 'bertanda situs lain → dilukis ulang, nomor seri sama');
   const doc = JSON.parse(env.STORE.m.get('os/gpu-stamp.json').body);
   assert.deepEqual(doc.ids, [a, b]);
   assert.deepEqual(doc.serial, { [a]: 1, [b]: 2 });
   assert.equal(doc.by[a], 'huggingface-ulyah', 'karya lama tidak dihapus');
-  assert.equal(doc.cek[a].bersih, true);
-  assert.equal(lamaTampil(doc, 'stamp', a), true, 'bersih → tampil sebagai gambar aslinya sampai dilukis ulang');
-  assert.equal(doc.qa?.[a], undefined);
+  assert.deepEqual(doc.qa[a], { v: QA_V, nilai: 9, model: 'asli' }, 'gambar asli lolos → antre video GPU');
+  assert.equal(doc.cek[a].lolos, true);
   assert.equal(doc.qa[b].v, QA_V);
-  assert.equal(env.STORE.m.get(`gpu/stamp/${a}.png`).body, 'lama', 'gambar lama tidak dihapus');
+  assert.equal(env.STORE.m.get(`gpu/stamp/${a}.png`).body, 'lama', 'gambar asli dipakai apa adanya');
 });
 
-test('jgn ada logo apapun: karya lama berlogo (daftar mata atau ditolak pemeriksa) disembunyikan & dilukis ulang lebih dulu', async () => {
-  const env = envDengan(aiTiruan(() => BAGUS, () => ({ mark: true })));
+test('jgn ada logo apapun: karya lama berlogo (daftar mata) atau ditolak pemeriksa → dilukis ulang (nomor seri sama)', async () => {
+  let n = 0;
+  // pemeriksaan pertama (gambar asli) menemukan tulisan; lukisan ulang sesudahnya lolos
+  const env = envDengan(aiTiruan(() => (n++ === 0 ? { ...BAGUS, text: true } : BAGUS)));
   const berlogo = BERLOGO.time[0];
   const x = candidates('time').find((id) => !BERLOGO.time.includes(id));
   env.STORE.m.set('os/gpu-time.json', { body: JSON.stringify({ ids: [x, berlogo], serial: { [x]: 1, [berlogo]: 2 }, by: { [x]: 'huggingface-ulyah', [berlogo]: 'huggingface-ulyah' } }), etag: 't' });
   gambarLama(env, 'time', x);
   const awal = JSON.parse(env.STORE.m.get('os/gpu-time.json').body);
   assert.equal(lamaBerlogo(awal, 'time', berlogo), true);
-  assert.equal(lamaTampil(awal, 'time', berlogo), false);
-  const r1 = await gpuTick(env, { now: JAM(23, 55) });
+  assert.equal(lamaBelumDicek(awal, 'time', berlogo), false, 'berlogo tidak perlu diperiksa — langsung dilukis ulang');
+  const r1 = await gpuTick(env, { now: JAM(23, 50) });
   const d1 = JSON.parse(env.STORE.m.get('os/gpu-time.json').body);
-  assert.equal(d1.cek[x].bersih, false, 'pemeriksa menemukan logo/tulisan');
-  assert.equal(lamaTampil(d1, 'time', x), false, 'berlogo tidak tampil');
+  assert.equal(d1.cek[x].lolos, false);
+  assert.match(d1.cek[x].alasan, /tulisan/);
+  assert.equal(d1.qa[x].model, MODEL, 'gambar asli bertulisan diganti lukisan baru yang lolos mutu (tick yang sama)');
   assert.deepEqual(r1.dibuat, { c: 'time', id: x, g: 1, ulang: true, nilai: 9 }, 'nomor seri kecil dilukis ulang lebih dulu');
-  const r2 = await gpuTick(env, { now: JAM(23, 56) });
+  const r2 = await gpuTick(env, { now: JAM(23, 50) + 600_000 });
   assert.deepEqual(r2.dibuat, { c: 'time', id: berlogo, g: 2, ulang: true, nilai: 9 });
   const d2 = JSON.parse(env.STORE.m.get('os/gpu-time.json').body);
-  assert.equal(d2.qa[x].v, QA_V);
-  assert.equal(d2.qa[berlogo].v, QA_V, 'lukisan baru lolos mutu (tanpa tulisan/logo) → tampil setelah video GPU dibuat');
-  assert.equal(putusanCek({}).bersih, false, 'jawaban tanpa „mark: false" tidak pernah dianggap bersih');
+  assert.equal(d2.qa[berlogo].v, QA_V, 'lolos mutu (tanpa tulisan/logo) → tampil setelah video GPU dibuat');
 });
 
-test('karya lama yang masih diam dilukis ulang bergantian dengan karya baru (agar semuanya beranimasi)', async () => {
+test('lukis ulang karya lama bergantian dengan karya baru per tick', async () => {
   const env = envDengan(aiTiruan());
   const [x] = candidates('hadith');
-  env.STORE.m.set('os/gpu-hadith.json', { body: JSON.stringify({ ids: [x], serial: { [x]: 1 }, by: { [x]: 'huggingface-ulyah' }, cek: { [x]: { bersih: true } } }), etag: 'h' });
+  env.STORE.m.set('os/gpu-hadith.json', { body: JSON.stringify({ ids: [x], serial: { [x]: 1 }, by: { [x]: 'huggingface-ulyah' }, cek: { [x]: { v: 2, lolos: false, alasan: 'tulisan' } } }), etag: 'h' });
   const slotUlang = JAM(23, 50); // floor(t / 5 menit) genap
-  const slotBaru = slotUlang + 300_000;
-  const baru = await gpuTick(env, { now: slotBaru });
+  const baru = await gpuTick(env, { now: slotUlang + 300_000 });
   assert.equal(baru.dibuat.ulang, undefined, 'giliran karya baru');
   const ulang = await gpuTick(env, { now: slotUlang + 600_000 });
-  assert.deepEqual(ulang.dibuat, { c: 'hadith', id: x, g: 1, ulang: true, nilai: 9 }, 'giliran lukis ulang karya lama yang diam');
+  assert.deepEqual(ulang.dibuat, { c: 'hadith', id: x, g: 1, ulang: true, nilai: 9 }, 'giliran lukis ulang karya lama');
 });
 
 test('tick: FLUX.2 melukis, pemeriksa meloloskan → seri G-1.. bergiliran 8 koleksi, cap mutu & panel tersimpan', async () => {
