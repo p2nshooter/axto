@@ -1,25 +1,27 @@
 // Koin AXTO: beli (halaman Koin), saldo, staking & jual kembali (Portal member), pantauan seluruh koin (Portal admin).
 // Dibuat dengan DOM + textContent — tidak ada innerHTML dari data.
+import { payChooser, payDialog } from '/pay.js?v=1';
+
 const lang = document.documentElement.lang.startsWith('id') ? 'id' : 'en';
 const T = {
   id: {
     connect: 'Hubungkan wallet Anda dulu (tombol di kanan atas) untuk membeli koin AXTO.',
-    usd: 'Jumlah (USD)', cur: 'Bayar dengan', payer: 'Alamat wallet pengirim Anda (milik Anda sendiri)', agree: 'Saya sudah membaca dan menyetujui perjanjian pembelian koin AXTO', terms: 'Perjanjian pembelian koin AXTO (wajib)',
+    usd: 'Jumlah (USD)', cur: 'Bayar dengan', payer: 'Alamat wallet milik Anda di jaringan yang sama (tujuan pencairan kelak)', agree: 'Saya sudah membaca dan menyetujui perjanjian pembelian koin AXTO', terms: 'Perjanjian pembelian koin AXTO (wajib)',
     get: 'Anda menerima', pay: 'Lanjut bayar', paying: 'Membuat pembayaran…', sendExact: 'Kirim tepat', to: 'ke alamat pembayaran ini', memo: 'Memo / extra ID', copy: 'Salin', until: 'Berlaku sampai', status: 'Status', credited: 'masuk ke saldo Anda',
     balance: 'Saldo koin AXTO', approx: 'setara', history: 'Riwayat pembelian', cashouts: 'Riwayat pencairan', none: 'Belum ada.',
     cashout: 'Jual kembali koin AXTO', dest: 'Dikirim ke (alamat & mata uang yang Anda pakai saat membeli)', coins: 'Jumlah koin', value: 'Nilai', penalty: 'Potongan sebelum rilis DEX', receive: 'Diterima (sebelum biaya jaringan)', confirm: 'Saya paham pencairan hanya ke alamat pembelian saya dan potongannya', doCash: 'Cairkan', noDest: 'Belum ada alamat pembelian. Pencairan hanya bisa ke alamat yang pernah Anda pakai membeli koin.',
     err: { auth: 'Masuk dulu dengan wallet Anda.', amount: 'Jumlah di luar batas.', currency: 'Mata uang tidak didukung.', payer_address: 'Alamat wallet pengirim tidak valid untuk jaringan ini.', agreement: 'Setujui perjanjian terlebih dahulu.', np: 'Pembayaran belum bisa dibuat, coba lagi sebentar.', amount_min: 'Pembelian minimal untuk mata uang ini', presale_closed: 'Presale sudah terjual habis.', closed: 'Staking sudah ditutup karena koin AXTO telah dirilis ke DEX.', stock: 'Stok hadiah tier ini sedang habis — coba jumlah lebih kecil.', payout_address: 'Alamat penerima hadiah harus alamat wallet Base (0x…).', months: 'Pilih 3, 6 atau 12 bulan.', rate_limited: 'Terlalu sering, tunggu sebentar.', balance: 'Saldo tidak cukup.', destination: 'Tujuan harus alamat & mata uang pembelian Anda.', minimum: 'Nilai setelah potongan di bawah minimal $20.', retry: 'Coba lagi.' },
-    st: { creating: 'menyiapkan', waiting: 'menunggu pembayaran', confirming: 'dikonfirmasi jaringan', confirmed: 'terkonfirmasi', sending: 'diproses', partially_paid: 'kurang bayar (dikreditkan sebagian)', finished: 'selesai', failed: 'gagal', refunded: 'dikembalikan', expired: 'kedaluwarsa', error: 'gagal dibuat', queued: 'antre', awaiting_payout_setup: 'antre (payout disiapkan)', retry: 'antre ulang', created: 'diproses', paid: 'terkirim', waiting_balance: 'antre (menunggu dana pembayaran)' },
+    st: { await: 'menunggu pembayaran', partial: 'diterima sebagian', paid: 'diterima — diproses', done: 'selesai', credited: 'selesai (sesuai yang diterima)', manual: 'antre — dibayar admin', paid_out: 'dibayar', creating: 'menyiapkan', waiting: 'menunggu pembayaran', confirming: 'dikonfirmasi jaringan', confirmed: 'terkonfirmasi', sending: 'diproses', partially_paid: 'kurang bayar (dikreditkan sebagian)', finished: 'selesai', failed: 'gagal', refunded: 'dikembalikan', expired: 'kedaluwarsa', error: 'gagal dibuat', queued: 'antre', awaiting_payout_setup: 'antre (payout disiapkan)', retry: 'antre ulang', created: 'diproses', paid: 'terkirim', waiting_balance: 'antre (menunggu dana pembayaran)' },
     adm: { title: 'Koin AXTO — pantauan seluruh koin', ipn: 'URL webhook IPN gerbang pembayaran (tempel di pengaturan notifikasi pembayaran instan)', ready: 'Kesiapan', api: 'API key', ipnS: 'IPN secret', payout: 'Kredensial payout otomatis (email, kata sandi, rahasia 2FA)', yes: 'siap', no: 'belum', totals: 'Ringkasan', members: 'Member pemegang', held: 'Dipegang member', sold: 'Terjual (60 hari)', presale: 'Presale terjual (total)', stake: 'Staking', stakeOpen: 'Staking dibuka', stakeLocked: 'Koin terkunci', stakePos: 'Posisi', returned: 'Dibeli kembali (buyback) — masuk wallet buyback', usdIn: 'USD masuk', usdOut: 'USD dibayarkan', queue: 'Antrean payout', cfg: 'Pengaturan', price: 'Harga koin (USD)', dex: 'Koin sudah dirilis ke DEX (potongan 0%)', save: 'Simpan', orders: 'Pembelian', outs: 'Pencairan', events: 'Semua gerak koin', np: 'Gerbang pembayaran', enabled: 'aktif', disabled: 'belum diaktifkan di gerbang pembayaran' },
   },
   en: {
     connect: 'Connect your wallet first (top right) to buy AXTO coins.',
-    usd: 'Amount (USD)', cur: 'Pay with', payer: 'Your sending wallet address (one you own)', agree: 'I have read and agree to the AXTO coin purchase agreement', terms: 'AXTO coin purchase agreement (required)',
+    usd: 'Amount (USD)', cur: 'Pay with', payer: 'A wallet address you own on the same network (for future cash-outs)', agree: 'I have read and agree to the AXTO coin purchase agreement', terms: 'AXTO coin purchase agreement (required)',
     get: 'You receive', pay: 'Continue to pay', paying: 'Creating payment…', sendExact: 'Send exactly', to: 'to this payment address', memo: 'Memo / extra ID', copy: 'Copy', until: 'Valid until', status: 'Status', credited: 'added to your balance',
     balance: 'AXTO coin balance', approx: 'worth', history: 'Purchase history', cashouts: 'Cash-out history', none: 'Nothing yet.',
     cashout: 'Sell AXTO coins back', dest: 'Sent to (the address & currency you bought with)', coins: 'Coins', value: 'Value', penalty: 'Reduction before DEX release', receive: 'You receive (before network fee)', confirm: 'I understand cash-outs go only to my purchase address and the reduction applies', doCash: 'Cash out', noDest: 'No purchase address yet. Cash-outs can only go to an address you used to buy coins.',
     err: { auth: 'Sign in with your wallet first.', amount: 'Amount out of range.', currency: 'Currency not supported.', payer_address: 'Sending address is not valid for this network.', agreement: 'Please accept the agreement first.', np: 'The payment could not be created, please try again shortly.', amount_min: 'Minimum purchase for this currency', presale_closed: 'The presale is sold out.', closed: 'Staking has closed because the AXTO coin has been released to a DEX.', stock: 'The reward stock for this tier is running out — try a smaller amount.', payout_address: 'The reward address must be a Base wallet address (0x…).', months: 'Choose 3, 6 or 12 months.', rate_limited: 'Too many requests, please wait.', balance: 'Insufficient balance.', destination: 'Destination must be your purchase address & currency.', minimum: 'Value after reduction is below the $20 minimum.', retry: 'Please try again.' },
-    st: { creating: 'preparing', waiting: 'waiting for payment', confirming: 'confirming on chain', confirmed: 'confirmed', sending: 'processing', partially_paid: 'underpaid (partly credited)', finished: 'finished', failed: 'failed', refunded: 'refunded', expired: 'expired', error: 'could not be created', queued: 'queued', awaiting_payout_setup: 'queued (payout being set up)', retry: 'queued again', created: 'processing', paid: 'sent', waiting_balance: 'queued (waiting for payout funds)' },
+    st: { await: 'waiting for payment', partial: 'partly received', paid: 'received — processing', done: 'done', credited: 'done (as received)', manual: 'queued — paid by the admin', paid_out: 'paid', creating: 'preparing', waiting: 'waiting for payment', confirming: 'confirming on chain', confirmed: 'confirmed', sending: 'processing', partially_paid: 'underpaid (partly credited)', finished: 'finished', failed: 'failed', refunded: 'refunded', expired: 'expired', error: 'could not be created', queued: 'queued', awaiting_payout_setup: 'queued (payout being set up)', retry: 'queued again', created: 'processing', paid: 'sent', waiting_balance: 'queued (waiting for payout funds)' },
     adm: { title: 'AXTO coin — every coin monitored', ipn: 'Payment gateway IPN webhook URL (paste into the instant payment notification settings)', ready: 'Readiness', api: 'API key', ipnS: 'IPN secret', payout: 'Automatic payout credentials (email, password, 2FA secret)', yes: 'ready', no: 'missing', totals: 'Totals', members: 'Member holders', held: 'Held by members', sold: 'Sold (60 days)', presale: 'Presale sold (total)', stake: 'Staking', stakeOpen: 'Staking open', stakeLocked: 'Coins locked', stakePos: 'Positions', returned: 'Bought back (buyback) — to the buyback wallet', usdIn: 'USD received', usdOut: 'USD paid out', queue: 'Payout queue', cfg: 'Settings', price: 'Coin price (USD)', dex: 'Coin released to a DEX (0% reduction)', save: 'Save', orders: 'Purchases', outs: 'Cash-outs', events: 'Every coin movement', np: 'Payment gateway', enabled: 'enabled', disabled: 'not enabled at the payment gateway' },
   },
 }[lang];
@@ -59,8 +61,8 @@ async function buyBox(root) {
   if (!me.wallet) { root.replaceChildren(h('p', { class: 'muted' }, T.connect)); return; }
   const ag = await get(`/api/coin/agreement?lang=${lang}`);
   const usd = h('input', { type: 'number', min: ag.limits.minBuyUsd, max: ag.limits.maxBuyUsd, step: '1', value: '10', required: true, name: 'usd' });
-  const cur = h('select', { name: 'cur' }, Object.entries(ag.currencies).map(([k, v]) => h('option', { value: k }, v)));
-  const payer = h('input', { type: 'text', name: 'payer', autocomplete: 'off', spellcheck: 'false', required: true, placeholder: 'T… / 0x… / 1… / bc1…' });
+  const ch = await payChooser();
+  const payer = h('input', { type: 'text', name: 'payer', autocomplete: 'off', spellcheck: 'false', required: true, placeholder: '0x… / T… / bc1…' });
   const q = h('p', { class: 'np-quote', role: 'status' });
   const out = h('div', { class: 'np-out', role: 'status' });
   const btn = h('button', { class: 'btn gold', type: 'submit' }, TX.review);
@@ -68,14 +70,14 @@ async function buyBox(root) {
   const requote = () => {
     clearTimeout(timer);
     timer = setTimeout(async () => {
-      const r = await get(`/api/coin/quote?usd=${encodeURIComponent(usd.value)}&cur=${encodeURIComponent(cur.value)}`);
+      const sel = ch.value() ?? {};
+      const r = await get(`/api/coin/quote?usd=${encodeURIComponent(usd.value)}&coin=${encodeURIComponent(sel.coin ?? '')}&net=${encodeURIComponent(sel.net ?? '')}`);
       if (r.minUsd) usd.min = String(r.minUsd);
-      const min = r.minUsd ? ` · ${TX.minFor}: $${r.minUsd}` : '';
-      q.textContent = r.error ? `${errText(r)}${r.min ? `: $${r.min}` : ''}` : `${T.get}: ${r.coins} AXTO ($${r.priceUsd}/AXTO)${r.estimate ? ` · ≈ ${r.estimate} ${cur.selectedOptions[0].textContent.split(' ')[0]}` : ''}${min}`;
+      q.textContent = r.error ? `${errText(r)}${r.min ? `: $${r.min}` : ''}` : `${T.get}: ${r.coins} AXTO ($${r.priceUsd}/AXTO)${r.estimate ? ` · ≈ ${r.estimate}` : ''}`;
     }, 350);
   };
   usd.addEventListener('input', requote);
-  cur.addEventListener('change', requote);
+  ch.onChange?.(requote);
   requote();
   // Pemilik 24 Nov 2026: ketentuan (termasuk jual kembali) cukup diinfokan saat membeli, dengan peringatan yang santun
   const agree = h('input', { type: 'checkbox', name: 'agree' });
@@ -92,13 +94,14 @@ async function buyBox(root) {
     dlg.close();
     btn.disabled = true;
     out.replaceChildren(h('p', {}, T.paying));
-    const r = await post('/api/coin/buy', { usd: Number(usd.value), cur: cur.value, payer: payer.value.trim(), agree: agree.checked, agreementV: ag.v, lang });
+    const r = await post('/api/coin/buy', { usd: Number(usd.value), ...(ch.value() ?? {}), payer: payer.value.trim(), agree: agree.checked, agreementV: ag.v, lang });
     btn.disabled = false;
     if (!r.ok) { out.replaceChildren(h('p', { class: 'warn' }, `${errText(r)}${r.min ? `: $${r.min}` : ''}`)); return; }
-    showPayment(out, r.order);
+    out.replaceChildren();
+    payDialog(r.intent, { onDone: () => { out.replaceChildren(h('p', { class: 'ok' }, `✓ ${T.credited}`)); } });
   });
   const form = h('form', { class: 'np-form' },
-    h('label', {}, T.usd, usd), h('label', {}, T.cur, cur), h('label', {}, T.payer, payer), q, btn, out);
+    h('label', {}, T.usd, usd), ch.el, h('label', {}, T.payer, payer), q, btn, out);
   form.addEventListener('submit', (ev) => {
     ev.preventDefault();
     agree.checked = false;
@@ -171,23 +174,6 @@ async function stakeBox(root, me) {
   root.replaceChildren(...parts);
 }
 
-function showPayment(out, o) {
-  const st = h('p', { class: 'np-status' }, `${T.status}: ${stText(o.status)}`);
-  out.replaceChildren(h('div', { class: 'np-pay' },
-    h('p', {}, `${T.sendExact} `, h('strong', {}, `${o.pay.amount} ${String(o.pay.currency).toUpperCase()}`), ` ${T.to}:`),
-    h('p', {}, h('code', {}, o.pay.address), ' ', copyBtn(o.pay.address)),
-    o.pay.extraId ? h('p', {}, `${T.memo}: `, h('code', {}, o.pay.extraId), ' ', copyBtn(o.pay.extraId)) : null,
-    o.pay.until ? h('p', { class: 'meta' }, `${T.until}: ${when(o.pay.until)}`) : null,
-    h('p', { class: 'meta' }, `${T.get}: ${o.coins} AXTO · ${o.label}`), st));
-  const poll = async () => {
-    const x = await get(`/api/coin/order/${o.id}`);
-    if (x.error) return;
-    st.textContent = `${T.status}: ${stText(x.status)}${x.credited !== '0' ? ` · ${x.credited} AXTO ${T.credited}` : ''}`;
-    if (!['finished', 'failed', 'expired', 'refunded'].includes(x.status)) setTimeout(poll, 15_000);
-  };
-  setTimeout(poll, 10_000);
-}
-
 // ---------------------------------------------------------------- saldo & cairkan (Portal member)
 async function memberBox(root) {
   const v = await get('/api/coin/me');
@@ -245,13 +231,37 @@ async function adminBox(root) {
     saved.textContent = r.at ? ' ✓' : ' ✗';
   });
   const t = v.totals;
-  const cur = v.np?.currencies ? Object.entries(v.np.currencies).map(([k, c]) => h('li', {}, `${k} (${c.code}): `, c.enabled === null ? '?' : h('span', { class: c.enabled ? 'ok' : 'warn' }, c.enabled ? A.enabled : A.disabled))) : [];
-  const bal = v.np?.balance && !v.np.balance.error ? Object.entries(v.np.balance).map(([k, b]) => h('li', {}, `${k}: ${b?.amount ?? 0}${b?.pendingAmount ? ` (+${b.pendingAmount})` : ''}`)) : [];
+  const P = v.pay ?? {};
+  const ID = lang === 'id';
+  const payBox = h('div', { class: 'np' },
+    h('h3', {}, ID ? 'Pembayaran kripto (akun penampung, kunci izin lihat)' : 'Crypto payments (receiving account, view-only key)'),
+    h('ul', {},
+      h('li', {}, `${ID ? 'Kunci API' : 'API key'}: `, yes(P.ready)),
+      h('li', {}, `${ID ? 'URL callback (menolak semua penarikan)' : 'Callback URL (refuses every withdrawal)'}: `, h('code', {}, P.callbackUrl ?? ''), ' ', copyBtn(P.callbackUrl ?? '')),
+      h('li', {}, `${ID ? 'Sinkron terakhir' : 'Last sync'}: ${P.sync?.at ? when(P.sync.at) : '—'} · ${P.sync?.ok ? '✓' : `✗ ${P.sync?.error ?? ''}`}`),
+      h('li', {}, `${ID ? 'Koin & jaringan' : 'Coins & networks'}: ${(P.options?.coins ?? []).join(' · ') || '—'}`),
+      P.options?.unknown?.length ? h('li', { class: 'warn' }, `${ID ? 'Jaringan belum dikenali (tidak ditawarkan)' : 'Unrecognised networks (not offered)'}: ${P.options.unknown.join(', ')}`) : null,
+      h('li', {}, `${ID ? 'Pembayaran terbuka' : 'Open payments'}: ${P.open ?? 0}`),
+      P.alerts ? h('li', { class: 'warn' }, `${ID ? 'Permintaan penarikan yang ditolak' : 'Refused withdrawal requests'}: ${P.alerts}`) : null),
+    h('p', {}, ...['refresh', 'sync'].map((op) => h('button', { class: 'btn sm', type: 'button', onclick: async () => { await post('/api/admin/pay', { op }); adminBox(root); } }, op === 'refresh' ? (ID ? 'Muat ulang alamat & jaringan' : 'Reload addresses & networks') : (ID ? 'Cek deposit sekarang' : 'Check deposits now')))),
+    P.unmatched?.length ? h('h4', {}, ID ? 'Deposit tanpa pasangan (cocokkan manual ke id pembayaran)' : 'Unmatched deposits (assign to a payment id)') : null,
+    P.unmatched?.length ? table(['', 'Coin', ID ? 'Jumlah' : 'Amount', 'Tx', ''], P.unmatched.map((d) => {
+      const idIn = h('input', { type: 'text', placeholder: 'p…', class: 'sm' });
+      const b = h('button', { class: 'btn sm', type: 'button', onclick: async () => { const r = await post('/api/admin/pay', { op: 'assign', coin: d.coin, depositId: d.depositId, id: idIn.value.trim() }); b.textContent = r.error ? `✗ ${r.error}` : '✓'; } }, ID ? 'Cocokkan' : 'Assign');
+      return [when(d.at), d.coin, d.amount, d.tx ?? '', h('span', {}, idIn, ' ', b)];
+    })) : null,
+    P.recent?.length ? h('h4', {}, ID ? 'Pembayaran terbaru' : 'Recent payments') : null,
+    P.recent?.length ? table(['', 'Id', 'Member', ID ? 'Jenis' : 'Kind', 'USD', ID ? 'Jumlah' : 'Amount', T.status], P.recent.map((x) => [when(x.at), x.id, short(x.wallet), x.kind, `$${x.usd}`, `${x.amount} ${x.coinLabel} · ${x.netLabel}`, `${stText(x.status)}${x.received !== '0' ? ` (${x.received})` : ''}`])) : null);
+  const cashAct = (o) => {
+    if (!['manual', 'queued', 'retry', 'waiting_balance', 'awaiting_payout_setup'].includes(o.status)) return '';
+    const tx = h('input', { type: 'text', placeholder: 'tx hash', class: 'sm' });
+    const msg = h('span', { role: 'status' });
+    const act = (action) => async () => { const r = await post('/api/admin/coin/cashout', { id: o.id, action, tx: tx.value.trim() }); msg.textContent = r.ok ? ' ✓' : ` ✗ ${r.error}`; if (r.ok) setTimeout(() => adminBox(root), 800); };
+    return h('span', {}, tx, ' ', h('button', { class: 'btn sm', type: 'button', onclick: act('paid') }, ID ? 'Sudah dibayar' : 'Mark paid'), ' ', h('button', { class: 'btn ghost sm', type: 'button', onclick: act('refund') }, ID ? 'Kembalikan koin' : 'Refund coins'), msg);
+  };
   root.replaceChildren(
     h('h2', {}, A.title),
-    h('p', {}, A.ipn), h('p', {}, h('code', {}, v.ipnUrl), ' ', copyBtn(v.ipnUrl)),
-    h('h3', {}, A.ready), h('ul', {}, h('li', {}, `${A.api}: `, yes(v.ready.api)), h('li', {}, `${A.ipnS}: `, yes(v.ready.ipn)), h('li', {}, `${A.payout}: `, yes(v.ready.payout))),
-    h('h3', {}, A.np), h('ul', {}, cur), bal.length ? h('ul', {}, bal) : null,
+    payBox,
     h('div', { class: 'np-warn' }, h('img', { src: '/brand/axto-buyback-64.png', alt: 'AXTO Coin Buyback', width: '64', height: '64' }), h('div', {}, h('strong', {}, 'AXTO Coin Buyback'), h('p', { class: 'meta' }, `${t.boughtBack} AXTO`), v.buyback?.address ? h('p', {}, h('code', {}, v.buyback.address), ' ', copyBtn(v.buyback.address)) : h('p', { class: 'muted' }, lang === 'id' ? 'Alamat buyback belum dimuat dari konfigurasi privat.' : 'Buyback address not loaded from private config yet.'))),
     h('h3', {}, A.totals),
     h('dl', { class: 'counters' }, [[A.members, t.members], [A.held, `${t.heldByMembers} AXTO`], [A.sold, `${t.soldViaGateway} AXTO`], [A.presale, `${t.presaleSold} AXTO`], [A.returned, `${t.boughtBack} AXTO`], [A.usdIn, `$${t.usdIn}`], [A.usdOut, `$${t.usdPaidOut}`], [A.queue, t.queue]].map(([k, x]) => h('div', {}, h('dt', {}, k), h('dd', {}, String(x))))),
@@ -261,7 +271,7 @@ async function adminBox(root) {
     h('h3', {}, A.orders),
     table(['', 'Member', 'USD', 'AXTO', T.cur, T.payer, T.status, 'Tx', ''], v.orders.map((o) => [when(o.at), short(o.wallet), `$${o.usd}`, o.credited !== '0' ? o.credited : o.coins, o.label ?? o.cur, o.payer, stText(o.status), o.txid ?? '', o.country ?? ''])),
     h('h3', {}, A.outs),
-    table(['', 'Member', 'AXTO', T.receive, T.dest, T.status, 'Tx', ''], v.cashouts.map((o) => [when(o.at), short(o.wallet), o.coins, `$${o.payoutUsd} (−${o.penaltyPct}%)`, `${o.label ?? o.cur} · ${o.to}`, stText(o.status), o.txid ?? '', o.lastError ?? ''])),
+    table(['', 'Member', 'AXTO', T.receive, T.dest, T.status, 'Tx', ''], v.cashouts.map((o) => [when(o.at), short(o.wallet), o.coins, `$${o.payoutUsd} (−${o.penaltyPct}%)`, `${o.label ?? o.cur} · ${o.to}`, stText(o.status), o.txid ?? '', cashAct(o) || (o.lastError ?? '')])),
     h('h3', {}, A.events),
     table(['', 'Event', 'Member', 'AXTO', 'Ref'], v.events.map((e) => [when(e.at), e.ev, short(e.wallet), `${e.sign}${e.coins}`, e.order ?? e.out ?? e.ref ?? ''])),
   );

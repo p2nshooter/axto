@@ -1,0 +1,39 @@
+name: Wallet gas axto.io (WD tanpa gas)
+
+# Pemilik 24 Nov 2026: „Seluruh gas fee di tanggung axto.io" · „gas fee tetep dari alamat
+# 0x2AB7f55Be9412a42556484Cf38Fd9B91fA34Fed8". Tiap 10 menit wallet gas mengirim voucher WD member (penerima tetap wallet
+# member, gas dari wallet gas) dan mengisi ulang wallet toko sistem bila menipis. Kunci hanya dari GitHub Secret
+# GAS_WALLET_PRIVATE_KEY; tanpa kunci skrip hanya menulis status „menunggu kunci".
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: gas-relay
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  relay:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Pasang
+        working-directory: market
+        run: npm ci --omit=dev --no-audit --no-fund || npm install --omit=dev --no-audit --no-fund --no-save
+      - name: Kirim WD antre & isi ulang wallet toko
+        working-directory: market
+        env:
+          CLOUDFLARE_API_KEY: ${{ secrets.CLOUDFLARE_API_KEY }}
+          CLOUDFLARE_EMAIL: ${{ secrets.CLOUDFLARE_EMAIL }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          GAS_WALLET_PRIVATE_KEY: ${{ secrets.GAS_WALLET_PRIVATE_KEY }}
+          CHAIN_ID: '8453'
+        run: node gas-relay.mjs

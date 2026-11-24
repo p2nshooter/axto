@@ -30,6 +30,8 @@ import * as COIN from './coin.js';
 import * as STAKE from './stake.js';
 import { STAKE_KEY, validStake, stakeDesign, stakeMetadata, stakeContractMetadata } from '../../engine/src/stake.js';
 import * as SHOP from './shop.js';
+import * as PAY from './pay.js';
+import * as CART from './cart.js';
 import * as GPUP from './gpu.js';
 import { QA_V, vGambar, promptFor as gpuPrompt } from '../../engine/src/gpu.js';
 import * as OSX from '../../engine/src/opensea.js';
@@ -183,6 +185,10 @@ async function api(request, env, ctx, url) {
       return json({ error: 'retry' }, 500); // NOWPayments mengirim ulang
     }
   }
+  // URL callback akun penampung pembayaran (pemilik, 24 Nov 2026): penarikan tidak pernah diminta sistem → selalu ditolak
+  if (p === '/api/indodax') {
+    try { return await PAY.callback(request, env); } catch { return new Response('refused', { headers: { 'content-type': 'text/plain' } }); }
+  }
   if (method === 'POST' && !p.startsWith('/api/paypal/webhook') && !p.startsWith('/internal/') && !sameOrigin(request, env)) return json({ error: 'origin' }, 403);
   if (!(await rateLimit(env, `ip:${ip}`, method === 'POST' ? 60 : 300))) return json({ error: 'rate_limited' }, 429);
 
@@ -331,16 +337,62 @@ async function api(request, env, ctx, url) {
     return json({ ...(u ? await publicProfile(env, u) : { wallet: s.wallet }), admin: s.admin });
   }
   // ---- koin AXTO (beli lewat gerbang pembayaran kripto, status pesanan, cairkan) ----
-  if (p === '/api/coin/quote') return json(await COIN.quote(env, { usd: url.searchParams.get('usd'), cur: url.searchParams.get('cur') }), 200, { 'cache-control': 'private, max-age=30' });
+  if (p === '/api/coin/quote') return json(await COIN.quote(env, { usd: url.searchParams.get('usd'), coin: url.searchParams.get('coin'), net: url.searchParams.get('net') }), 200, { 'cache-control': 'private, max-age=30' });
+  // ---- pembayaran kripto (src/pay.js): pilihan koin/jaringan, status, klaim hash, QR ----
+  if (p === '/api/pay/options') {
+    try { return json({ ok: true, ready: PAY.gatewayReady(env), coins: PAY.gatewayReady(env) ? await PAY.publicOptions(env) : [] }, 200, { 'cache-control': 'public, max-age=120' }); } catch { return json({ ok: false, ready: false, coins: [] }, 200, { 'cache-control': 'no-store' }); }
+  }
+  m = /^\/api\/pay\/(p[0-9a-z]{6,40})(\/qr\.svg|\/check)?$/.exec(p);
+  if (m) {
+    if (!s) return json({ error: 'auth' }, 401);
+    const x = await PAY.getIntent(env, m[1]);
+    if (!x || x.wallet !== s.wallet.toLowerCase()) return json({ error: 'not_found' }, 404);
+    if (m[2] === '/qr.svg') return new Response(await PAY.qrSvg(x.address), { headers: { 'content-type': 'image/svg+xml', 'cache-control': 'private, max-age=3600' } });
+    if (m[2] === '/check' && method === 'POST') {
+      if (!(await rateLimit(env, `paycheck:${s.wallet}`, 20))) return json({ error: 'rate_limited' }, 429);
+      const b = await readBody(request, 1024);
+      if (b.tx) { const c = await PAY.claimTx(env, s.wallet, m[1], b.tx); if (!c.ok) return json(c, 400); }
+      await PAY.syncDeposits(env).catch(() => null);
+      await PAY.settle(env, m[1]).catch(() => null);
+    }
+    return json({ ok: true, intent: PAY.publicIntent(await PAY.getIntent(env, m[1])) }, 200, { 'cache-control': 'private, no-store' });
+  }
+  if (p === '/api/pay/me') {
+    if (!s) return json({ error: 'auth' }, 401);
+    return json({ ok: true, items: await PAY.myIntents(env, s.wallet) }, 200, { 'cache-control': 'private, no-store' });
+  }
+  // ---- keranjang: beli massal & WD massal (src/cart.js) ----
+  if (p === '/api/cart') {
+    if (!s) return json({ error: 'auth' }, 401);
+    if (method === 'POST') {
+      if (!(await rateLimit(env, `cart:${s.wallet}`, 120))) return json({ error: 'rate_limited' }, 429);
+      const r = await CART.edit(env, s.wallet, await readBody(request, 2048));
+      return json(r, r.ok ? 200 : 400, { 'cache-control': 'private, no-store' });
+    }
+    return json(await CART.view(env, s.wallet), 200, { 'cache-control': 'private, no-store' });
+  }
+  if (p === '/api/cart/checkout' && method === 'POST') {
+    if (!s) return json({ error: 'auth' }, 401);
+    if (!(await rateLimit(env, `cartpay:${s.wallet}`, 10))) return json({ error: 'rate_limited' }, 429);
+    const r = await CART.checkout(env, s.wallet, await readBody(request, 2048));
+    if (r.ok) SOLD.clear();
+    return json(r, r.ok ? 200 : 400, { 'cache-control': 'private, no-store' });
+  }
+  if (p === '/api/cart/wd' && method === 'POST') {
+    if (!s) return json({ error: 'auth' }, 401);
+    if (!(await rateLimit(env, `cartwd:${s.wallet}`, 10))) return json({ error: 'rate_limited' }, 429);
+    const r = await CART.withdrawAll(env, s.wallet, await readBody(request, 1024), colAddrOf(env), EX_NAMES);
+    return json(r, r.ok ? 200 : 400, { 'cache-control': 'private, no-store' });
+  }
   if (p === '/api/coin/agreement') {
     const l = url.searchParams.get('lang') === 'id' ? 'id' : 'en';
-    return json({ v: COIN.AGREEMENT_V, lang: l, items: COIN.AGREEMENT[l], warn: COIN.AGREEMENT_WARN[l], stakeV: STAKE.STAKE_AGREEMENT_V, hash: await COIN.agreementHash(l), currencies: Object.fromEntries(Object.entries(COIN.CURRENCIES).map(([k, c]) => [k, c.label])), limits: COIN.LIMITS }, 200, { 'cache-control': 'public, max-age=300' });
+    return json({ v: COIN.AGREEMENT_V, lang: l, items: COIN.AGREEMENT[l], warn: COIN.AGREEMENT_WARN[l], stakeV: STAKE.STAKE_AGREEMENT_V, hash: await COIN.agreementHash(l), limits: COIN.LIMITS }, 200, { 'cache-control': 'public, max-age=300' });
   }
   if (p === '/api/coin/buy' && method === 'POST') {
     if (!s) return json({ error: 'auth' }, 401);
     if (!(await rateLimit(env, `coinbuy:${s.wallet}`, 10))) return json({ error: 'rate_limited' }, 429);
     const b = await readBody(request, 2048);
-    const r = await COIN.buy(env, s.wallet, b, { lang: b.lang === 'id' ? 'id' : 'en', country: request.headers.get('cf-ipcountry'), base: env.BASE_URL || url.origin });
+    const r = await COIN.buy(env, s.wallet, b, { lang: b.lang === 'id' ? 'id' : 'en', country: request.headers.get('cf-ipcountry') });
     return json(r, r.ok ? 200 : 400, { 'cache-control': 'private, no-store' });
   }
   if (p === '/api/coin/me') {
@@ -387,6 +439,21 @@ async function api(request, env, ctx, url) {
   if (p === '/api/admin/coin') {
     if (!s?.admin) return json({ error: 'admin_only' }, 403);
     return json(await COIN.adminView(env), 200, { 'cache-control': 'private, no-store' });
+  }
+  if (p === '/api/admin/coin/cashout' && method === 'POST') {
+    if (!s?.admin) return json({ error: 'admin_only' }, 403);
+    const r = await COIN.adminCashout(env, s.wallet, await readBody(request, 1024));
+    return json(r, r.ok ? 200 : 400, { 'cache-control': 'private, no-store' });
+  }
+  if (p === '/api/admin/pay') {
+    if (!s?.admin) return json({ error: 'admin_only' }, 403);
+    if (method === 'POST') {
+      const b = await readBody(request, 1024);
+      if (b.op === 'refresh') { try { await PAY.gatewayCfg(env, { refresh: true }); } catch (e) { return json({ error: String(e.message) }, 400); } }
+      if (b.op === 'sync') await PAY.syncDeposits(env, { force: true });
+      if (b.op === 'assign') { const r = await PAY.adminAssign(env, s.wallet, b); if (!r.ok) return json(r, 400); }
+    }
+    return json(await PAY.adminView(env), 200, { 'cache-control': 'private, no-store' });
   }
   if (p === '/api/admin/coin/cfg' && method === 'POST') {
     if (!s?.admin) return json({ error: 'admin_only' }, 403);
@@ -514,6 +581,16 @@ async function api(request, env, ctx, url) {
   if (p === '/internal/stake/kirim') {
     if (!(await engineAuth(request, env, ''))) return json({ error: 'auth' }, 401);
     return json({ items: await STAKE.pendingSends(env) });
+  }
+  // WD tanpa gas: wallet gas sistem (market/gas-relay.mjs) mengambil antrean voucher lalu melapor
+  if (p === '/internal/wd/antre') {
+    if (!(await engineAuth(request, env, ''))) return json({ error: 'auth' }, 401);
+    return json({ items: await SHOP.relayQueue(env, colAddrOf(env)) });
+  }
+  if (p === '/internal/wd/terkirim' && method === 'POST') {
+    const body = await request.text();
+    if (!(await engineAuth(request, env, body))) return json({ error: 'auth' }, 401);
+    return json(await SHOP.relayDone(env, JSON.parse(body)));
   }
   if (p === '/internal/stake/stok') {
     if (!(await engineAuth(request, env, ''))) return json({ error: 'auth' }, 401);
@@ -740,10 +817,10 @@ async function html(request, env, ctx, url) {
     const exgs = await gpuSet(env, c);
     const crumbs = [[BREAD[lang].home, `/${lang}`], [BREAD[lang].ex, `/${lang}/${PATHS.exclusive[lang]}`], [P.collName(lang, c), `/${lang}/c/${c}`]];
     const product = { '@context': 'https://schema.org', '@type': 'Product', name: meta.name, image: meta.image, description: meta.description.slice(0, 300), sku: `${c}-${id}`, brand: { '@type': 'Brand', name: 'AXTO' }, offers: { '@type': 'Offer', priceCurrency: 'USD', price: 1, availability: stock.left > 0 ? 'https://schema.org/InStock' : 'https://schema.org/SoldOut', url: `${base}/${lang}/nft/${c}/${id}`, seller: { '@type': 'Organization', name: 'AXTO' } } };
-    return out({ page: 'home', rest: `/nft/${c}/${id}`, title: `${meta.name} — $1`, desc: `${meta.name}: ${lang === 'id' ? 'karya eksklusif, 10 edisi, $1 per edisi dengan koin AXTO di axto.io' : 'exclusive work, 10 editions, $1 per edition in AXTO coin on axto.io'}.`.slice(0, 160), image: meta.image, jsonld: [product, breadcrumb(base, [...crumbs, [meta.name, `/${lang}/nft/${c}/${id}`]])], body: P.nftPage(lang, c, id, meta, attributesFor(c, id, lang), '', { stock, listings, priceCoins, crumbs, gpuSerial: exgs.serial[id] ? Number(exgs.serial[id]) : 0, gpuAnim: exgs.anim.has(id), gpuFirst: Boolean(exgs.serial[id]) && url.searchParams.get('v') === 'g' }), script: "const x=document.createElement('script');x.type='module';x.src='/market.js?v=1';document.head.append(x);" });
+    return out({ page: 'home', rest: `/nft/${c}/${id}`, title: `${meta.name} — $1`, desc: `${meta.name}: ${lang === 'id' ? 'karya eksklusif, 10 edisi, $1 per edisi dengan koin AXTO di axto.io' : 'exclusive work, 10 editions, $1 per edition in AXTO coin on axto.io'}.`.slice(0, 160), image: meta.image, jsonld: [product, breadcrumb(base, [...crumbs, [meta.name, `/${lang}/nft/${c}/${id}`]])], body: P.nftPage(lang, c, id, meta, attributesFor(c, id, lang), '', { stock, listings, priceCoins, crumbs, gpuSerial: exgs.serial[id] ? Number(exgs.serial[id]) : 0, gpuAnim: exgs.anim.has(id), gpuFirst: Boolean(exgs.serial[id]) && url.searchParams.get('v') === 'g' }), script: "const x=document.createElement('script');x.type='module';x.src='/market.js?v=2';document.head.append(x);" });
   }
   const key = pageFromSlug(sub);
-  const mk = "const x=document.createElement('script');x.type='module';x.src='/market.js?v=1';document.head.append(x);";
+  const mk = "const x=document.createElement('script');x.type='module';x.src='/market.js?v=2';document.head.append(x);";
   if (key === 'exclusive' && !parts[2]) {
     const sold = {};
     const gpuEx = {};
@@ -767,6 +844,9 @@ async function html(request, env, ctx, url) {
     // publik hanya kontrak token; wallet internal hanya di Portal admin (perintah pemilik #43)
     const addrs = { token: env.AXTO_TOKEN || '', sale: '' };
     return out({ page: key, title: T[lang].coin.title, image: `${base}/brand/axto-coin-512.png`, jsonld: [P.coinGuideJsonLd(lang, base)], body: P.coinPage(lang, { sold: Number((await COIN.presaleSold(env)) / COIN.MICRO) }, false, addrs) });
+  }
+  if (key === 'cart') {
+    return out({ page: key, title: T[lang].nav.cart, body: P.cartPage(lang), noindex: true, private: true, ads: false, script: "const x=document.createElement('script');x.type='module';x.src='/cart.js?v=1';document.head.append(x);" });
   }
   if (key === 'member') {
     // wallet admin selalu ke Portal admin (perintah pemilik #34)
@@ -797,7 +877,7 @@ export default {
     const p = url.pathname;
     try {
       if (p === '/ads.txt') return new Response(ADS_TXT, { headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'public, max-age=3600' } });
-      if (p === '/robots.txt') return new Response(`User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /internal/\nDisallow: /id/member\nDisallow: /en/member\nDisallow: /id/admin\nDisallow: /en/admin\nSitemap: ${env.BASE_URL}/sitemap.xml\n`, { headers: { 'content-type': 'text/plain; charset=utf-8' } });
+      if (p === '/robots.txt') return new Response(`User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /internal/\nDisallow: /id/member\nDisallow: /en/member\nDisallow: /id/keranjang\nDisallow: /en/cart\nDisallow: /id/admin\nDisallow: /en/admin\nSitemap: ${env.BASE_URL}/sitemap.xml\n`, { headers: { 'content-type': 'text/plain; charset=utf-8' } });
       if (p.startsWith('/sitemap')) return (await sitemap(env, url)) ?? new Response('not found', { status: 404 });
       if (p.startsWith('/api/') || p.startsWith('/internal/') || p === '/tokenlist.json') return await api(request, env, ctx, url);
       let m = /^\/img\/stake\/(\d+)\.svg$/.exec(p);
@@ -868,6 +948,8 @@ export default {
     ctx.waitUntil(SHOP.settleDue(e2).catch((e) => appendLog(env.STORE, 'error', { path: 'cron:settle', e: String(e?.message ?? e).slice(0, 300) })));
     ctx.waitUntil(SHOP.recover(e2, colAddrOf(e2), EX_NAMES).catch((e) => appendLog(env.STORE, 'error', { path: 'cron:recover', e: String(e?.message ?? e).slice(0, 300) })));
     ctx.waitUntil(COIN.processCashouts(env).catch((e) => appendLog(env.STORE, 'error', { path: 'cron:cashout', e: String(e?.message ?? e).slice(0, 300) })));
+    // pembayaran kripto: deposit diterima → pembelian berhasil; tidak dibayar → pesanan dilepas
+    ctx.waitUntil(PAY.cron(e2).catch((e) => appendLog(env.STORE, 'error', { path: 'cron:pay', e: String(e?.message ?? e).slice(0, 300) })));
     // staking jatuh tempo: koin kembali ke saldo, NFT hadiah masuk antrean kirim tanpa gas
     ctx.waitUntil(STAKE.processDue(env).catch((e) => appendLog(env.STORE, 'error', { path: 'cron:stake', e: String(e?.message ?? e).slice(0, 300) })));
     // seri G- 24 jam: satu karya per tick bila jatah gratis harian terbuka (lihat src/gpu.js)
