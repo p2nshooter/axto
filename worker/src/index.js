@@ -340,7 +340,7 @@ async function api(request, env, ctx, url) {
   if (p === '/api/coin/quote') return json(await COIN.quote(env, { usd: url.searchParams.get('usd'), coin: url.searchParams.get('coin'), net: url.searchParams.get('net') }), 200, { 'cache-control': 'private, max-age=30' });
   // ---- pembayaran kripto (src/pay.js): pilihan koin/jaringan, status, klaim hash, QR ----
   if (p === '/api/pay/options') {
-    try { return json({ ok: true, ready: PAY.gatewayReady(env), coins: PAY.gatewayReady(env) ? await PAY.publicOptions(env) : [] }, 200, { 'cache-control': 'public, max-age=120' }); } catch { return json({ ok: false, ready: false, coins: [] }, 200, { 'cache-control': 'no-store' }); }
+    try { return json({ ok: true, ready: PAY.gatewayReady(env), coins: PAY.gatewayReady(env) ? await PAY.publicOptions(env) : [] }, 200, { 'cache-control': 'public, max-age=120' }); } catch (e) { return json({ ok: false, ready: false, coins: [], reason: /^gw:[a-z0-9_-]{1,20}$/i.test(String(e?.message)) ? e.message : 'error' }, 200, { 'cache-control': 'no-store' }); }
   }
   m = /^\/api\/pay\/(p[0-9a-z]{6,40})(\/qr\.svg|\/check)?$/.exec(p);
   if (m) {
