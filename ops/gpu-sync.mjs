@@ -114,7 +114,20 @@ export async function renderVideo(fetchImpl, key, spec, job, ms = 150_000) {
   const auth = { Authorization: `Bearer ${key}` };
   const signal = AbortSignal.timeout(ms);
   try {
-    const img = { path: job.img, meta: { _type: 'gradio.FileData' } };
+    // gambar diunggah ke Space dulu (tidak bergantung pada Space mengambil dari axto.io); gagal unggah → URL langsung
+    let img = { path: job.img, url: job.img, orig_name: `${job.c}-${job.id}.png`, meta: { _type: 'gradio.FileData' } };
+    try {
+      const g = await fetchImpl(job.img, { signal });
+      if (g.ok) {
+        const fd = new FormData();
+        fd.append('files', new Blob([await g.arrayBuffer()], { type: 'image/png' }), `${job.c}-${job.id}.png`);
+        const u = await fetchImpl(`${base}/upload`, { method: 'POST', signal, headers: auth, body: fd });
+        const up = u.ok ? (await u.json().catch(() => null))?.[0] : null;
+        if (typeof up === 'string' && up) img = { path: up, orig_name: `${job.c}-${job.id}.png`, meta: { _type: 'gradio.FileData' } };
+      }
+    } catch (e) {
+      if (e?.name === 'TimeoutError' || e?.name === 'AbortError') throw e;
+    }
     const r = await fetchImpl(`${base}/call/${spec.api}`, { method: 'POST', signal, headers: { ...auth, 'Content-Type': 'application/json' }, body: JSON.stringify({ data: spec.data(img, job.prompt, job.id % 2_147_483_647) }) });
     if (!r.ok) return { err: r.status === 429 ? 'quota' : `http_${r.status}` };
     const ev = (await r.json())?.event_id;
@@ -125,7 +138,7 @@ export async function renderVideo(fetchImpl, key, spec, job, ms = 150_000) {
     const m = /event:\s*complete\s*\r?\ndata:\s*(.+)/.exec(sse);
     if (!m) {
       const e = /event:\s*error\s*\r?\ndata:\s*(.*)/.exec(sse)?.[1] ?? '';
-      return { err: /quota|exceeded|GPU limit|daily/i.test(e) ? 'quota' : 'space_error', msg: e.replace(/hf_[A-Za-z0-9]+/g, 'hf_…').slice(0, 140) };
+      return { err: /quota|exceeded|GPU limit|daily/i.test(e) ? 'quota' : 'space_error', msg: `${spec.space}: ${e || '(kosong)'}`.replace(/hf_[A-Za-z0-9]+/g, 'hf_…').slice(0, 160) };
     }
     const url = urlVideo(base, JSON.parse(m[1]));
     if (!url) return { err: 'no_file' };
@@ -175,6 +188,7 @@ export async function run({ io = realIO(), fetchImpl = globalThis.fetch, now = D
   // 3) render
   const made = Object.fromEntries(GPU_KEYS.map((c) => [c, []]));
   const errs = {};
+  const contoh = {}; // contoh pesan galat Space (tanpa kunci) agar penyebab terlihat di log
   const habis = new Set(); // kunci yang kuotanya habis di putaran ini
   let n = 0;
   for (const job of jobs) {
@@ -197,6 +211,7 @@ export async function run({ io = realIO(), fetchImpl = globalThis.fetch, now = D
         }
         last = r;
         errs[r.err] = (errs[r.err] ?? 0) + 1;
+        if (r.msg && Object.keys(contoh).length < 6 && !Object.values(contoh).includes(r.msg)) contoh[`${r.err}#${Object.keys(contoh).length + 1}`] = r.msg;
         if (r.err === 'quota') { habis.add(ki); break; }
       }
     }
@@ -217,7 +232,7 @@ export async function run({ io = realIO(), fetchImpl = globalThis.fetch, now = D
   io.putText('axto-vault-data/gpu-video.json', JSON.stringify(state));
   const summary = Object.fromEntries(GPU_KEYS.map((c) => [c, (st[c].ids ?? []).filter((id) => lolos(c, id)).length]));
   const beranimasi = Object.fromEntries(GPU_KEYS.map((c) => [c, Object.keys(st[c].vid ?? {}).length]));
-  const video = { baru: Object.values(made).reduce((a, x) => a + x.length, 0), antrean: jobs.length, jeda: skipped.cooldown, kunci: { semua: K.keys.length, hf: hf.length, habisKuota: habis.size, sumber: K.from, perPenyedia: byProvider }, gagal: errs };
+  const video = { baru: Object.values(made).reduce((a, x) => a + x.length, 0), antrean: jobs.length, jeda: skipped.cooldown, kunci: { semua: K.keys.length, hf: hf.length, habisKuota: habis.size, sumber: K.from, perPenyedia: byProvider }, gagal: errs, contoh };
   log(`Seri G- lolos mutu: ${JSON.stringify(summary)} · beranimasi (tampil) ${JSON.stringify(beranimasi)} · video ${JSON.stringify(video)}`);
   return { summary, beranimasi, video, made };
 }

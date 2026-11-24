@@ -106,3 +106,22 @@ test('gagal tidak pernah menyerah selamanya: 2× gagal → jeda 3 jam → dicoba
   const r4 = await run({ io, fetchImpl: down, cf: CF, log: () => {}, now: () => t, perMs: 1000 });
   assert.equal(r4.video.antrean, 1, 'dicoba lagi setelah jeda');
 });
+
+test('gambar diunggah ke Space dulu; pesan galat Space dicatat tanpa kunci', async () => {
+  const { renderVideo, SPACES } = await import('../gpu-sync.mjs');
+  const job = { c: 'time', id: 7, img: 'https://axto.io/gpu/time/7.png?v=q1', prompt: 'p' };
+  const seen = [];
+  const fetchImpl = async (url, init = {}) => {
+    const u = String(url);
+    seen.push(u);
+    if (u === job.img) return new Response(new Uint8Array(1000), { status: 200 });
+    if (u.endsWith('/gradio_api/upload')) { assert.ok(init.body instanceof FormData); return new Response(JSON.stringify(['/tmp/gradio/abc/time-7.png'])); }
+    if (u.endsWith('/call/generate_video')) { assert.equal(JSON.parse(init.body).data[0].path, '/tmp/gradio/abc/time-7.png'); return new Response(JSON.stringify({ event_id: 'z' })); }
+    if (u.endsWith('/call/generate_video/z')) return new Response('event: error\ndata: "boom hf_RAHASIA123"\n\n');
+    return new Response('', { status: 500 });
+  };
+  const r = await renderVideo(fetchImpl, 'hf_RAHASIA123', SPACES[0], job, 5_000);
+  assert.equal(r.err, 'space_error');
+  assert.ok(r.msg.includes('boom') && !r.msg.includes('RAHASIA'));
+  assert.ok(seen.some((u) => u.endsWith('/gradio_api/upload')));
+});
