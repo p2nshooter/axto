@@ -145,3 +145,20 @@ test('anonim lebih dulu (akun HF gratis ditolak ZeroGPU), LTX urutan pertama; ta
   assert.ok(r.bytes, JSON.stringify(r));
   assert.ok(auths.every((a) => a === null), 'tanpa header Authorization');
 });
+
+test('versi render naik: catatan gagal cara lama dihapus, karya langsung diantrekan lagi', async () => {
+  const { RENDER_V } = await import('../gpu-sync.mjs');
+  const io = mkIO();
+  const CF = 'cf-test-key';
+  io.files['axto-vault-data/api-keys.enc'] = _seal.sealV(JSON.stringify({ at: 'x', keys: [] }), _seal.hkey(CF, 'axto:API_KEYS'));
+  const [a] = showcaseIds('quran').ids;
+  io.files['axto-nft-data/os/gpu-quran.json'] = JSON.stringify({ ids: [a], serial: { [a]: 1 }, by: {}, qa: { [a]: { v: QA_V } } });
+  const t = Date.UTC(2026, 10, 24, 20);
+  io.files['axto-vault-data/gpu-video.json'] = JSON.stringify({ failed: { [`quran:${a}:v${QA_V}`]: { n: 5, at: t - 60_000, err: 'space_error' } }, done: {} });
+  const r = await run({ io, fetchImpl: async () => new Response('', { status: 503 }), cf: CF, log: () => {}, now: () => t, perMs: 1000 });
+  assert.equal(r.video.jeda, 0, 'tidak lagi dijeda');
+  assert.equal(r.video.antrean, 1);
+  const st = JSON.parse(io.files['axto-vault-data/gpu-video.json']);
+  assert.equal(st.v, RENDER_V);
+  assert.equal(st.failed[`quran:${a}:v${QA_V}`].n, 1, 'dihitung ulang dari awal');
+});

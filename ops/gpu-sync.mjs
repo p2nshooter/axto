@@ -31,6 +31,8 @@ import { GPU_KEYS, QA_V, candidates, promptFor, gerakFor } from '../engine/src/g
 export { GPU_KEYS, candidates, promptFor };
 export const VIDEO_ANTRE = 48;
 export const RETRY_MS = 3 * 3600_000;
+/** Versi cara render. Naik → catatan gagal lama dihapus (gagal karena cara lama, bukan karena karyanya). 2 = anonim + LTX. */
+export const RENDER_V = 2;
 const NEG = 'text, letters, words, writing, numbers, subtitles, watermark, logo, signature, people, face, blurry, distorted, deformed, melting, static, frozen, low quality';
 
 /** Space gambar→video ZeroGPU (Gradio REST: POST /gradio_api/call/<api>, lalu GET SSE hasilnya). */
@@ -163,6 +165,7 @@ export async function run({ io = realIO(), fetchImpl = globalThis.fetch, now = D
   const state = parse(io.getText('axto-vault-data/gpu-video.json'), { failed: {}, done: {} });
   state.failed ??= {};
   state.done ??= {};
+  if (state.v !== RENDER_V) { state.failed = {}; state.v = RENDER_V; }
   const jk = (j) => `${j.c}:${j.id}:v${QA_V}`;
 
   // 1) kunci
