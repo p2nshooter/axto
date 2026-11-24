@@ -120,8 +120,28 @@ test('gambar diunggah ke Space dulu; pesan galat Space dicatat tanpa kunci', asy
     if (u.endsWith('/call/generate_video/z')) return new Response('event: error\ndata: "boom hf_RAHASIA123"\n\n');
     return new Response('', { status: 500 });
   };
-  const r = await renderVideo(fetchImpl, 'hf_RAHASIA123', SPACES[0], job, 5_000);
+  const r = await renderVideo(fetchImpl, 'hf_RAHASIA123', SPACES.find((x) => x.api === 'generate_video'), job, 5_000);
   assert.equal(r.err, 'space_error');
   assert.ok(r.msg.includes('boom') && !r.msg.includes('RAHASIA'));
   assert.ok(seen.some((u) => u.endsWith('/gradio_api/upload')));
+});
+
+test('anonim lebih dulu (akun HF gratis ditolak ZeroGPU), LTX urutan pertama; tanpa kunci pun tetap merender', async () => {
+  const { renderVideo, SPACES } = await import('../gpu-sync.mjs');
+  assert.equal(SPACES[0].space, 'lightricks-ltx-video-distilled');
+  const job = { c: 'time', id: 9, img: 'https://axto.io/gpu/time/9.png?v=q1', prompt: 'p' };
+  const auths = [];
+  const fetchImpl = async (url, init = {}) => {
+    const u = String(url);
+    auths.push(init.headers?.Authorization ?? null);
+    if (u === job.img) return new Response(new Uint8Array(1000));
+    if (u.endsWith('/gradio_api/upload')) return new Response(JSON.stringify(['/tmp/gradio/x/time-9.png']));
+    if (u.endsWith('/call/image_to_video')) return new Response(JSON.stringify({ event_id: 'a' }));
+    if (u.endsWith('/call/image_to_video/a')) return new Response('event: complete\ndata: [{"video":{"url":"https://x.hf.space/file/o.mp4"}}, 7]\n\n');
+    if (u === 'https://x.hf.space/file/o.mp4') return new Response(new Uint8Array(30_000));
+    return new Response('', { status: 500 });
+  };
+  const r = await renderVideo(fetchImpl, null, SPACES[0], job, 5_000);
+  assert.ok(r.bytes, JSON.stringify(r));
+  assert.ok(auths.every((a) => a === null), 'tanpa header Authorization');
 });

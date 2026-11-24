@@ -34,11 +34,12 @@ export const RETRY_MS = 3 * 3600_000;
 const NEG = 'text, letters, words, writing, numbers, subtitles, watermark, logo, signature, people, face, blurry, distorted, deformed, melting, static, frozen, low quality';
 
 /** Space gambar→video ZeroGPU (Gradio REST: POST /gradio_api/call/<api>, lalu GET SSE hasilnya). */
+// Urutan: LTX lebih dulu — diuji 24 Nov 2026 dari runner: LTX berhasil (±4 detik), Wan 2.2 sedang rusak di hulu.
 export const SPACES = [
+  // Lightricks/ltx-video-distilled · image_to_video(prompt, negative, image, video, height, width, mode, duration, frames, seed, randomize, guidance, texture)
+  { space: 'lightricks-ltx-video-distilled', api: 'image_to_video', data: (img, prompt, seed) => [prompt, NEG, img, null, 512, 512, 'image-to-video', 2, 9, seed, false, 1, true] },
   // zerogpu-aoti/wan2-2-fp8da-aoti-faster · generate_video(image, prompt, steps, negative, duration, guidance, guidance_2, seed, randomize)
   { space: 'zerogpu-aoti-wan2-2-fp8da-aoti-faster', api: 'generate_video', data: (img, prompt, seed) => [img, prompt, 4, NEG, 2.5, 1, 1, seed, false] },
-  // Lightricks/ltx-video-distilled · image_to_video(prompt, negative, image, video, height, width, mode, duration, frames, seed, randomize, guidance, texture)
-  { space: 'lightricks-ltx-video-distilled', api: 'image_to_video', data: (img, prompt, seed) => [prompt, NEG, img, null, 512, 512, 'image-to-video', 2.5, 9, seed, false, 1, true] },
 ];
 
 export function realIO() {
@@ -111,7 +112,8 @@ export function urlVideo(base, out) {
 /** Satu render lewat satu Space. {bytes} atau {err, msg} — err: quota | http_<n> | timeout | … (tanpa kunci). */
 export async function renderVideo(fetchImpl, key, spec, job, ms = 150_000) {
   const base = `https://${spec.space}.hf.space/gradio_api`;
-  const auth = { Authorization: `Bearer ${key}` };
+  // key null = anonim (jatah ZeroGPU per IP runner); akun HF gratis ditolak ZeroGPU tanpa pesan (data: null)
+  const auth = key ? { Authorization: `Bearer ${key}` } : {};
   const signal = AbortSignal.timeout(ms);
   try {
     // gambar diunggah ke Space dulu (tidak bergantung pada Space mengambil dari axto.io); gagal unggah → URL langsung
@@ -190,29 +192,34 @@ export async function run({ io = realIO(), fetchImpl = globalThis.fetch, now = D
   const errs = {};
   const contoh = {}; // contoh pesan galat Space (tanpa kunci) agar penyebab terlihat di log
   const habis = new Set(); // kunci yang kuotanya habis di putaran ini
+  let anonHabis = false; // jatah anonim IP runner habis di putaran ini
+  const lewat = { anonim: 0, kunci: 0 };
   let n = 0;
   for (const job of jobs) {
     if (now() - t0 > budgetMs) break;
     const live = hf.map((_, i) => i).filter((i) => !habis.has(i));
-    if (!live.length) break;
+    // anonim lebih dulu (terbukti jalan dari runner), lalu maksimal 2 kunci HF sebagai cadangan
+    const tries = [...(anonHabis ? [] : [-1]), ...live.slice(0, 2).map((_, t) => live[(n + t) % live.length])];
+    if (!tries.length) break;
     let ok = false;
     let last = null;
-    for (let t = 0; t < Math.min(3, live.length) && !ok && now() - t0 <= budgetMs; t += 1) {
-      const ki = live[(n + t) % live.length];
+    for (const ki of tries) {
+      if (ok || now() - t0 > budgetMs) break;
       for (const spec of SPACES) {
-        const r = await renderVideo(fetchImpl, hf[ki].key, spec, job, perMs);
+        const r = await renderVideo(fetchImpl, ki < 0 ? null : hf[ki].key, spec, job, perMs);
         if (r.bytes) {
           io.putBytes(`axto-nft-data/gpu/${job.c}/${job.id}.mp4`, r.bytes, 'video/mp4');
           made[job.c].push(job.id);
-          state.done[jk(job)] = { at: new Date(now()).toISOString(), bytes: r.bytes.length, space: spec.space };
+          state.done[jk(job)] = { at: new Date(now()).toISOString(), bytes: r.bytes.length, space: spec.space, via: ki < 0 ? 'anonim' : 'kunci' };
           delete state.failed[jk(job)];
+          lewat[ki < 0 ? 'anonim' : 'kunci'] += 1;
           ok = true;
           break;
         }
         last = r;
         errs[r.err] = (errs[r.err] ?? 0) + 1;
-        if (r.msg && Object.keys(contoh).length < 6 && !Object.values(contoh).includes(r.msg)) contoh[`${r.err}#${Object.keys(contoh).length + 1}`] = r.msg;
-        if (r.err === 'quota') { habis.add(ki); break; }
+        if (r.msg && Object.keys(contoh).length < 6 && !Object.values(contoh).includes(r.msg)) contoh[`${r.err}#${Object.keys(contoh).length + 1}`] = `${ki < 0 ? 'anonim' : 'kunci'} · ${r.msg}`;
+        if (r.err === 'quota') { if (ki < 0) anonHabis = true; else habis.add(ki); break; }
       }
     }
     n += 1;
@@ -232,7 +239,7 @@ export async function run({ io = realIO(), fetchImpl = globalThis.fetch, now = D
   io.putText('axto-vault-data/gpu-video.json', JSON.stringify(state));
   const summary = Object.fromEntries(GPU_KEYS.map((c) => [c, (st[c].ids ?? []).filter((id) => lolos(c, id)).length]));
   const beranimasi = Object.fromEntries(GPU_KEYS.map((c) => [c, Object.keys(st[c].vid ?? {}).length]));
-  const video = { baru: Object.values(made).reduce((a, x) => a + x.length, 0), antrean: jobs.length, jeda: skipped.cooldown, kunci: { semua: K.keys.length, hf: hf.length, habisKuota: habis.size, sumber: K.from, perPenyedia: byProvider }, gagal: errs, contoh };
+  const video = { baru: Object.values(made).reduce((a, x) => a + x.length, 0), antrean: jobs.length, jeda: skipped.cooldown, kunci: { semua: K.keys.length, hf: hf.length, habisKuota: habis.size, sumber: K.from, perPenyedia: byProvider }, anonimHabis: anonHabis, lewat, gagal: errs, contoh };
   log(`Seri G- lolos mutu: ${JSON.stringify(summary)} · beranimasi (tampil) ${JSON.stringify(beranimasi)} · video ${JSON.stringify(video)}`);
   return { summary, beranimasi, video, made };
 }
