@@ -16,3 +16,12 @@ Aturan kerja yang terbuka untuk kontributor:
 - **Seri G- selalu beranimasi** („OS-G-4 masih diem saja, baru yg OS-G-5 yg punya animasi"): karya G- tampil hanya bila lolos
   mutu dan videonya sudah dibuat GPU. Karya lama yang gambar aslinya lolos pemeriksaan mutu langsung dianimasikan; yang tidak
   lolos atau berlogo dilukis ulang dengan nomor seri yang sama.
+- **Pembayaran kripto langsung** (pemilik, 24 Nov 2026): semua harga bisa dibayar tanpa koin AXTO — member memilih koin &
+  jaringan (stablecoin dianjurkan, jaringan murah lebih dulu), mendapat alamat deposit akun penampung axto.io + jumlah unik +
+  QR; pembelian berhasil HANYA setelah pembayaran diterima (`worker/src/pay.js`, kunci API izin lihat — sistem tidak pernah
+  menarik dana). Nama penyedia tidak pernah tampil di halaman, JS publik, atau respons API publik.
+- **Keranjang** (`worker/src/cart.js`): kumpulkan dulu, beli massal (koin AXTO atau kripto) & WD massal. Keranjang bukan
+  pemesanan — barang yang keduluan member lain hilang otomatis dengan pemberitahuan; barang dipesan atomik saat checkout.
+- **Gas ditanggung axto.io** dari wallet gas `0x2AB7f55Be9412a42556484Cf38Fd9B91fA34Fed8` (`market/gas-relay.mjs`, kunci
+  hanya GitHub Secret `GAS_WALLET_PRIVATE_KEY`): WD member dikirim tanpa gas member; wallet toko diisi ulang dari wallet gas.
+  Jual ulang di Pasar Member bebas gas (fee 10%); jual di OpenSea gas oleh pemiliknya, royalti 10% tetap.
