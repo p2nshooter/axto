@@ -34,6 +34,11 @@ Aturan kerja yang terbuka untuk kontributor:
   dulu dan ditolak sebelum dikirim bila > 15 jt gas. Koleksi 1/1 Qur'an, Hadits dan Prangko masing-masing dua kontrak (I & II,
   ±16,7 jt karya, ±11,6 jt gas); total tetap 100 jt karya, desain bagian II melanjutkan nomor bagian I. Deploy lengkap
   terukur 179.393.879 gas (22 koleksi + koin), dana pemilik 0,00145539 ETH cukup pada harga gas ±0,006 gwei.
+- **Sinkron pembayaran dari runner GitHub** (25 Nov 2026): API akun penampung menolak jaringan worker Cloudflare (HTTP 403)
+  tetapi menerima runner GitHub. `ops/pay-sync.mjs` (workflow `pay-sync.yml`, dipicu tiap 10 menit juga oleh penjaga
+  produksi) membaca alamat deposit (satu panggilan per koin) dan riwayat deposit tiap 20 detik selama ±9 menit, lalu
+  mengirimnya apa adanya ke worker (`/internal/pay/ingest`, HMAC engine). Pencocokan & pengkreditan tetap di
+  `worker/src/pay.js`; hanya titik baca yang dipanggil.
 - **1/1 tambahan 50 jt** (pemilik 25 Nov 2026: „Tambahin aja 50jt lg, jgn 80jt biar cukup"): bagian III Qur'an, Hadits dan
   Prangko (±16,7 jt karya per kontrak, desain melanjutkan bagian II). Dideploy dari sisa dana deployer SETELAH koin + 22
   koleksi inti aktif & terdaftar, satu per satu, hanya bila saldo cukup (batas gas × maxFee + cadangan); terdaftar ke worker

@@ -448,9 +448,51 @@ export async function settle(env, id, now = Date.now()) {
  * Baca riwayat deposit 2 hari terakhir dan cocokkan. Dibatasi sekali per 20 detik (status di pay/sync.json).
  * Deposit tanpa pasangan dicatat (pay/dep/…, id null) untuk portal admin.
  */
+/** Cocokkan satu daftar riwayat deposit (format API v2) untuk satu koin. Tiap deposit diproses sekali (createOnce). */
+export async function processDeposits(env, coin, list, now = Date.now()) {
+  let seen = 0;
+  let matched = 0;
+  for (const e of Array.isArray(list) ? list : []) {
+    if (String(e?.status ?? '').toLowerCase() !== 'success') continue;
+    const depId = String(e.id ?? '').replace(/[^0-9A-Za-z_-]/g, '');
+    const units8 = toUnits8(e.amount);
+    if (!depId || units8 === null) continue;
+    seen += 1;
+    const dkey = `pay/dep/${coin}/${depId}`;
+    if (await env.STORE.head(dkey)) continue;
+    // setoran hasil penjualan OpenSea + royalti dari wallet toko (market/opensea-list.mjs) — bukan pembayaran member
+    const sweep = e.txId ? await env.STORE.head(`pay/sweep/${String(e.txId).toLowerCase()}.json`) : null;
+    if (sweep) {
+      if (await createOnce(env.STORE, dkey, { id: null, sweep: true, units8: units8.toString(), tx: e.txId, net: e.network ?? null, at: now })) await appendLog(env.STORE, 'pay', { ev: 'sweep', coin, depositId: depId, units8: units8.toString(), tx: e.txId });
+      continue;
+    }
+    let id = null;
+    const tk = txKey(e.txId);
+    if (tk) id = (await readJSON(env.STORE, tk))?.id ?? null;
+    if (!id) id = (await readJSON(env.STORE, `pay/amt/${coin}/${units8}`))?.id ?? null;
+    // intent harus untuk koin yang sama dan dibuat sebelum deposit selesai
+    if (id) {
+      const x = await getIntent(env, id);
+      const doneAt = Number(e.completeTime ?? e.insertTime ?? 0);
+      const okTime = !doneAt || doneAt >= Number(x?.at ?? 0) - 10 * 60_000;
+      if (!x || x.coin !== coin || !okTime) id = null;
+    }
+    if (!(await createOnce(env.STORE, dkey, { id, units8: units8.toString(), tx: e.txId ?? null, net: e.network ?? null, at: now }))) continue;
+    if (!id) { await appendLog(env.STORE, 'pay', { ev: 'unmatched', coin, depositId: depId, units8: units8.toString(), tx: e.txId ?? null }); continue; }
+    await applyDeposit(env, id, { id: depId, units8: units8.toString(), tx: e.txId ?? null }, now);
+    matched += 1;
+  }
+  return { seen, matched };
+}
+
+/** Sinkron dari runner GitHub dianggap segar selama ini (worker tidak perlu memanggil API sendiri). */
+export const RUNNER_FRESH_MS = 15 * 60_000;
+
 export async function syncDeposits(env, { now = Date.now(), force = false } = {}) {
   if (!gatewayReady(env)) return { ok: false, error: 'pay_off' };
   const last = await readJSON(env.STORE, 'pay/sync.json').catch(() => null);
+  // akses API dari jaringan worker ditolak (403) → sinkron dijalankan runner GitHub (ops/pay-sync.mjs) lewat ingest()
+  if (last?.via === 'runner' && now - Number(last.okAt ?? 0) < RUNNER_FRESH_MS) return { ok: true, skipped: 'runner', okAt: last.okAt };
   if (!force && last && now - Number(last.at ?? 0) < SYNC_MIN_MS) return { ok: true, skipped: true };
   await putJSON(env.STORE, 'pay/sync.json', { ...(last ?? {}), at: now });
   let cfg = null;
@@ -464,36 +506,9 @@ export async function syncDeposits(env, { now = Date.now(), force = false } = {}
     try {
       list = await gw(env, '/api/v2/capital/deposit/hisrec', { coin: coin.toUpperCase(), startTime: String(now - 2 * 86_400_000), endTime: String(now), limit: '1000' });
     } catch (e) { errors[e.message] = (errors[e.message] ?? 0) + 1; continue; }
-    for (const e of Array.isArray(list) ? list : []) {
-      if (String(e.status ?? '').toLowerCase() !== 'success') continue;
-      const depId = String(e.id ?? '').replace(/[^0-9A-Za-z_-]/g, '');
-      const units8 = toUnits8(e.amount);
-      if (!depId || units8 === null) continue;
-      seen += 1;
-      const dkey = `pay/dep/${coin}/${depId}`;
-      if (await env.STORE.head(dkey)) continue;
-      let id = null;
-      const tk = txKey(e.txId);
-      if (tk) id = (await readJSON(env.STORE, tk))?.id ?? null;
-      if (!id) id = (await readJSON(env.STORE, `pay/amt/${coin}/${units8}`))?.id ?? null;
-      // intent harus untuk koin yang sama dan dibuat sebelum deposit selesai
-      if (id) {
-        const x = await getIntent(env, id);
-        const doneAt = Number(e.completeTime ?? e.insertTime ?? 0);
-        const okTime = !doneAt || doneAt >= Number(x?.at ?? 0) - 10 * 60_000;
-        if (!x || x.coin !== coin || !okTime) id = null;
-      }
-      // setoran hasil penjualan OpenSea + royalti dari wallet toko (market/opensea-list.mjs) — bukan pembayaran member
-      const sweep = e.txId ? await env.STORE.head(`pay/sweep/${String(e.txId).toLowerCase()}.json`) : null;
-      if (sweep) {
-        if (await createOnce(env.STORE, dkey, { id: null, sweep: true, units8: units8.toString(), tx: e.txId, net: e.network ?? null, at: now })) await appendLog(env.STORE, 'pay', { ev: 'sweep', coin, depositId: depId, units8: units8.toString(), tx: e.txId });
-        continue;
-      }
-      if (!(await createOnce(env.STORE, dkey, { id, units8: units8.toString(), tx: e.txId ?? null, net: e.network ?? null, at: now }))) continue;
-      if (!id) { await appendLog(env.STORE, 'pay', { ev: 'unmatched', coin, depositId: depId, units8: units8.toString(), tx: e.txId ?? null }); continue; }
-      await applyDeposit(env, id, { id: depId, units8: units8.toString(), tx: e.txId ?? null }, now);
-      matched += 1;
-    }
+    const r = await processDeposits(env, coin, list, now);
+    seen += r.seen;
+    matched += r.matched;
   }
   if (coins.length && Object.keys(errors).length === coins.length) {
     await putJSON(env.STORE, 'pay/sync.json', { at: now, ok: false, error: Object.keys(errors).join(','), okAt: last?.okAt ?? null });
@@ -503,12 +518,44 @@ export async function syncDeposits(env, { now = Date.now(), force = false } = {}
   return { ok: true, seen, matched };
 }
 
+/**
+ * Data dari runner GitHub (ops/pay-sync.mjs, HMAC): API menolak jaringan worker (403), runner tidak. Runner hanya membaca
+ * (alamat deposit & riwayat deposit, kunci izin lihat) lalu mengirim jawabannya apa adanya; pencocokan tetap di sini.
+ */
+export async function ingest(env, { addresses, deposits } = {}, now = Date.now()) {
+  const out = {};
+  if (Array.isArray(addresses)) {
+    const v = { ...buildOptions(addresses), at: now, via: 'runner' };
+    if (v.opts.length) {
+      await putJSON(env.STORE, 'pay/cfg.json', v);
+      await env.STORE.delete('pay/cfg-error.json').catch(() => null);
+      CFG = { at: now, v };
+    }
+    out.options = v.opts.map((o) => `${o.coin}:${o.nets.map((n) => n.net).join(',')}`);
+    out.unknown = v.unknown;
+  }
+  if (deposits && typeof deposits === 'object') {
+    let seen = 0;
+    let matched = 0;
+    for (const [coin, list] of Object.entries(deposits)) {
+      if (!COINS[coin]) continue;
+      const r = await processDeposits(env, coin, list, now);
+      seen += r.seen;
+      matched += r.matched;
+    }
+    await putJSON(env.STORE, 'pay/sync.json', { at: now, ok: true, okAt: now, seen, matched, via: 'runner' });
+    out.seen = seen;
+    out.matched = matched;
+  }
+  return out;
+}
+
 /** Cron: sinkronkan deposit, lalu selesaikan/lepaskan intent yang kedaluwarsa, lalu bersihkan penanda jumlah lama. */
 export async function cron(env, now = Date.now(), { refreshPause = 300 } = {}) {
   if (gatewayReady(env)) {
     const c = await readJSON(env.STORE, 'pay/cfg.json').catch(() => null);
     const e = await readJSON(env.STORE, 'pay/cfg-error.json').catch(() => null);
-    const stale = !c || now - Number(c.at ?? 0) > CFG_TTL_MS;
+    const stale = !c || now - Number(c.at ?? 0) > (c.via === 'runner' ? 2 * CFG_TTL_MS : CFG_TTL_MS);
     const backoff = e && now - Number(e.at ?? 0) < 30 * 60_000; // galat akses: coba lagi 30 menit kemudian
     if (stale && !backoff) await gatewayCfg(env, { refresh: true, now, refreshPause }).catch(() => null);
   }

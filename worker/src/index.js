@@ -566,6 +566,13 @@ async function api(request, env, ctx, url) {
     }
     return json(r, r.ok ? 200 : 400);
   }
+  // pembayaran kripto: alamat deposit & riwayat deposit dibaca runner GitHub (API menolak jaringan worker) — HMAC
+  if (p === '/internal/pay/ingest' && method === 'POST') {
+    const body = await request.text();
+    if (body.length > 2_000_000) return json({ error: 'too_large' }, 413);
+    if (!(await engineAuth(request, env, body))) return json({ error: 'auth' }, 401);
+    return json({ ok: true, ...(await PAY.ingest(env, JSON.parse(body))) });
+  }
   // Pratinjau seri G- (ops/gpu-pratinjau.mjs): lukis + periksa mutu TANPA disimpan, untuk melihat hasil sebelum produksi.
   if (p === '/internal/gpu/pratinjau' && method === 'POST') {
     const body = await request.text();

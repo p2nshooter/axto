@@ -33,11 +33,11 @@ jobs:
       GH_REPO: ${{ github.repository }}
       CABANG: ${{ github.event.repository.default_branch }}
     steps:
-      - name: Jaga produksi (engine, seri G-, listing OpenSea, deploy kontrak, wallet gas) ±5 jam 40 menit
+      - name: Jaga produksi (pembayaran, engine, seri G-, listing OpenSea, deploy kontrak, wallet gas) ±5 jam 40 menit
         run: |
           set -u
           # berkas workflow · jeda minimum antarputaran (menit)
-          JADWAL="engine.yml:60 gpu-sync.yml:60 opensea-list.yml:60 contracts-deploy.yml:10 gas-relay.yml:10"
+          JADWAL="pay-sync.yml:10 engine.yml:60 gpu-sync.yml:60 opensea-list.yml:60 contracts-deploy.yml:10 gas-relay.yml:10"
           mulai=$(date +%s)
           picu() {
             local wf=$1 menit=$2 info status dibuat umur
