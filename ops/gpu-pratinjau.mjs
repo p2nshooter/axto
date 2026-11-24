@@ -29,6 +29,13 @@ for (const c of koleksi) {
     const { image, ...rest } = j;
     ringkas.push({ c, id, ...rest });
     console.log(`${j.ok ? '✓' : '✗'} ${c} ${id} · ${j.model} · ${JSON.stringify(j.qa)}${j.klein ? ` · klein: ${j.klein}` : ''}`);
+    // gambar kecil di log (artefak tidak selalu bisa diunduh peninjau): baris PRATINJAU-B64 <nama> <potongan>
+    try {
+      const { default: sharp } = await import('sharp');
+      const kecil = await sharp(Buffer.from(j.image, 'base64')).resize(320, 320).jpeg({ quality: 72 }).toBuffer();
+      const b64 = kecil.toString('base64');
+      for (let i = 0; i < b64.length; i += 3000) console.log(`PRATINJAU-B64 ${c}-${id} ${b64.slice(i, i + 3000)}`);
+    } catch { /* sharp tidak terpasang: lewati */ }
   }
 }
 writeFileSync('pratinjau/hasil.json', JSON.stringify(ringkas, null, 2));
