@@ -35,52 +35,68 @@ function fakeR2() {
 const EVM = '0x' + '5a'.repeat(20);
 const W = '0x' + '11'.repeat(20);
 const W2 = '0x' + '22'.repeat(20);
-// akun penampung tiruan: getInfo (alamat & jaringan), transHistory (deposit), ticker publik
+// akun penampung tiruan (API v2): alamat deposit per koin & jaringan, riwayat deposit per koin, ticker publik
+const TRON = 'TTestAddrForAxtoUnitTests123456789';
+const ADDR = {
+  'USDT:BEP20': { address: EVM, network: 'bep20' },
+  'USDT:TRC20': { address: TRON, network: 'trc20' },
+  'USDT:ERC20': { address: EVM, network: 'erc20' },
+  'USDC:BASE': { address: EVM, network: 'base' },
+  'USDC:ERC20': { address: EVM, network: 'erc20' },
+  'USDC:SOL': { address: 'So1anaTestAddrxxxxxxxxxxxxxxxxxxxxxxxxxxx', network: 'sol', tag: 'memo-1' },
+  'ETH:BASE': { address: EVM, network: 'base' },
+  'ETH:ARB': { address: EVM, network: 'arb' },
+  'ETH:ETH': { address: EVM, network: 'eth' },
+  'BTC:BTC': { address: 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4', network: 'btc' },
+};
 function fakeGateway(state) {
   return async (url, init = {}) => {
-    const u = String(url);
-    const ok = (j) => new Response(JSON.stringify(j), { status: 200, headers: { 'content-type': 'application/json' } });
-    if (u === 'https://indodax.com/api/ticker_all') return ok({ tickers: { usdt_idr: { last: '16000' }, usdc_idr: { last: '16000' }, eth_idr: { last: '48000000' }, btc_idr: { last: '1600000000' } } });
-    if (u === PAY.TAPI) {
-      const body = String(init.body);
-      // tanda tangan HMAC-SHA512 atas badan permintaan
-      assert.equal(init.headers.Key, 'KEY-1');
-      assert.equal(init.headers.Sign, createHmac('sha512', 'secret-1').update(body).digest('hex'));
-      const p = Object.fromEntries(new URLSearchParams(body));
-      state.calls = [...(state.calls ?? []), p.method];
-      if (p.method === 'getInfo') {
-        return ok({ success: 1, return: {
-          balance: { idr: 999 }, name: 'Rahasia', email: 'rahasia@example.com',
-          address: { usdt: EVM, usdc: EVM, eth: EVM, btc: 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4', xrp: 'rXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' },
-          network: { usdt: ['bep20', 'trc20', 'erc20'], usdc: ['base', 'erc20'], eth: ['eth', 'arb', 'op', 'base'], btc: 'mainnet', xrp: 'xrp' },
-          memo_is_required: { usdt: { bep20: false, trc20: false, erc20: false }, usdc: { base: false }, eth: { eth: false, base: false }, btc: { mainnet: false }, xrp: { xrp: true } },
-        } });
+    const u = new URL(String(url));
+    const ok = (j, status = 200) => new Response(JSON.stringify(j), { status, headers: { 'content-type': 'application/json' } });
+    if (String(url) === 'https://indodax.com/api/ticker_all') return ok({ tickers: { usdt_idr: { last: '16000' }, usdc_idr: { last: '16000' }, eth_idr: { last: '48000000' }, btc_idr: { last: '1600000000' } } });
+    if (u.origin === PAY.GW) {
+      // tanda tangan HMAC-SHA256 atas query string, kunci di X-APIKEY; hanya GET
+      assert.equal(init.method ?? 'GET', 'GET');
+      assert.equal(init.headers['X-APIKEY'], 'KEY-1');
+      assert.equal(init.headers.Sign, createHmac('sha256', 'secret-1').update(u.search.slice(1)).digest('hex'));
+      const q = Object.fromEntries(u.searchParams);
+      state.calls = [...(state.calls ?? []), u.pathname];
+      if (u.pathname === '/api/v2/capital/deposit/address/list') {
+        const a = ADDR[`${q.coin}:${q.network}`];
+        if (!a) return ok([{ coin: q.coin, address: '', tag: '', network: q.network.toLowerCase() }]);
+        return ok([{ coin: q.coin, address: a.address, tag: a.tag ?? '', network: a.network }]);
       }
-      if (p.method === 'transHistory') return ok({ success: 1, return: { withdraw: {}, deposit: state.deposits ?? {} } });
-      return ok({ success: 0, error: 'method', error_code: 'bad' });
+      if (u.pathname === '/api/v2/capital/deposit/hisrec') return ok(state.deposits?.[q.coin.toLowerCase()] ?? []);
+      return ok({ code: -1100, msg: 'unknown' }, 400);
     }
     return new Response('{}', { status: 404 });
   };
 }
+const dep = (id, amount, txId, network = 'bep20', t = Date.now()) => ({ id, amount, coin: 'X', txId, address: 'x', network, status: 'success', insertTime: t, completeTime: t });
+const ready = (env) => PAY.gatewayCfg(env, { refresh: true, refreshPause: 0 });
 
 const ENV = () => ({ STORE: fakeR2(), BASE_URL: 'https://axto.io', INDODAX_API_KEY: 'KEY-1', INDODAX_API_SECRET: 'secret-1' });
 beforeEach(() => { PAY._resetPrices(); PAY._resetCfg(); });
 
-test('alamat & jaringan dari getInfo: hanya yang dikenali & cocok bentuk alamatnya; memo wajib tidak ditawarkan; tanpa saldo/nama/email', async () => {
+test('alamat deposit (API v2): hanya jaringan yang punya alamat & dikenali; memo wajib tidak ditawarkan; dibaca di cron, bukan saat member membuka', async () => {
   const env = ENV();
   const state = {};
   globalThis.fetch = fakeGateway(state);
+  await assert.rejects(PAY.publicOptions(env), /gw:warming/, 'belum dibaca cron: belum ditawarkan');
+  await PAY.cron(env, Date.now(), { refreshPause: 0 });
+  PAY._resetCfg();
   const opts = await PAY.publicOptions(env);
-  assert.deepEqual(opts.map((o) => o.coin), ['usdt', 'usdc', 'eth', 'btc'], 'stablecoin lebih dulu; xrp (memo wajib) tidak ditawarkan');
-  assert.deepEqual(opts.find((o) => o.coin === 'usdt').nets.map((n) => n.net), ['bep20', 'erc20'], 'trc20 tidak cocok dengan alamat 0x → tidak ditawarkan');
-  assert.deepEqual(opts.find((o) => o.coin === 'eth').nets.map((n) => n.net), ['base', 'arb', 'op', 'eth'], 'Base (termurah) lebih dulu');
+  assert.deepEqual(opts.map((o) => o.coin), ['usdt', 'usdc', 'eth', 'btc'], 'stablecoin lebih dulu');
+  assert.deepEqual(opts.find((o) => o.coin === 'usdt').nets.map((n) => n.net), ['bep20', 'trc20', 'erc20'], 'jaringan murah lebih dulu');
+  assert.deepEqual(opts.find((o) => o.coin === 'usdc').nets.map((n) => n.net), ['base', 'erc20'], 'USDC Solana (memo wajib) tidak ditawarkan');
+  assert.deepEqual(opts.find((o) => o.coin === 'eth').nets.map((n) => n.net), ['base', 'arb', 'eth'], 'Base (termurah) lebih dulu; tanpa alamat (OP) tidak ditawarkan');
   assert.equal(opts.find((o) => o.coin === 'usdc').nets[0].wallet, true);
   const saved = JSON.stringify(await env.STORE.get('pay/cfg.json').then((o) => o.json()));
-  assert.ok(!saved.includes('Rahasia') && !saved.includes('rahasia@') && !saved.includes('999'), 'saldo, nama & email akun tidak pernah disimpan');
-  assert.ok(saved.includes('usdt:trc20:alamat'));
-  // sistem tidak pernah memanggil metode selain baca
-  await assert.rejects(PAY.tapi(env, 'withdrawCoin', {}), /gw:method/);
-  await assert.rejects(PAY.tapi(env, 'trade', {}), /gw:method/);
+  assert.ok(!saved.includes('memo-1'), 'alamat bermemo tidak disimpan sebagai opsi');
+  assert.ok(state.calls.every((c) => c.startsWith('/api/v2/capital/deposit/')), 'hanya titik baca deposit yang dipanggil');
+  // sistem tidak pernah memanggil titik lain (penarikan, perdagangan)
+  await assert.rejects(PAY.gw(env, '/api/v2/capital/withdraw/apply', {}), /gw:method/);
+  await assert.rejects(PAY.gw(env, '/api/v2/order', {}), /gw:method/);
 });
 
 test('jumlah unik: dua pembayaran $10 tidak pernah berjumlah sama; tambahan maksimal ±$0,10', () => {
@@ -97,11 +113,12 @@ test('beli koin AXTO: pembayaran → deposit sukses (cocok jumlah unik) → kred
   const env = ENV();
   const state = {};
   globalThis.fetch = fakeGateway(state);
+  await ready(env);
   assert.equal((await C.buy(env, W, { usd: 10, coin: 'usdt', net: 'bep20', payer: EVM, agree: false, agreementV: C.AGREEMENT_V }, { lang: 'id' })).error, 'agreement');
   assert.equal((await C.buy(env, W, { usd: 10, coin: 'usdt', net: 'bep20', payer: 'TTestAddrForAxtoUnitTests123456789', agree: true, agreementV: C.AGREEMENT_V }, { lang: 'id' })).error, 'payer_address');
   assert.equal((await C.buy(env, W, { usd: 0.5, coin: 'usdt', net: 'bep20', payer: EVM, agree: true, agreementV: C.AGREEMENT_V }, { lang: 'id' })).error, 'amount');
   assert.equal((await C.buy(env, W, { usd: 10, coin: 'usdt', net: 'trc20', payer: EVM, agree: true, agreementV: C.AGREEMENT_V }, { lang: 'id' })).error, 'payer_address');
-  assert.equal((await C.buy(env, W, { usd: 10, coin: 'usdt', net: 'trc20', payer: 'TTestAddrForAxtoUnitTests123456789', agree: true, agreementV: C.AGREEMENT_V }, { lang: 'id' })).error, 'network', 'jaringan yang tidak ditawarkan ditolak');
+  assert.equal((await C.buy(env, W, { usd: 10, coin: 'usdt', net: 'polygon', payer: EVM, agree: true, agreementV: C.AGREEMENT_V }, { lang: 'id' })).error, 'network', 'jaringan tanpa alamat deposit ditolak');
   const r = await C.buy(env, W, { usd: 10, coin: 'usdt', net: 'bep20', payer: '0x' + '77'.repeat(20), agree: true, agreementV: C.AGREEMENT_V }, { lang: 'id' });
   assert.ok(r.ok, JSON.stringify(r));
   const x = r.intent;
@@ -112,11 +129,11 @@ test('beli koin AXTO: pembayaran → deposit sukses (cocok jumlah unik) → kred
   // QR berisi alamat
   assert.match(await PAY.qrSvg(x.address), /^<svg/);
   // deposit milik orang lain dengan jumlah berbeda → tidak dicocokkan
-  state.deposits = { usdt: [{ status: 'success', usdt: '10.00000000', amount: '10.00000000', success_time: String(Math.floor(Date.now() / 1000)), deposit_id: 'd1', tx: '0x' + 'aa'.repeat(32) }] };
+  state.deposits = { usdt: [dep('d1', '10.00000000', '0x' + 'aa'.repeat(32))] };
   await PAY.syncDeposits(env, { force: true });
   assert.equal((await C.account(env, W)).micro, '0');
   // deposit dengan jumlah unik tepat → 1 AXTO ($10 pada $10/AXTO)
-  state.deposits.usdt.push({ status: 'success', usdt: x.amount, amount: x.amount, success_time: String(Math.floor(Date.now() / 1000)), deposit_id: 'd2', tx: '0x' + 'bb'.repeat(32) });
+  state.deposits.usdt.push(dep('d2', x.amount, '0x' + 'bb'.repeat(32)));
   const s1 = await PAY.syncDeposits(env, { force: true });
   assert.equal(s1.matched, 1);
   assert.equal((await C.account(env, W)).micro, '1000000');
@@ -136,13 +153,14 @@ test('kurang bayar: ditunggu sampai kedaluwarsa, lalu dikreditkan sesuai yang di
   const env = ENV();
   const state = {};
   globalThis.fetch = fakeGateway(state);
+  await ready(env);
   const t0 = Date.now();
   const r = await C.buy(env, W, { usd: 20, coin: 'usdc', net: 'base', payer: EVM, agree: true, agreementV: C.AGREEMENT_V }, { lang: 'en' });
   const x = r.intent;
   const tx = '0x' + 'cd'.repeat(32);
   assert.ok((await PAY.claimTx(env, W, x.id, tx)).ok);
   assert.equal((await PAY.claimTx(env, W2, x.id, tx)).error, 'not_found');
-  state.deposits = { usdc: [{ status: 'success', usdc: '10.00000000', success_time: String(Math.floor(t0 / 1000)), deposit_id: 'u1', tx }] };
+  state.deposits = { usdc: [dep('u1', '10.00000000', tx, 'base', t0)] };
   await PAY.syncDeposits(env, { force: true });
   assert.equal((await PAY.getIntent(env, x.id)).status, 'partial');
   assert.equal((await C.account(env, W)).micro, '0', 'belum dikreditkan selama masih bisa dilunasi');
@@ -151,6 +169,20 @@ test('kurang bayar: ditunggu sampai kedaluwarsa, lalu dikreditkan sesuai yang di
   assert.equal(after.status, 'credited');
   const got = BigInt((await C.account(env, W)).micro);
   assert.ok(got > 990_000n && got <= 1_000_000n, `≈ 1 AXTO untuk $10 dari $20, dapat ${got}`);
+});
+
+test('setoran hasil penjualan OpenSea dari wallet toko (pay/sweep) tidak pernah dianggap pembayaran member', async () => {
+  const env = ENV();
+  const state = {};
+  globalThis.fetch = fakeGateway(state);
+  await ready(env);
+  const tx = '0x' + '5e'.repeat(32);
+  await env.STORE.put(`pay/sweep/${tx}.json`, JSON.stringify({ tx, to: 'indodax' }));
+  state.deposits = { eth: [dep('sw1', '0.05000000', tx, 'base')] };
+  await PAY.syncDeposits(env, { force: true });
+  const v = await PAY.adminView(env);
+  assert.equal(v.unmatched.length, 0, 'bukan deposit tak dikenal');
+  assert.equal((await (await env.STORE.get('pay/dep/eth/sw1')).json()).sweep, true, 'dicatat sekali sebagai setoran');
 });
 
 test('URL callback: penarikan apa pun ditolak (tidak pernah „ok") dan dicatat untuk admin', async () => {
@@ -192,6 +224,7 @@ test('keranjang kripto: barang dipesan saat checkout, diserahkan setelah pembaya
   const env = ENV();
   const state = {};
   globalThis.fetch = fakeGateway(state);
+  await ready(env);
   const c = SHOP.EX_KEYS[1];
   await CART.edit(env, W, { op: 'add', t: 'ex', c, id: 7, qty: 3 });
   const r = await CART.checkout(env, W, { pay: 'crypto', coin: 'usdt', net: 'bep20', ref: 'cryptocheck01' });
@@ -199,7 +232,7 @@ test('keranjang kripto: barang dipesan saat checkout, diserahkan setelah pembaya
   assert.equal(r.intent.usd, 3);
   assert.equal((await SHOP.stockOf(env, c, 7)).left, 7, 'stok ditahan selama menunggu pembayaran');
   assert.equal((await SHOP.holdings(env, W)).items.length, 0, 'belum diserahkan sebelum dibayar');
-  state.deposits = { usdt: [{ status: 'success', usdt: r.intent.amount, success_time: String(Math.floor(Date.now() / 1000)), deposit_id: 'k1', tx: '0x' + 'ef'.repeat(32) }] };
+  state.deposits = { usdt: [dep('k1', r.intent.amount, '0x' + 'ef'.repeat(32))] };
   await PAY.syncDeposits(env, { force: true });
   assert.equal((await PAY.getIntent(env, r.intent.id)).status, 'done');
   assert.deepEqual((await SHOP.holdings(env, W)).items.map((i) => [i.id, i.qty]), [[7, 3]]);
@@ -239,6 +272,7 @@ test('Pasar Member dibayar kripto: edisi ditahan, setelah pembayaran diterima pi
   const env = ENV();
   const state = {};
   globalThis.fetch = fakeGateway(state);
+  await ready(env);
   const c = SHOP.EX_KEYS[2];
   await C.adjust(env, W2, 10n * C.MICRO, { ev: 'test' });
   assert.ok((await SHOP.buyExclusive(env, W2, { c, id: 9, qty: 3, ref: 'seller-buy-01' })).ok);
@@ -253,7 +287,7 @@ test('Pasar Member dibayar kripto: edisi ditahan, setelah pembayaran diterima pi
   assert.ok(r.ok, JSON.stringify(r));
   assert.equal((await SHOP.getListing(env, lid)).left, 1, 'dua edisi ditahan untuk pembeli');
   const sellerBefore = BigInt((await C.account(env, W2)).micro);
-  state.deposits = { usdc: [{ status: 'success', usdc: r.intent.amount, success_time: String(Math.floor(Date.now() / 1000)), deposit_id: 'm1', tx: '0x' + '12'.repeat(32) }] };
+  state.deposits = { usdc: [dep('m1', r.intent.amount, '0x' + '12'.repeat(32), 'base')] };
   await PAY.syncDeposits(env, { force: true });
   assert.equal((await PAY.getIntent(env, r.intent.id)).status, 'done');
   assert.deepEqual((await SHOP.holdings(env, W)).items.map((i) => [i.id, i.qty]), [[9, 2]]);

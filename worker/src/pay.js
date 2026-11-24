@@ -6,21 +6,21 @@
  *   apa, pake stable coin aja rekomendasi atau make crypto terkenal" · „buatkan QR nya dengan jaringanya".
  *
  * Nama penyedia akun penampung TIDAK pernah tampil di halaman, JS publik atau respons API publik (rahasia perusahaan).
- * Kunci API hanya izin LIHAT: sistem tidak pernah menarik dana. Yang dibaca hanya alamat deposit + jaringannya (getInfo) dan
- * riwayat deposit (transHistory). Saldo, nama dan email akun tidak pernah disimpan atau ditampilkan.
+ * Kunci API hanya izin LIHAT: sistem tidak pernah menarik dana. Yang dibaca hanya alamat deposit per koin & jaringan dan
+ * riwayat deposit (API v2). Saldo, nama dan email akun tidak pernah disimpan atau ditampilkan.
  *
  * Alur satu pembayaran (intent):
  *   1. Member memilih koin + jaringan → alamat deposit akun untuk jaringan itu + jumlah koin dari kurs bursa, ditambah
  *      penanda unik pada digit terakhir (sen terkecil) agar deposit bisa dicocokkan otomatis + QR. Berlaku 60 menit.
  *   2. Member mengirim dari wallet/bursa mana pun; boleh menempelkan hash transaksi (pencocokan paling pasti).
- *   3. Cron 5 menit (dan tombol „Cek pembayaran", dibatasi 20 detik) membaca transHistory 2 hari terakhir. Deposit SUKSES
+ *   3. Cron 5 menit (dan tombol „Cek pembayaran", dibatasi 20 detik) membaca riwayat deposit 2 hari terakhir. Deposit SUKSES
  *      dicocokkan lewat hash transaksi yang diklaim member atau lewat jumlah unik. Setiap deposit diproses sekali
  *      (tulis-sekali per id deposit). Baru setelah itu pembelian berhasil: koin dikreditkan / isi keranjang diserahkan.
  *   4. Kurang bayar: ditunggu sampai kedaluwarsa; lalu nilai yang diterima dikreditkan sebagai saldo koin AXTO (dana member
  *      tidak hilang). Datang terlambat (sesudah kedaluwarsa): diproses bila barang masih ada, kalau tidak → saldo koin AXTO.
  *
  * R2 (bucket STORE):
- *   pay/cfg.json               {opts:[{coin, nets:[{net, addr}]}], unknown:[…], at}       ← dari getInfo (tanpa saldo/nama)
+ *   pay/cfg.json               {opts:[{coin, nets:[{net, addr}]}], unknown:[…], at}       ← daftar alamat deposit (API v2)
  *   pay/intent/<id>.json       intent
  *   pay/amt/<coin>/<units8>    jumlah unik yang sedang dipakai (tulis-sekali) → {id}      meta {exp}
  *   pay/tx/<hash>              hash transaksi yang diklaim member (tulis-sekali) → {id}
@@ -31,7 +31,7 @@
  */
 import { readJSON, putJSON, createOnce, update, appendLog, listKeys } from './r2.js';
 
-export const TAPI = 'https://indodax.com/tapi';
+export const GW = 'https://api.indodax.com';
 export const PUBAPI = 'https://indodax.com/api';
 export const PAY_TTL_MS = 60 * 60_000;
 const RELEASE_GRACE_MS = 15 * 60_000; // pesanan dilepas 15 menit sesudah kedaluwarsa
@@ -57,7 +57,7 @@ export const COINS = {
 export const COIN_ORDER = Object.keys(COINS);
 
 /**
- * Jaringan yang dikenali (nama mengikuti getInfo). `fam` = bentuk alamat; `rank` kecil = biaya jaringan lebih murah
+ * Jaringan yang dikenali (nama jaringan API v2, huruf kecil). `fam` = bentuk alamat; `rank` kecil = biaya jaringan lebih murah
  * (Base paling dianjurkan). Jaringan yang tidak dikenali TIDAK ditawarkan (lebih aman daripada menebak).
  */
 export const NETS = {
@@ -142,17 +142,25 @@ async function hmac512(secret, body) {
 
 export const gatewayReady = (env) => Boolean(env.INDODAX_API_KEY && env.INDODAX_API_SECRET);
 
-/** Panggilan API privat (hanya metode baca). Mengembalikan `return`; error → Error('gw:<kode>'). */
-export async function tapi(env, method, params = {}) {
+async function hmac256(secret, text) {
+  const k = await crypto.subtle.importKey('raw', enc.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  return hex(await crypto.subtle.sign('HMAC', k, enc.encode(text)));
+}
+
+/** Hanya dua titik baca ini yang pernah dipanggil — sistem tidak pernah menarik dana atau berdagang. */
+const READ_PATHS = ['/api/v2/capital/deposit/address/list', '/api/v2/capital/deposit/hisrec'];
+
+/** Panggilan API privat v2 (GET bertanda tangan). Galat → Error('gw:<kode>'). */
+export async function gw(env, path, params = {}) {
   if (!gatewayReady(env)) throw new Error('gw:not_configured');
-  if (!['getInfo', 'transHistory'].includes(method)) throw new Error('gw:method'); // sistem tidak pernah menarik/berdagang
-  const body = new URLSearchParams({ method, timestamp: String(Date.now()), recvWindow: '15000', ...params }).toString();
-  const r = await fetch(TAPI, { method: 'POST', headers: { Key: env.INDODAX_API_KEY, Sign: await hmac512(env.INDODAX_API_SECRET, body), 'content-type': 'application/x-www-form-urlencoded' }, body });
+  if (!READ_PATHS.includes(path)) throw new Error('gw:method');
+  const q = new URLSearchParams({ ...params, timestamp: String(Date.now()), recvWindow: '10000' }).toString();
+  const r = await fetch(`${GW}${path}?${q}`, { headers: { 'X-APIKEY': env.INDODAX_API_KEY, Sign: await hmac256(env.INDODAX_API_SECRET, q), accept: 'application/json' } });
   const t = await r.text();
   let j = null;
   try { j = JSON.parse(t); } catch { j = null; }
-  if (!r.ok || !j || j.success !== 1) throw new Error(`gw:${j?.error_code || r.status}`);
-  return j.return;
+  if (!r.ok || j === null || (!Array.isArray(j) && j.code !== undefined && Number(j.code) < 0)) throw new Error(`gw:${j?.code ?? r.status}`);
+  return j;
 }
 
 let PX = { at: 0, map: null };
@@ -181,45 +189,74 @@ export const addrOk = (coin, net, addr) => {
   return FAMILY[n.fam].test(addr);
 };
 
-/** Bangun daftar opsi dari jawaban getInfo (hanya address/network/memo_is_required yang dibaca). */
-export function buildOptions(info) {
+/** Kandidat jaringan per koin untuk API v2 (nama jaringan API → kunci NETS). Yang tidak punya alamat dilewati. */
+export const CANDIDATES = {
+  usdt: ['BEP20', 'TRC20', 'POLYGON', 'BASE', 'ARB', 'SOL', 'OP', 'ERC20'],
+  usdc: ['BASE', 'BEP20', 'POLYGON', 'ARB', 'SOL', 'OP', 'ERC20'],
+  eth: ['BASE', 'ARB', 'OP', 'ETH', 'ERC20'],
+  btc: ['BTC'],
+  bnb: ['BEP20', 'BSC'],
+  sol: ['SOL'],
+  trx: ['TRC20', 'TRX'],
+  pol: ['POLYGON', 'POL', 'MATIC'],
+  doge: ['DOGE'],
+  ltc: ['LTC'],
+};
+
+/** Bangun daftar opsi dari baris alamat deposit API v2: [{coin, address, tag, network}]. */
+export function buildOptions(rows) {
   const opts = [];
   const unknown = [];
   for (const coin of COIN_ORDER) {
-    const key = coin === 'pol' && !info?.address?.pol ? 'matic' : coin;
-    const a = info?.address?.[key];
-    if (!a) continue;
-    let nets = info?.network?.[key] ?? [];
-    if (!Array.isArray(nets)) nets = [nets];
     const out = [];
-    for (const net0 of nets) {
-      const net = lw(net0);
-      const addr = typeof a === 'object' ? a[net0] ?? a[net] : a;
-      const memo = info?.memo_is_required?.[key]?.[net0] ?? info?.memo_is_required?.[key]?.[net];
-      if (memo) continue; // memo wajib: tidak ditawarkan (salah memo = dana hilang)
+    for (const r of rows.filter((x) => lw(x.coin) === coin || (coin === 'pol' && lw(x.coin) === 'matic'))) {
+      if (!r.address) continue;
+      if (r.tag) continue; // memo wajib: tidak ditawarkan (salah memo = dana hilang)
+      const net = lw(r.network);
       if (!NETS[net]) { unknown.push(`${coin}:${net}`); continue; }
-      if (!addrOk(coin, net, addr)) { unknown.push(`${coin}:${net}:alamat`); continue; }
-      out.push({ net, addr });
+      if (!addrOk(coin, net, r.address)) { unknown.push(`${coin}:${net}:alamat`); continue; }
+      if (!out.some((o) => o.net === net)) out.push({ net, addr: r.address });
     }
     out.sort((x, y) => NETS[x.net].rank - NETS[y.net].rank);
-    if (out.length) opts.push({ coin, key, nets: out });
+    if (out.length) opts.push({ coin, nets: out });
   }
   return { opts, unknown };
 }
 
-let CFG = { at: 0, v: null };
-export async function gatewayCfg(env, { refresh = false, now = Date.now() } = {}) {
-  if (!refresh && CFG.v && now - CFG.at < 300_000) return CFG.v;
-  let v = await readJSON(env.STORE, 'pay/cfg.json').catch(() => null);
-  if (refresh || !v || now - Number(v.at ?? 0) > CFG_TTL_MS) {
-    try {
-      const info = await tapi(env, 'getInfo');
-      v = { ...buildOptions(info), at: now };
-      await putJSON(env.STORE, 'pay/cfg.json', v);
-    } catch (e) {
-      if (!v) throw e; // tanpa konfigurasi lama: tidak bisa menawarkan pembayaran
+/** Baca alamat deposit semua kandidat (berjeda — batas 50 permintaan/menit per IP). Hanya cron & admin. */
+export async function readAddresses(env, { pause = 1300 } = {}) {
+  const rows = [];
+  const errors = {};
+  for (const [coin, nets] of Object.entries(CANDIDATES)) {
+    for (const n of nets) {
+      try {
+        const j = await gw(env, '/api/v2/capital/deposit/address/list', { coin: coin.toUpperCase(), network: n });
+        for (const r of Array.isArray(j) ? j : []) rows.push(r);
+      } catch (e) {
+        errors[e.message] = (errors[e.message] ?? 0) + 1;
+        if (e.message === 'gw:403' || e.message === 'gw:401' || e.message === 'gw:-2015') return { rows, errors, fatal: e.message };
+      }
+      if (pause) await new Promise((res) => setTimeout(res, pause));
     }
   }
+  return { rows, errors };
+}
+
+let CFG = { at: 0, v: null };
+export async function gatewayCfg(env, { refresh = false, now = Date.now(), refreshPause = 1300 } = {}) {
+  if (!refresh && CFG.v && now - CFG.at < 300_000) return CFG.v;
+  let v = await readJSON(env.STORE, 'pay/cfg.json').catch(() => null);
+  if (refresh) {
+    const got = await readAddresses(env, { pause: refreshPause });
+    if (got.fatal && !got.rows.length) {
+      await putJSON(env.STORE, 'pay/cfg-error.json', { at: now, error: got.fatal });
+      if (!v) throw new Error(got.fatal);
+    } else {
+      v = { ...buildOptions(got.rows), errors: got.errors, at: now };
+      await putJSON(env.STORE, 'pay/cfg.json', v);
+    }
+  }
+  if (!v) throw new Error('gw:warming'); // alamat belum terbaca (cron berikutnya mengisi)
   CFG = { at: now, v };
   return v;
 }
@@ -388,50 +425,65 @@ export async function syncDeposits(env, { now = Date.now(), force = false } = {}
   const last = await readJSON(env.STORE, 'pay/sync.json').catch(() => null);
   if (!force && last && now - Number(last.at ?? 0) < SYNC_MIN_MS) return { ok: true, skipped: true };
   await putJSON(env.STORE, 'pay/sync.json', { ...(last ?? {}), at: now });
-  const d = (ms) => new Date(ms).toISOString().slice(0, 10);
-  let hist;
-  try {
-    hist = await tapi(env, 'transHistory', { start: d(now - 2 * 86_400_000), end: d(now + 86_400_000) });
-  } catch (e) {
-    await putJSON(env.STORE, 'pay/sync.json', { at: now, ok: false, error: String(e.message).slice(0, 120), okAt: last?.okAt ?? null });
-    return { ok: false, error: e.message };
-  }
+  let cfg = null;
+  try { cfg = await gatewayCfg(env, { now }); } catch { cfg = null; }
+  const coins = cfg?.opts?.map((o) => o.coin) ?? [];
   let seen = 0;
   let matched = 0;
-  for (const coin of COIN_ORDER) {
-    const keys = coin === 'pol' ? ['pol', 'matic'] : [coin];
-    for (const k of keys) {
-      for (const e of hist?.deposit?.[k] ?? []) {
-        if (String(e.status ?? '').toLowerCase() !== 'success') continue;
-        const depId = String(e.deposit_id ?? '').replace(/[^0-9A-Za-z_-]/g, '');
-        const units8 = toUnits8(e[k] ?? e.amount);
-        if (!depId || units8 === null) continue;
-        seen += 1;
-        const dkey = `pay/dep/${coin}/${depId}`;
-        if (await env.STORE.head(dkey)) continue;
-        let id = null;
-        const tk = txKey(e.tx);
-        if (tk) id = (await readJSON(env.STORE, tk))?.id ?? null;
-        if (!id) id = (await readJSON(env.STORE, `pay/amt/${coin}/${units8}`))?.id ?? null;
-        // intent harus untuk koin yang sama dan dibuat sebelum deposit sukses
-        if (id) {
-          const x = await getIntent(env, id);
-          const okTime = !e.success_time || Number(e.success_time) * 1000 >= Number(x?.at ?? 0) - 10 * 60_000;
-          if (!x || x.coin !== coin || !okTime) id = null;
-        }
-        if (!(await createOnce(env.STORE, dkey, { id, units8: units8.toString(), tx: e.tx ?? null, at: now }))) continue;
-        if (!id) { await appendLog(env.STORE, 'pay', { ev: 'unmatched', coin, depositId: depId, units8: units8.toString(), tx: e.tx ?? null }); continue; }
-        await applyDeposit(env, id, { id: depId, units8: units8.toString(), tx: e.tx ?? null }, now);
-        matched += 1;
+  const errors = {};
+  for (const coin of coins) {
+    let list;
+    try {
+      list = await gw(env, '/api/v2/capital/deposit/hisrec', { coin: coin.toUpperCase(), startTime: String(now - 2 * 86_400_000), endTime: String(now), limit: '1000' });
+    } catch (e) { errors[e.message] = (errors[e.message] ?? 0) + 1; continue; }
+    for (const e of Array.isArray(list) ? list : []) {
+      if (String(e.status ?? '').toLowerCase() !== 'success') continue;
+      const depId = String(e.id ?? '').replace(/[^0-9A-Za-z_-]/g, '');
+      const units8 = toUnits8(e.amount);
+      if (!depId || units8 === null) continue;
+      seen += 1;
+      const dkey = `pay/dep/${coin}/${depId}`;
+      if (await env.STORE.head(dkey)) continue;
+      let id = null;
+      const tk = txKey(e.txId);
+      if (tk) id = (await readJSON(env.STORE, tk))?.id ?? null;
+      if (!id) id = (await readJSON(env.STORE, `pay/amt/${coin}/${units8}`))?.id ?? null;
+      // intent harus untuk koin yang sama dan dibuat sebelum deposit selesai
+      if (id) {
+        const x = await getIntent(env, id);
+        const doneAt = Number(e.completeTime ?? e.insertTime ?? 0);
+        const okTime = !doneAt || doneAt >= Number(x?.at ?? 0) - 10 * 60_000;
+        if (!x || x.coin !== coin || !okTime) id = null;
       }
+      // setoran hasil penjualan OpenSea + royalti dari wallet toko (market/opensea-list.mjs) — bukan pembayaran member
+      const sweep = e.txId ? await env.STORE.head(`pay/sweep/${String(e.txId).toLowerCase()}.json`) : null;
+      if (sweep) {
+        if (await createOnce(env.STORE, dkey, { id: null, sweep: true, units8: units8.toString(), tx: e.txId, net: e.network ?? null, at: now })) await appendLog(env.STORE, 'pay', { ev: 'sweep', coin, depositId: depId, units8: units8.toString(), tx: e.txId });
+        continue;
+      }
+      if (!(await createOnce(env.STORE, dkey, { id, units8: units8.toString(), tx: e.txId ?? null, net: e.network ?? null, at: now }))) continue;
+      if (!id) { await appendLog(env.STORE, 'pay', { ev: 'unmatched', coin, depositId: depId, units8: units8.toString(), tx: e.txId ?? null }); continue; }
+      await applyDeposit(env, id, { id: depId, units8: units8.toString(), tx: e.txId ?? null }, now);
+      matched += 1;
     }
   }
-  await putJSON(env.STORE, 'pay/sync.json', { at: now, ok: true, okAt: now, seen, matched });
+  if (coins.length && Object.keys(errors).length === coins.length) {
+    await putJSON(env.STORE, 'pay/sync.json', { at: now, ok: false, error: Object.keys(errors).join(','), okAt: last?.okAt ?? null });
+    return { ok: false, error: Object.keys(errors).join(',') };
+  }
+  await putJSON(env.STORE, 'pay/sync.json', { at: now, ok: true, okAt: now, seen, matched, errors });
   return { ok: true, seen, matched };
 }
 
 /** Cron: sinkronkan deposit, lalu selesaikan/lepaskan intent yang kedaluwarsa, lalu bersihkan penanda jumlah lama. */
-export async function cron(env, now = Date.now()) {
+export async function cron(env, now = Date.now(), { refreshPause = 1300 } = {}) {
+  if (gatewayReady(env)) {
+    const c = await readJSON(env.STORE, 'pay/cfg.json').catch(() => null);
+    const e = await readJSON(env.STORE, 'pay/cfg-error.json').catch(() => null);
+    const stale = !c || now - Number(c.at ?? 0) > CFG_TTL_MS;
+    const backoff = e && now - Number(e.at ?? 0) < 30 * 60_000; // galat akses: coba lagi 30 menit kemudian
+    if (stale && !backoff) await gatewayCfg(env, { refresh: true, now, refreshPause }).catch(() => null);
+  }
   const s = await syncDeposits(env, { now, force: true }).catch((e) => ({ ok: false, error: e.message }));
   let expired = 0;
   for (const o of await listKeys(env.STORE, 'pay/open/', 1000)) {
@@ -479,17 +531,18 @@ export async function callback(request, env) {
 
 /** Ringkasan untuk portal admin (tanpa kunci; tanpa saldo akun). */
 export async function adminView(env) {
-  const [cfg, sync, open, alerts] = await Promise.all([
+  const [cfg, sync, open, alerts, cfgErr] = await Promise.all([
     readJSON(env.STORE, 'pay/cfg.json').catch(() => null),
     readJSON(env.STORE, 'pay/sync.json').catch(() => null),
     listKeys(env.STORE, 'pay/open/', 1000),
     listKeys(env.STORE, `log/pay-alert/`, 200),
+    readJSON(env.STORE, 'pay/cfg-error.json').catch(() => null),
   ]);
   const unmatched = [];
   for (const coin of COIN_ORDER) {
     for (const o of (await listKeys(env.STORE, `pay/dep/${coin}/`, 2000)).slice(-200)) {
       const d = await readJSON(env.STORE, o.key);
-      if (d && !d.id) unmatched.push({ coin, depositId: o.key.split('/').pop(), amount: fromUnits8(BigInt(d.units8)), tx: d.tx, at: d.at });
+      if (d && !d.id && !d.sweep) unmatched.push({ coin, depositId: o.key.split('/').pop(), amount: fromUnits8(BigInt(d.units8)), tx: d.tx, at: d.at });
     }
   }
   const recent = [];
@@ -497,7 +550,7 @@ export async function adminView(env) {
     const x = await readJSON(env.STORE, o.key);
     if (x) recent.push({ ...publicIntent(x), wallet: x.wallet });
   }
-  return { recent: recent.reverse(), ready: gatewayReady(env), callbackUrl: `${env.BASE_URL || 'https://axto.io'}/api/indodax`, sync, options: cfg ? { at: cfg.at, coins: cfg.opts.map((o) => `${o.coin}: ${o.nets.map((n) => n.net).join(', ')}`), unknown: cfg.unknown } : null, open: open.length, unmatched: unmatched.slice(-100), alerts: alerts.length };
+  return { recent: recent.reverse(), ready: gatewayReady(env), callbackUrl: `${env.BASE_URL || 'https://axto.io'}/api/indodax`, sync, options: cfg ? { at: cfg.at, coins: cfg.opts.map((o) => `${o.coin}: ${o.nets.map((n) => n.net).join(', ')}`), unknown: cfg.unknown, errors: cfg.errors ?? null } : null, optionsError: cfgErr, open: open.length, unmatched: unmatched.slice(-100), alerts: alerts.length };
 }
 
 /** Admin mencocokkan deposit tanpa pasangan ke sebuah pembayaran secara manual (mis. member salah nominal). */
