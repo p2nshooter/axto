@@ -60,7 +60,7 @@ export async function run({ io = realIO(), log = console.log } = {}) {
       const belum = (st[c].ids ?? []).filter((id) => lolos(c, id) && !st[c].vid?.[id] && !vidBaru[c].includes(id));
       if (belum[i] === undefined) continue;
       any = true;
-      if (videoJobs.length < VIDEO_ANTRE) videoJobs.push({ c, id: belum[i], v: QA_V, img: `https://axto.io/gpu/${c}/${belum[i]}.png?v=${QA_V}`, prompt: gerakFor(c, belum[i]) });
+      if (videoJobs.length < VIDEO_ANTRE) videoJobs.push({ c, id: belum[i], v: QA_V, img: `https://axto.io/gpu/${c}/${belum[i]}.png?v=q${QA_V}`, prompt: gerakFor(c, belum[i]) });
     }
     if (!any) break;
   }

@@ -10,7 +10,7 @@ const PUBLIC = ['time', 'stamp', 'quran', 'model', 'hadith'];
 const EXCL = ['ex-time', 'ex-stamp', 'ex-quran', 'ex-model', 'ex-hadith'];
 const fmt = (n, lang) => Number(n ?? 0).toLocaleString(lang === 'id' ? 'id-ID' : 'en-US');
 const nftPath = (lang, c, id) => `/${lang}/nft/${c}/${id}`;
-const IMGV = 'v=9';
+const IMGV = 'v=10';
 const img = (c, id) => `/img/${c}/${id}.svg?${IMGV}`;
 /** Lencana jenis karya: publik (OpenSea, harga tetap per kelangkaan) atau eksklusif ($1, koin AXTO, kustodi axto.io, WD). */
 export const badge = (lang, c, long = false) => {
@@ -161,7 +161,7 @@ export function collectionPage(lang, c, o) {
   const pub = !COLLECTIONS[c].exclusive;
   // harga di kartu: eksklusif = $1 + sisa edisi (dari 10); publik = harga tetap OpenSea + jumlah edisi
   const tag = (it) => (pub ? `${it.usd ? `<span class="pr">$${fmt(it.usd, lang)}</span>` : ''}${it.ed ? `<span class="ed">${it.ed}×</span>` : ''}` : `<span class="pr">$1</span><span class="ed${it.left === 0 ? ' out' : ''}">${it.left ?? EXCLUSIVE_SUPPLY}/${EXCLUSIVE_SUPPLY}</span>`);
-  const tile = (it) => `<li data-id="${it.id}" data-tier="${it.tier}"${it.gpu ? ` class="g" data-g="${it.g}"` : ''}><a href="${nftPath(lang, c, it.id)}${it.gpu ? '?v=g' : ''}"><img src="${it.gpu ? `/gpu/${c}/${it.id}.png?v=2` : img(c, it.id)}" alt="${esc(it.name)}" loading="lazy" width="300" height="300"><span class="id">${it.gpu ? kode(c, it.id, it.g) : kode(c, it.id)}</span><span class="nm">${esc(it.name.replace(/^(OS|AC)-\d+ · /, ''))}</span><span class="tr t${it.tier}">${esc(TIER_NAMES[lang][it.tier])}</span>${tag(it)}</a></li>`;
+  const tile = (it) => `<li data-id="${it.id}" data-tier="${it.tier}"${it.gpu ? ` class="g" data-g="${it.g}"` : ''}><a href="${nftPath(lang, c, it.id)}${it.gpu ? '?v=g' : ''}"><img src="${it.gpu ? `/gpu/${c}/${it.id}.png?v=${it.v ?? 2}` : img(c, it.id)}" alt="${esc(it.gpu ? `${kode(c, it.id, it.g)} · ${it.name.replace(/^(OS|AC)-\d+ · /, '')}` : it.name)}" loading="lazy" width="300" height="300"><span class="id">${it.gpu ? kode(c, it.id, it.g) : kode(c, it.id)}</span><span class="nm">${esc(it.name.replace(/^(OS|AC)-\d+ · /, ''))}</span><span class="tr t${it.tier}">${esc(TIER_NAMES[lang][it.tier])}</span>${tag(it)}</a></li>`;
   const crumbs = o.crumbs ? `<nav class="crumbs" aria-label="breadcrumb">${o.crumbs.map(([n, h], i) => (i < o.crumbs.length - 1 ? `<a href="${h}">${esc(n)}</a>` : `<span aria-current="page">${esc(n)}</span>`)).join(' › ')}</nav>` : '';
   const gpuChip = !/model$/.test(c) ? `<a href="/${lang}/c/${c}?maker=gpu"${o.maker === 'gpu' ? ' aria-current="true"' : ''} class="gchip">${esc(t.opensea.gpu)} <small>${fmt(o.gpuCount ?? 0, lang)}</small></a>` : '';
   const exChips = !pub && gpuChip ? `<nav class="chips" aria-label="G-"><a href="/${lang}/c/${c}"${o.maker !== 'gpu' ? ' aria-current="true"' : ''}>${esc(lang === 'id' ? 'Semua' : 'All')} <small>${fmt(COLLECTIONS[c].max, lang)}</small></a>${gpuChip}</nav>` : '';
@@ -212,7 +212,7 @@ function buyBox(lang, c, id, meta, opensea, info) {
 function gpuFigure(lang, c, id, meta, info) {
   const al = `${esc(meta.name)} — ${kode(c, id, info.gpuSerial)}`;
   const media = info.gpuAnim
-    ? `<video src="/gpu/${c}/${id}.mp4?v=2" poster="/gpu/${c}/${id}.png?v=2" autoplay muted loop playsinline preload="metadata" width="768" height="768" aria-label="${al}"></video>`
+    ? `<video src="/gpu/${c}/${id}.mp4?v=2" poster="/gpu/${c}/${id}.png?v=q2" autoplay muted loop playsinline preload="metadata" width="768" height="768" aria-label="${al}"></video>`
     : `<img src="/gpu/${c}/${id}.png?v=2" alt="${al}" width="768" height="768" loading="lazy">`;
   const kata = info.gpuAnim ? (lang === 'id' ? 'Versi GPU — dilukis & dianimasikan GPU dari DNA karya ini' : 'GPU version — painted & animated by GPU from this work’s DNA') : (lang === 'id' ? 'Versi GPU — dilukis GPU dari DNA karya ini' : 'GPU version — painted by GPU from this work’s DNA');
   return `<figure class="gpuv"><a href="?v=g">${media}</a><figcaption><b>${kode(c, id, info.gpuSerial)}</b> · ${esc(kata)}</figcaption></figure>`;

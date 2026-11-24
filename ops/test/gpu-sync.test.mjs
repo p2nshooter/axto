@@ -43,7 +43,7 @@ test('video GPU: hanya karya lolos mutu yang diantrekan; video v2 disalin & dita
   assert.deepEqual(doc.vid, { [a]: true });
   const jobs = JSON.parse(io.files['ulyah-media/axto-gpu/video-jobs.json']).jobs;
   assert.deepEqual(jobs.map((j) => j.id), [b], 'hanya karya lolos mutu yang belum beranimasi');
-  assert.equal(jobs[0].img, `https://axto.io/gpu/time/${b}.png?v=${QA_V}`);
+  assert.equal(jobs[0].img, `https://axto.io/gpu/time/${b}.png?v=q${QA_V}`);
   assert.equal(jobs[0].v, QA_V);
   assert.match(jobs[0].prompt, /hands rotate/);
   assert.deepEqual(JSON.parse(io.files['ulyah-media/axto-gpu/jobs.json']).jobs, [], 'gambar tanpa pemeriksaan mutu tidak dibuat lagi');

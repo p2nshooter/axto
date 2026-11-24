@@ -103,7 +103,7 @@ export function stampSvg(d) {
     const dn = text(x + w - 26, y + h - 30, denom[4], `text-anchor="end" font-family="Georgia,serif" font-size="${Math.min(72, fitFs(denom[4], (w - 52) / 2, 72, 0, 0.62)) | 0}" font-weight="700" fill="${ink}"`);
     const yr = text(x + 26, y + h - 30, year[4], `font-family="Georgia,serif" font-size="26" fill="${ink}" opacity=".85"`);
     const se = text(x + w / 2, y + h - 92, series[1], `text-anchor="middle" font-family="Helvetica,Arial,sans-serif" font-size="${r1(fitFs(series[1], w - 40, 20, 2, 0.62))}" letter-spacing="2" fill="${ink}"`);
-    const micro = `<text x="${x + 20}" y="${y + h - 10}" font-family="monospace" font-size="4.2" fill="${ink}" opacity=".7">${esc(`AXTO·${realm[1]}·${series[1]}·No.${serial}·`.repeat(8))}</text>`;
+    const micro = `<text x="${x + 20}" y="${y + h - 10}" font-family="monospace" font-size="4.2" fill="${ink}" opacity=".7">${esc(`${realm[1]}·${series[1]}·No.${serial}·`.repeat(8))}</text>`;
     return t + dn + yr + se + micro;
   };
   if (o.rect) {

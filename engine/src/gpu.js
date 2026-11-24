@@ -20,6 +20,9 @@ const attr = (m, k) => String(m.attributes.find((a) => a.trait_type === k)?.valu
 /** Versi mutu seri G- baru: cap `qa[id].v === QA_V` dari pemeriksa mutu (worker/src/gpu.js: lukis FLUX.2 + periksa). Karya G-
  * lama tanpa cap tetap ada dan tampil sebagai lukisan aslinya, diam (pemilik 24 Nov 2026). */
 export const QA_V = 2;
+/** Versi URL gambar G-: lukisan lolos-mutu (`q2`) berbeda dari lukisan lama (`2`) agar cache peramban/OpenSea tidak menampilkan
+ * gambar lama setelah karya dilukis ulang dengan nomor seri yang sama. */
+export const vGambar = (lolosMutu) => (lolosMutu ? `q${QA_V}` : '2');
 
 /* Prompt v2. Kata seperti „masterpiece", „8k", „no text" DIHAPUS: model gambar malah menuliskannya sebagai huruf di lukisan
  * (G-22 „8k GIAL MAASTERENDE"). Model gambar tidak paham kalimat negatif, jadi semua permintaan ditulis positif: simetris,
