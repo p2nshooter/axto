@@ -1,5 +1,7 @@
 /**
- * Koin AXTO lewat NOWPayments — beli & cairkan, otomatis penuh (pemilik, 23 Nov 2026):
+ * Koin AXTO — beli & cairkan. SEJAK 24 Nov 2026 pembelian lewat src/pay.js (alamat deposit akun penampung axto.io, dilacak
+ * otomatis; kunci API hanya izin lihat). Gerbang lama di bawah hanya tersisa untuk pesanan lama dan tidak dipakai lagi
+ * (LEGACY_NP !== 'on'); pencairan dibayar admin secara manual dari portal admin. Riwayat keputusan (23 Nov 2026):
  *   „Pembelian dan Penjualan axto coin seluruh full otomatis melalui nowpayments" · „member juga bisa mencairkan coin axto
  *   nya tapi di potong 50% jika belum waktunya di release ke dex, seluruh member wajib menyetujui perjanjian saat melakukan
  *   pembelian" · „member yg ingin menjual akan di TF ke rekening/address yg di pakai saat member membeli tidak bisa ke
@@ -29,6 +31,7 @@
  *   cfg/coin.json                {priceCents, dexReleased} — diubah admin
  */
 import { readJSON, getJSON, createOnce, appendLog, listKeys, update } from './r2.js';
+import * as PAY from './pay.js';
 
 export const NP_API = 'https://api.nowpayments.io';
 /** Webhook pembayaran (alamat lama tetap diterima untuk pembayaran yang dibuat sebelum 24 Nov 2026). */
@@ -38,8 +41,7 @@ export const IPN_PATHS = ['/api/pay/ipn', '/api/nowpayments/ipn'];
 export const MICRO = 1_000_000n;
 export const DEFAULT_PRICE_CENTS = 1000; // $10 per AXTO (harga presale)
 export const PENALTY_BEFORE_DEX = 50; // %
-/** Pemilik, 24 Nov 2026: „Pembelian dan investasi axto minimum $1". Batas bawah sebenarnya per mata uang = minimum jaringan
- *  gerbang pembayaran (mis. USDT TRON ±$10, BTC ±$4) — lihat minUsdFor(). */
+/** Pemilik, 24 Nov 2026: „Pembelian dan investasi axto minimum $1". */
 export const LIMITS = { minBuyUsd: 1, maxBuyUsd: 10_000, minCashoutUsd: 20 };
 /** Batas presale: 20.000.000 AXTO (harga tetap sampai terjual habis). */
 export const PRESALE_MICRO = 20_000_000n * 1_000_000n;
@@ -63,19 +65,19 @@ export function validAddress(cur, a) {
 }
 
 // ---------------------------------------------------------------- perjanjian (wajib disetujui saat membeli)
-export const AGREEMENT_V = '2026-11-24.1';
+export const AGREEMENT_V = '2026-11-24.2';
 export const AGREEMENT = {
   id: [
     'AXTO adalah koin komunitas NFT axto.io — investasi bersama di dalam ekosistem karya seni digital yang hidup. Seperti setiap aset kripto, nilainya dapat naik maupun turun dan tidak dijamin; tidak ada janji keuntungan. Belilah sesuai kemampuan dan patuhi aturan di negara Anda.',
-    'Pembayaran diproses otomatis oleh gerbang pembayaran kripto mitra axto.io (USDT TRC20, USDC BEP20, BTC, BNB BEP20). Koin masuk ke akun Anda begitu pembayaran terkonfirmasi.',
-    'Anda wajib membayar dari alamat wallet milik Anda sendiri yang Anda isi di formulir ini — bukan dari bursa (exchange) atau wallet orang lain.',
+    'Pembayaran dikirim langsung ke alamat pembayaran axto.io untuk koin dan jaringan yang Anda pilih (stablecoin USDT/USDC dianjurkan). Kirim tepat jumlah yang tertera, lewat jaringan yang tertera — jaringan atau koin lain tidak dapat diterima. Koin masuk ke akun Anda otomatis begitu pembayaran diterima; bila kurang, dikreditkan sesuai jumlah yang diterima.',
+    'Alamat wallet yang Anda isi di formulir ini adalah milik Anda sendiri pada jaringan yang sama, dan menjadi satu-satunya tujuan bila kelak Anda menjual kembali koin.',
     'Koin yang Anda staking terkunci sampai masa kontraknya selesai; hadiah NFT-nya dikirim tanpa biaya gas ke alamat yang Anda cantumkan begitu kontrak selesai.',
     'Semua transaksi tercatat (alamat, jumlah, waktu, hash transaksi). axto.io dapat menahan transaksi yang terindikasi penipuan atau melanggar hukum.',
   ],
   en: [
     'AXTO is the community coin of the axto.io NFT museum — a shared investment inside an ecosystem of living digital art. Like every crypto asset, its value can rise or fall and is not guaranteed; no profit is promised. Buy within your means and follow the rules of your country.',
-    'Payments are processed automatically by axto.io\'s crypto payment partner (USDT TRC20, USDC BEP20, BTC, BNB BEP20). Coins reach your account as soon as the payment is confirmed.',
-    'You must pay from a wallet address you own, entered in this form — not from an exchange or someone else\'s wallet.',
+    'Payment is sent straight to the axto.io payment address for the coin and network you choose (the USDT/USDC stablecoins are recommended). Send exactly the amount shown, on the network shown — other networks or coins cannot be received. Coins reach your account automatically as soon as the payment is received; if it falls short, you are credited for the amount received.',
+    'The wallet address you enter in this form is your own, on the same network, and is the only destination should you ever sell coins back.',
     'Coins you stake stay locked until the term ends; their NFT rewards are delivered gas-free to the address you name as soon as the term completes.',
     'Every transaction is recorded (addresses, amounts, times, transaction hashes). axto.io may hold transactions that indicate fraud or break the law.',
   ],
@@ -229,7 +231,8 @@ async function jwt(env) {
   return j.token;
 }
 
-export const payoutReady = (env) => !!(env.NOWPAYMENTS_API_KEY && env.NOWPAYMENTS_EMAIL && env.NOWPAYMENTS_PASSWORD && env.NOWPAYMENTS_2FA_SECRET);
+export const legacyOn = (env) => env.LEGACY_NP === 'on';
+export const payoutReady = (env) => legacyOn(env) && !!(env.NOWPAYMENTS_API_KEY && env.NOWPAYMENTS_EMAIL && env.NOWPAYMENTS_PASSWORD && env.NOWPAYMENTS_2FA_SECRET);
 
 // ---------------------------------------------------------------- konfigurasi & akun
 export async function coinCfg(env) {
@@ -281,87 +284,95 @@ export async function adjust(env, wallet, deltaMicro, ev, ref) {
 }
 
 // ---------------------------------------------------------------- beli
-const MIN_CACHE = new Map();
-/** Minimum beli (USD bulat ke atas) untuk satu mata uang: maks($1, minimum jaringan gerbang pembayaran + 10%). Cache 10 menit. */
-export async function minUsdFor(env, cur) {
-  const c = CURRENCIES[cur];
-  if (!c) return LIMITS.minBuyUsd;
-  const hit = MIN_CACHE.get(cur);
-  if (hit && Date.now() - hit.at < 600_000) return hit.v;
-  try {
-    const m = await np(env, '/v1/min-amount', { query: { currency_from: c.code, currency_to: c.code, fiat_equivalent: 'usd' } });
-    const f = Number(m?.fiat_equivalent);
-    if (Number.isFinite(f) && f > 0) {
-      const v = Math.max(LIMITS.minBuyUsd, Math.ceil(f * 1.1));
-      MIN_CACHE.set(cur, { at: Date.now(), v });
-      return v;
-    }
-  } catch { /* gerbang tidak menjawab: tidak di-cache, gerbang tetap menolak jumlah yang terlalu kecil */ }
-  return LIMITS.minBuyUsd;
-}
-
 /** Koin presale yang sudah terjual (mikro) — dihitung dari pembayaran yang terkonfirmasi, tidak berkurang saat dijual kembali. */
 export async function presaleSold(env) {
   return BigInt((await readJSON(env.STORE, 'coin/presale.json').catch(() => null))?.soldMicro ?? '0');
 }
 
-export async function quote(env, { usd, cur }) {
-  const c = CURRENCIES[cur];
+/** Label tujuan/jalur bayar: kode lama (usdt-trx …) atau `koin:jaringan` baru. */
+export const curLabel = (cur) => CURRENCIES[cur]?.label ?? (String(cur).includes(':') ? `${PAY.COINS[cur.split(':')[0]]?.label ?? cur.split(':')[0].toUpperCase()} · ${PAY.NETS[cur.split(':')[1]]?.label ?? cur.split(':')[1]}` : cur);
+
+/** Perkiraan: koin AXTO yang didapat + jumlah kripto (kurs bursa) untuk koin & jaringan pilihan. */
+export async function quote(env, { usd, coin, net }) {
   const cents = Math.round(Number(usd) * 100);
-  if (!c) return { error: 'currency' };
   if (!(cents >= LIMITS.minBuyUsd * 100 && cents <= LIMITS.maxBuyUsd * 100)) return { error: 'amount', min: LIMITS.minBuyUsd, max: LIMITS.maxBuyUsd };
   const { priceCents } = await coinCfg(env);
-  const minUsd = await minUsdFor(env, cur);
-  const out = { usd: cents / 100, cur, label: c.label, coins: fmtCoins(microForCents(cents, priceCents)), priceUsd: priceCents / 100, minUsd };
-  if (cents < minUsd * 100) return { ...out, error: 'amount_min', min: minUsd };
-  try {
-    const e = await np(env, '/v1/estimate', { query: { amount: cents / 100, currency_from: 'usd', currency_to: c.code } });
-    out.estimate = e?.estimated_amount ?? null;
-  } catch { out.estimate = null; }
+  const out = { usd: cents / 100, coins: fmtCoins(microForCents(cents, priceCents)), priceUsd: priceCents / 100, minUsd: LIMITS.minBuyUsd };
+  if (PAY.COINS[coin]) {
+    try {
+      const px = (await PAY.pricesUsd(env))[coin];
+      if (px > 0) out.estimate = `${(cents / 100 / px).toFixed(PAY.COINS[coin].stable ? 2 : 6)} ${PAY.COINS[coin].label}`;
+    } catch { out.estimate = null; }
+  }
   return out;
 }
 
-export async function buy(env, wallet, b, { lang, country, base }) {
-  const c = CURRENCIES[b.cur];
+/**
+ * Beli koin: setujui perjanjian → pembayaran (pay.js) ke alamat deposit akun penampung axto.io untuk koin & jaringan
+ * pilihan member → koin dikreditkan begitu deposit diterima. `payer` = alamat wallet milik member di jaringan yang sama,
+ * tujuan pencairan kelak (aturan pemilik: pencairan hanya ke alamat yang dipakai saat membeli).
+ */
+export async function buy(env, wallet, b, { lang, country }) {
   const cents = Math.round(Number(b.usd) * 100);
-  if (!c) return { error: 'currency' };
-  if (!(cents >= LIMITS.minBuyUsd * 100 && cents <= LIMITS.maxBuyUsd * 100)) return { error: 'amount' };
+  if (!(cents >= LIMITS.minBuyUsd * 100 && cents <= LIMITS.maxBuyUsd * 100)) return { error: 'amount', min: LIMITS.minBuyUsd };
+  const coin = String(b.coin ?? '');
+  const net = String(b.net ?? '');
+  if (!PAY.COINS[coin] || !PAY.NETS[net]) return { error: 'currency' };
   const payer = String(b.payer ?? '').trim();
-  if (!validAddress(b.cur, payer)) return { error: 'payer_address' };
+  if (!PAY.addrOk(coin, net, payer)) return { error: 'payer_address' };
   if (b.agree !== true || b.agreementV !== AGREEMENT_V) return { error: 'agreement' };
-  const minUsd = await minUsdFor(env, b.cur);
-  if (cents < minUsd * 100) return { error: 'amount_min', min: minUsd };
-  // presale: harga tetap sampai 20.000.000 AXTO terjual (pembayaran yang sudah terkonfirmasi)
-  {
-    const { priceCents: pc } = await coinCfg(env);
-    if ((await presaleSold(env)) + microForCents(cents, pc) > PRESALE_MICRO) return { error: 'presale_closed' };
-  }
-  // alamat ditanyakan langsung ke NOWPayments (format & jaringan) — sekaligus memastikan pencairan nanti bisa dikirim ke sana
-  try { await np(env, '/v1/payout/validate-address', { method: 'POST', body: { address: payer, currency: c.code } }); } catch (e) {
-    if (e.status && e.status < 500) return { error: 'payer_address' };
-  }
   const { priceCents } = await coinCfg(env);
-  const id = `${Date.now().toString(36)}${hex(crypto.getRandomValues(new Uint8Array(5)))}`;
+  const coinsMicro = microForCents(cents, priceCents);
+  // presale: harga tetap sampai 20.000.000 AXTO terjual (pembayaran yang sudah diterima)
+  if ((await presaleSold(env)) + coinsMicro > PRESALE_MICRO) return { error: 'presale_closed' };
   const agreement = { v: AGREEMENT_V, lang, hash: await agreementHash(lang), at: Date.now() };
-  const order = { id, wallet: wallet.toLowerCase(), usdCents: cents, priceCents, coinsMicro: microForCents(cents, priceCents).toString(), cur: b.cur, code: c.code, payer, agreement, country: country ?? null, status: 'creating', creditedMicro: '0', history: [], at: Date.now() };
-  const meta = (o) => ({ w: o.wallet, st: o.status, usd: String(o.usdCents), cur: o.cur });
-  if (!(await createOnce(env.STORE, `coin/order/${id}.json`, order, meta(order)))) return { error: 'retry' };
-  await createOnce(env.STORE, `coin/by/${order.wallet}/o/${id}`, { id });
-  let p;
-  try {
-    p = await np(env, '/v1/payment', { method: 'POST', body: { price_amount: cents / 100, price_currency: 'usd', pay_currency: c.code, ipn_callback_url: `${base}${IPN_PATH}`, order_id: id, order_description: `AXTO coin ${fmtCoins(order.coinsMicro)} AXTO` } });
-  } catch (e) {
-    await cas(env.STORE, `coin/order/${id}.json`, (o) => ({ ...o, status: 'error', error: e.detail ?? e.message }), meta);
-    return { error: 'np', detail: e.detail ?? e.message };
-  }
-  const np_ = { payment_id: String(p.payment_id), pay_address: p.pay_address, pay_amount: p.pay_amount, pay_currency: p.pay_currency, payin_extra_id: p.payin_extra_id ?? null, valid_until: p.valid_until ?? p.expiration_estimate_date ?? null };
-  const saved = await cas(env.STORE, `coin/order/${id}.json`, (o) => ({ ...o, status: p.payment_status ?? 'waiting', np: np_ }), meta);
+  const r = await PAY.createIntent(env, wallet, { kind: 'coin', usdCents: cents, coin, net, extra: { coinsMicro: coinsMicro.toString(), priceCents, payer, agreement, country: country ?? null } });
+  if (!r.ok) return { error: r.error, ...(r.min ? { min: r.min } : {}) };
   await cas(env.STORE, acctKey(wallet), (a) => {
     const x = a ?? emptyAcct(wallet);
     return { ...x, agreements: { ...x.agreements, [AGREEMENT_V]: agreement.at } };
   });
-  return { ok: true, order: publicOrder(saved) };
+  return { ok: true, intent: r.intent };
 }
+
+/**
+ * Kreditkan koin yang SUDAH dibayar (pembayaran diterima). Idempoten per ref: saldo memakai ref di dalam CAS akun,
+ * penghitung presale & log hanya sekali (penanda tulis-sekali coin/credit/<ref> ditulis SESUDAH saldo).
+ */
+export async function creditPaid(env, wallet, micro, ref, info = {}, dest = null) {
+  const m = BigInt(micro);
+  if (m <= 0n) return;
+  await cas(env.STORE, acctKey(wallet), (a) => {
+    const x = a ?? emptyAcct(wallet);
+    if ((x.refs ?? []).includes(ref)) return undefined;
+    const addresses = dest && !x.addresses.some((r) => r.cur === dest.cur && r.addr === dest.addr) ? [...x.addresses, { ...dest, at: Date.now() }] : x.addresses;
+    return { ...x, micro: (BigInt(x.micro) + m).toString(), addresses, refs: [...(x.refs ?? []), ref].slice(-500), at: Date.now() };
+  });
+  if (!(await createOnce(env.STORE, `coin/credit/${ref.replace(/[^0-9a-z:_-]/gi, '_')}`, { micro: m.toString(), at: Date.now() }))) return;
+  await update(env.STORE, 'coin/presale.json', (cur) => ({ soldMicro: (BigInt(cur?.soldMicro ?? '0') + m).toString(), at: Date.now() }));
+  await appendLog(env.STORE, 'coin', { ev: 'buy_credit', wallet: wallet.toLowerCase(), micro: m.toString(), ref, ...info });
+}
+
+// penangan pembayaran koin (pay.js): lunas → kredit penuh (kelebihan s.d. 10% ikut dikreditkan); kurang → proporsional
+function paidMicro(x) {
+  const want = BigInt(x.units8);
+  let got = BigInt(x.paid8);
+  if (got > (want * 11n) / 10n) got = (want * 11n) / 10n;
+  return (BigInt(x.coinsMicro) * got) / want;
+}
+PAY.registerHandler('coin', {
+  async fulfil(env, x) {
+    const micro = paidMicro(x);
+    await creditPaid(env, x.wallet, micro, `pay:${x.id}`, { intent: x.id, usdCents: x.usdCents, coin: x.coin, net: x.net, payer: x.payer }, { cur: `${x.coin}:${x.net}`, addr: x.payer, order: x.id });
+    return { status: 'done', result: { coins: fmtCoins(micro) } };
+  },
+  async partial(env, x) {
+    const micro = paidMicro(x);
+    await creditPaid(env, x.wallet, micro, `pay:${x.id}`, { intent: x.id, usdCents: Number((BigInt(x.usdCents) * BigInt(x.paid8)) / BigInt(x.units8)), coin: x.coin, net: x.net, payer: x.payer, partial: true }, { cur: `${x.coin}:${x.net}`, addr: x.payer, order: x.id });
+    return { result: { coins: fmtCoins(micro) }, note: 'underpaid' };
+  },
+  async expire() {},
+});
 
 export const publicOrder = (o) => ({ id: o.id, at: o.at, usd: o.usdCents / 100, coins: fmtCoins(o.coinsMicro), cur: o.cur, label: CURRENCIES[o.cur]?.label, payer: o.payer, status: o.status, credited: fmtCoins(o.creditedMicro ?? '0'), pay: o.np ? { address: o.np.pay_address, amount: o.np.pay_amount, currency: o.np.pay_currency, extraId: o.np.payin_extra_id, until: o.np.valid_until } : null, txid: o.payinHash ?? null });
 
@@ -437,14 +448,15 @@ export async function requestCashout(env, wallet, b) {
   } catch (e) {
     return { error: e.message === 'balance' ? 'balance' : 'retry' };
   }
-  const rec = { id, wallet: wallet.toLowerCase(), micro: micro.toString(), priceCents: cfg.priceCents, ...q, cur: dest.cur, code: CURRENCIES[dest.cur].code, addr: dest.addr, status: payoutReady(env) ? 'queued' : 'awaiting_payout_setup', at: Date.now(), history: [] };
+  // tanpa izin penarikan otomatis (24 Nov 2026): pencairan diantrekan untuk dibayar admin dari portal admin
+  const rec = { id, wallet: wallet.toLowerCase(), micro: micro.toString(), priceCents: cfg.priceCents, ...q, cur: dest.cur, code: CURRENCIES[dest.cur]?.code ?? dest.cur, addr: dest.addr, status: payoutReady(env) ? 'queued' : 'manual', at: Date.now(), history: [] };
   await createOnce(env.STORE, `coin/out/${id}.json`, rec, { w: rec.wallet, st: rec.status, usd: String(rec.payoutCents) });
   await createOnce(env.STORE, `coin/by/${rec.wallet}/x/${id}`, { id });
   await createOnce(env.STORE, `coin/queue/${id}`, { id });
   return { ok: true, cashout: publicCashout(rec) };
 }
 
-export const publicCashout = (o) => ({ id: o.id, at: o.at, coins: fmtCoins(o.micro), valueUsd: o.valueCents / 100, penaltyPct: o.penaltyPct, payoutUsd: o.payoutCents / 100, cur: o.cur, label: CURRENCIES[o.cur]?.label, to: o.addr, status: o.status, sent: o.np?.amount ?? null, txid: o.np?.hash ?? null });
+export const publicCashout = (o) => ({ id: o.id, at: o.at, coins: fmtCoins(o.micro), valueUsd: o.valueCents / 100, penaltyPct: o.penaltyPct, payoutUsd: o.payoutCents / 100, cur: o.cur, label: curLabel(o.cur), to: o.addr, status: o.status, sent: o.np?.amount ?? o.sent ?? null, txid: o.np?.hash ?? o.tx ?? null });
 
 /**
  * Satu putaran antrean payout (cron tiap 5 menit). Tanpa kredensial payout: tetap antre, admin melihatnya.
@@ -553,8 +565,8 @@ export async function memberView(env, wallet) {
     priceUsd: cfg.priceCents / 100,
     dexReleased: cfg.dexReleased,
     penaltyPct: cfg.dexReleased ? 0 : PENALTY_BEFORE_DEX,
-    destinations: a.addresses.map((r) => ({ cur: r.cur, label: CURRENCIES[r.cur]?.label, addr: r.addr })),
-    orders: (await read(orders)).map(publicOrder).reverse(),
+    destinations: a.addresses.map((r) => ({ cur: r.cur, label: curLabel(r.cur), addr: r.addr })),
+    orders: [...(await PAY.myIntents(env, wallet, 'coin')).map((x) => ({ id: x.id, at: x.at, usd: x.usd, coins: x.result?.coins ?? '—', credited: x.result?.coins ?? '0', label: `${x.coinLabel} · ${x.netLabel}`, payer: null, status: x.status, txid: null, pay: x })), ...(await read(orders)).map(publicOrder).reverse()],
     cashouts: (await read(outs)).map(publicCashout).reverse(),
     agreementV: AGREEMENT_V,
     limits: LIMITS,
@@ -566,7 +578,7 @@ export async function orderStatus(env, wallet, id) {
   const o = await readJSON(env.STORE, `coin/order/${id}.json`);
   if (!o || o.wallet !== wallet.toLowerCase()) return null;
   // belum ada IPN: tanya API sesekali (tanpa menunggu IPN) lalu terapkan bila sudah selesai
-  if (o.np?.payment_id && !['finished', 'failed', 'expired', 'refunded'].includes(o.status) && Date.now() - (o.checkedAt ?? 0) > 20_000) {
+  if (legacyOn(env) && o.np?.payment_id && !['finished', 'failed', 'expired', 'refunded'].includes(o.status) && Date.now() - (o.checkedAt ?? 0) > 20_000) {
     try {
       const p = await np(env, `/v1/payment/${encodeURIComponent(o.np.payment_id)}`);
       await applyPayment(env, id, p);
@@ -611,7 +623,7 @@ export async function adminView(env) {
   }
   const priv = (await readJSON(env.STORE, 'private/config.json').catch(() => null)) ?? {};
   let np_ = null;
-  try {
+  if (legacyOn(env)) try {
     const [status, coins, balance] = await Promise.all([
       np(env, '/v1/status').catch((e) => ({ error: e.message })),
       np(env, '/v1/merchant/coins').catch((e) => ({ error: e.message })),
@@ -623,16 +635,44 @@ export async function adminView(env) {
   return {
     cfg: { ...cfg, priceUsd: cfg.priceCents / 100, penaltyPct: cfg.dexReleased ? 0 : PENALTY_BEFORE_DEX, agreementV: AGREEMENT_V },
     ipnUrl: `${env.BASE_URL || 'https://axto.io'}${IPN_PATH}`,
-    ready: { api: !!env.NOWPAYMENTS_API_KEY, ipn: !!env.NOWPAYMENTS_IPN_SECRET, payout: payoutReady(env) },
+    ready: { gateway: PAY.gatewayReady(env), payout: payoutReady(env), manualPayout: !payoutReady(env) },
+    pay: await PAY.adminView(env),
     totals: { members: accounts.length, heldByMembers: fmtCoins(held), soldViaGateway: fmtCoins(sold), presaleSold: fmtCoins((await presaleSold(env)).toString()), boughtBack: fmtCoins(returned), usdIn: usdIn / 100, usdPaidOut: usdOut / 100, queue: queue.length },
     // alamat privat (R2 private/config.json, tidak pernah di repo): wallet buyback & alamat setelmen NOWPayments
     buyback: { address: priv.buyback ?? null, coins: fmtCoins(returned) },
-    settlement: priv.nowpaymentsSettlement ?? null,
+    settlement: null,
     orders: orderDocs.map((o) => ({ ...publicOrder(o), wallet: o.wallet, country: o.country })).reverse(),
     cashouts: outDocs.map((o) => ({ ...publicCashout(o), wallet: o.wallet, lastError: o.lastError ?? null })).reverse(),
     events,
     np: np_,
   };
+}
+
+/**
+ * Admin menyelesaikan pencairan secara manual (tanpa izin penarikan otomatis): 'paid' + hash transaksi pembayaran yang
+ * dikirim admin ke alamat tujuan member, atau 'refund' → koin dikembalikan ke saldo member. Masing-masing sekali.
+ */
+export async function adminCashout(env, admin, b) {
+  const id = String(b?.id ?? '');
+  if (!/^[0-9a-z]{8,40}$/.test(id)) return { error: 'id' };
+  const key = `coin/out/${id}.json`;
+  const rec = await readJSON(env.STORE, key);
+  if (!rec) return { error: 'not_found' };
+  if (['paid', 'refunded'].includes(rec.status)) return { ok: true, cashout: publicCashout(rec) };
+  const meta = (x) => ({ w: x.wallet, st: x.status, usd: String(x.payoutCents) });
+  if (b?.action === 'refund') {
+    await refundCashout(env, id);
+    await appendLog(env.STORE, 'admin', { ev: 'cashout-refund', id, by: admin });
+    await env.STORE.delete(`coin/queue/${id}`);
+  } else if (b?.action === 'paid') {
+    const tx = String(b?.tx ?? '').trim().slice(0, 120);
+    if (!/^[0-9A-Za-z]{20,120}$/.test(tx.replace(/^0x/, ''))) return { error: 'tx' };
+    if (!(await createOnce(env.STORE, `coin/paid/${id}`, { at: Date.now(), by: admin }))) return { ok: true };
+    await cas(env.STORE, key, (x) => ({ ...x, status: 'paid', tx, sent: b?.sent ? String(b.sent).slice(0, 40) : null, history: [...(x.history ?? []).slice(-30), { st: 'paid', at: Date.now(), by: admin }] }), meta);
+    await appendLog(env.STORE, 'coin', { ev: 'cashout_paid', wallet: rec.wallet, micro: '0', out: id, payoutCents: rec.payoutCents, cur: rec.cur, to: rec.addr, txid: tx, by: admin });
+    await env.STORE.delete(`coin/queue/${id}`);
+  } else return { error: 'action' };
+  return { ok: true, cashout: publicCashout(await readJSON(env.STORE, key)) };
 }
 
 export async function setCfg(env, admin, b) {

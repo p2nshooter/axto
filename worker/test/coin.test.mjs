@@ -1,4 +1,5 @@
-// Koin AXTO lewat NOWPayments: tanda tangan IPN, TOTP, hitungan koin, aliran beli → IPN → kredit, cairkan.
+// Koin AXTO: tanda tangan IPN gerbang lama, TOTP, hitungan koin, pencairan (gerbang lama bila LEGACY_NP=on; selain itu
+// dibayar admin secara manual). Pembelian koin lewat pembayaran kripto baru diuji di test/pay.test.mjs.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHmac } from 'node:crypto';
@@ -108,49 +109,11 @@ test('alamat pengirim per jaringan', () => {
   assert.ok(!C.validAddress('doge', 'D1'));
 });
 
-test('beli → IPN (diperiksa ulang ke API) → kredit sekali; IPN berulang tidak menggandakan', async () => {
-  const env = ENV();
-  const state = {};
-  globalThis.fetch = fakeNP(state);
-  assert.equal((await C.buy(env, W, { usd: 50, cur: 'usdt-trx', payer: 'TTestAddrForAxtoUnitTests123456789', agree: false, agreementV: C.AGREEMENT_V }, { lang: 'id', base: 'https://axto.io' })).error, 'agreement');
-  assert.equal((await C.buy(env, W, { usd: 50, cur: 'usdt-trx', payer: '0xabababababababababababababababababababab', agree: true, agreementV: C.AGREEMENT_V }, { lang: 'id', base: 'https://axto.io' })).error, 'payer_address');
-  assert.equal((await C.buy(env, W, { usd: 5, cur: 'usdt-trx', payer: 'TTestAddrForAxtoUnitTests123456789', agree: true, agreementV: C.AGREEMENT_V }, { lang: 'id', base: 'https://axto.io' })).error, 'amount_min'); // USDT TRON: minimum jaringan ±$10,46 → $12; pemilik: minimum umum $1
-  const r = await C.buy(env, W, { usd: 50, cur: 'usdt-trx', payer: 'TTestAddrForAxtoUnitTests123456789', agree: true, agreementV: C.AGREEMENT_V }, { lang: 'id', base: 'https://axto.io' });
-  assert.ok(r.ok, JSON.stringify(r));
-  assert.equal(state.createdWith.pay_currency, 'usdttrc20');
-  assert.equal(state.createdWith.price_currency, 'usd');
-  assert.equal(state.createdWith.ipn_callback_url, 'https://axto.io/api/pay/ipn');
-  assert.equal(r.order.pay.address, 'TPayAddressOfNowPayments11111111');
-  // IPN palsu (tanda tangan salah) ditolak
-  const fake = new Request('https://axto.io/api/nowpayments/ipn', { method: 'POST', body: JSON.stringify({ payment_id: 555001, order_id: r.order.id, payment_status: 'finished' }), headers: { 'x-nowpayments-sig': 'ab'.repeat(64) } });
-  assert.equal((await C.ipn(fake, env)).status, 401);
-  // IPN sah tapi API masih "confirming" → belum ada kredit (IPN hanya pemicu)
-  const sign = async (p) => new Request('https://axto.io/api/nowpayments/ipn', { method: 'POST', body: JSON.stringify(p), headers: { 'x-nowpayments-sig': await C.ipnSignature(p, 'ipn-secret') } });
-  state.payment = { ...state.payment, payment_status: 'confirming' };
-  const p1 = { payment_id: 555001, order_id: r.order.id, payment_status: 'finished' }; // klaim IPN tidak dipercaya
-  assert.equal((await C.ipn(await sign(p1), env)).body.credited, '0');
-  assert.equal((await C.account(env, W)).micro, '0');
-  // API menyatakan selesai → 5 AXTO masuk, alamat pengirim terdaftar sebagai tujuan pencairan
-  state.payment = { ...state.payment, payment_status: 'finished', actually_paid: 50.12, payin_hash: 'tronTxHash' };
-  assert.equal((await C.ipn(await sign(p1), env)).body.credited, '5000000');
-  assert.equal((await C.ipn(await sign(p1), env)).body.credited, '0'); // IPN ulang
-  const a = await C.account(env, W);
-  assert.equal(a.micro, '5000000');
-  assert.deepEqual(a.addresses.map((x) => [x.cur, x.addr]), [['usdt-trx', 'TTestAddrForAxtoUnitTests123456789']]);
-  const mv = await C.memberView(env, W);
-  assert.equal(mv.balance, '5');
-  assert.equal(mv.orders[0].txid, 'tronTxHash');
-  const ev = [...env.STORE.m.keys()].filter((k) => k.startsWith('log/coin/'));
-  assert.equal(ev.length, 1);
-});
-
 test('cairkan: hanya ke alamat & mata uang pembelian, potong 50%, payout 2 fase tanpa ganda, gagal → koin kembali', async () => {
-  const env = ENV();
+  const env = { ...ENV(), LEGACY_NP: 'on' };
   const state = {};
   globalThis.fetch = fakeNP(state);
-  const r = await C.buy(env, W, { usd: 100, cur: 'usdt-trx', payer: 'TTestAddrForAxtoUnitTests123456789', agree: true, agreementV: C.AGREEMENT_V }, { lang: 'en', base: 'https://axto.io' });
-  state.payment = { ...state.payment, payment_status: 'finished' };
-  await C.applyPayment(env, r.order.id, state.payment);
+  await C.creditPaid(env, W, 10_000_000n, 'pay:seed-1', { usdCents: 10000 }, { cur: 'usdt-trx', addr: 'TTestAddrForAxtoUnitTests123456789' });
   assert.equal((await C.account(env, W)).micro, '10000000'); // $100 → 10 AXTO
   // alamat lain ditolak
   assert.equal((await C.requestCashout(env, W, { coins: '5', cur: 'usdt-trx', addr: 'TOtherTestAddrForAxtoUnitTests9999', agree: true })).error, 'destination');
@@ -208,15 +171,25 @@ test('cairkan: hanya ke alamat & mata uang pembelian, potong 50%, payout 2 fase 
   assert.equal(av.ipnUrl, 'https://axto.io/api/pay/ipn');
 });
 
-test('tanpa kredensial payout: pencairan tetap antre (tidak hilang), admin melihatnya', async () => {
+test('tanpa izin penarikan otomatis: pencairan antre untuk admin, admin menandai dibayar (dengan hash) atau mengembalikan koin', async () => {
   const env = ENV();
-  delete env.NOWPAYMENTS_2FA_SECRET;
-  const state = {};
-  globalThis.fetch = fakeNP(state);
-  const r = await C.buy(env, W, { usd: 100, cur: 'bnb-bsc', payer: '0xabababababababababababababababababababab', agree: true, agreementV: C.AGREEMENT_V }, { lang: 'en', base: 'https://axto.io' });
-  await C.applyPayment(env, r.order.id, { ...state.payment, payment_status: 'finished' });
-  const c = await C.requestCashout(env, W, { coins: '10', cur: 'bnb-bsc', addr: '0xabababababababababababababababababababab', agree: true });
-  assert.equal(c.cashout.status, 'awaiting_payout_setup');
+  globalThis.fetch = fakeNP({});
+  await C.creditPaid(env, W, 20_000_000n, 'pay:seed-2', { usdCents: 20000 }, { cur: 'usdt:bep20', addr: '0xabababababababababababababababababababab' });
+  await C.creditPaid(env, W, 20_000_000n, 'pay:seed-2', { usdCents: 20000 }, { cur: 'usdt:bep20', addr: '0xabababababababababababababababababababab' });
+  assert.equal((await C.account(env, W)).micro, '20000000', 'kredit idempoten per ref');
+  const c = await C.requestCashout(env, W, { coins: '10', cur: 'usdt:bep20', addr: '0xabababababababababababababababababababab', agree: true });
+  assert.ok(c.ok, JSON.stringify(c));
+  assert.equal(c.cashout.status, 'manual');
+  assert.equal(c.cashout.label, 'USDT · BNB Smart Chain (BEP20)');
   assert.deepEqual(await C.processCashouts(env), { processed: 0, waiting: 1, reason: 'payout_credentials_missing' });
-  assert.equal(state.payouts, undefined);
+  assert.equal((await C.adminCashout(env, 'admin', { id: c.cashout.id, action: 'paid', tx: 'x' })).error, 'tx');
+  const p = await C.adminCashout(env, 'admin', { id: c.cashout.id, action: 'paid', tx: '0x' + 'ab'.repeat(32) });
+  assert.equal(p.cashout.status, 'paid');
+  assert.equal(p.cashout.txid, '0x' + 'ab'.repeat(32));
+  const c2 = await C.requestCashout(env, W, { coins: '10', cur: 'usdt:bep20', addr: '0xabababababababababababababababababababab', agree: true });
+  assert.equal((await C.account(env, W)).micro, '0');
+  await C.adminCashout(env, 'admin', { id: c2.cashout.id, action: 'refund' });
+  await C.adminCashout(env, 'admin', { id: c2.cashout.id, action: 'refund' });
+  assert.equal((await C.account(env, W)).micro, '10000000', 'koin dikembalikan sekali');
+  assert.equal((await C.processCashouts(env)).processed, 0);
 });

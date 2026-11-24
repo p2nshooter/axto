@@ -146,14 +146,10 @@ jobs:
           ENGINE_HMAC_KEY: ${{ secrets.ENGINE_HMAC_KEY }}
           VAULT_HMAC_KEY: ${{ secrets.VAULT_HMAC_KEY }}
           OPENSEA_API_KEY: ${{ secrets.OPENSEA_API_KEY }}
-          # Koin AXTO lewat NOWPayments (pemilik, 23 Nov 2026). Tiga yang pertama untuk beli + webhook IPN; tiga berikutnya
-          # (opsional) membuat pencairan berjalan sendiri: email & kata sandi akun NOWPayments + rahasia Base32 2FA aplikasi.
-          NOWPAYMENTS_API_KEY: ${{ secrets.NOWPAYMENTS_API_KEY }}
-          NOWPAYMENTS_IPN_SECRET: ${{ secrets.NOWPAYMENTS_IPN_SECRET }}
-          NOWPAYMENTS_PUBLIC_KEY: ${{ secrets.NOWPAYMENTS_PUBLIC_KEY }}
-          NOWPAYMENTS_EMAIL: ${{ secrets.NOWPAYMENTS_EMAIL }}
-          NOWPAYMENTS_PASSWORD: ${{ secrets.NOWPAYMENTS_PASSWORD }}
-          NOWPAYMENTS_2FA_SECRET: ${{ secrets.NOWPAYMENTS_2FA_SECRET }}
+          # Pembayaran kripto axto.io (pemilik, 24 Nov 2026): akun penampung, kunci API izin LIHAT saja (alamat deposit &
+          # riwayat deposit). Email/kata sandi/2FA akun TIDAK pernah dikirim ke worker.
+          PAY_API_KEY: ${{ secrets.INDODAX_API_KEY_2 }}
+          PAY_API_SECRET: ${{ secrets.INDODAX_API_SECRET_2 }}
         run: |
           have=$(npx wrangler secret list --name axto-web 2>/dev/null || echo '[]')
           # kunci data dibuat SEKALI (email member terenkripsi dengannya) — tidak pernah ditimpa
@@ -165,12 +161,13 @@ jobs:
           printf '%s' "${ENGINE_HMAC_KEY:-$(derive ENGINE_HMAC_KEY)}" | npx wrangler secret put ENGINE_HMAC_KEY --name axto-web >/dev/null
           printf '%s' "${VAULT_HMAC_KEY:-$(derive VAULT_HMAC_KEY)}" | npx wrangler secret put VAULT_HMAC_KEY --name axto-web >/dev/null
           [ -n "$OPENSEA_API_KEY" ] && printf '%s' "$OPENSEA_API_KEY" | npx wrangler secret put OPENSEA_API_KEY --name axto-web >/dev/null
-          np=""
-          for k in NOWPAYMENTS_API_KEY NOWPAYMENTS_IPN_SECRET NOWPAYMENTS_PUBLIC_KEY NOWPAYMENTS_EMAIL NOWPAYMENTS_PASSWORD NOWPAYMENTS_2FA_SECRET; do
-            if [ -n "${!k}" ]; then printf '%s' "${!k}" | npx wrangler secret put "$k" --name axto-web >/dev/null && np="$np $k"; fi
-          done
-          echo "- NOWPayments di worker:${np:- (belum ada secret)}" >> "$GITHUB_STEP_SUMMARY"
-          echo "NOWPayments di worker (nama secret saja):${np:- belum ada}"
+          pay=0
+          if [ -n "$PAY_API_KEY" ] && [ -n "$PAY_API_SECRET" ]; then
+            printf '%s' "$PAY_API_KEY" | npx wrangler secret put INDODAX_API_KEY --name axto-web >/dev/null
+            printf '%s' "$PAY_API_SECRET" | npx wrangler secret put INDODAX_API_SECRET --name axto-web >/dev/null
+            pay=1
+          fi
+          if [ "$pay" = 1 ]; then echo "- Pembayaran kripto: kunci API terpasang" >> "$GITHUB_STEP_SUMMARY"; else echo "- Pembayaran kripto: kunci API belum ada" >> "$GITHUB_STEP_SUMMARY"; fi
           echo "rahasia worker siap"
 
       - name: Pindahkan axto.io & www.axto.io ke worker axto-web
@@ -221,13 +218,18 @@ jobs:
             if curl -sf "https://axto.io/img/$k/42.svg?v=live$GITHUB_RUN_ID" | grep -q '>AXTO<\|>AXTO·\|>EXCLUSIVE ·'; then echo "::error::karya $k/42 masih membawa tanda/label"; exit 1; fi
           done
           echo "- Metadata OpenSea ERC-721: OS-42 · OS-G · koleksi AXTO G- ✅" >> "$GITHUB_STEP_SUMMARY"
-          # webhook IPN NOWPayments hidup dan menolak kiriman tanpa tanda tangan sah
-          for ipn in /api/pay/ipn /api/nowpayments/ipn; do
-            code=$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'content-type: application/json' -H 'x-nowpayments-sig: 00' -d '{"payment_id":1}' "https://axto.io$ipn")
-            [ "$code" = "401" ] || { echo "::error::webhook IPN $ipn tidak menjawab 401 untuk tanda tangan palsu (dapat $code)"; exit 1; }
-          done
-          echo "- Webhook IPN gerbang pembayaran: https://axto.io/api/pay/ipn (menolak tanda tangan palsu ✅)" >> "$GITHUB_STEP_SUMMARY"
+          # URL callback akun pembayaran: hidup, dan permintaan penarikan apa pun ditolak (sistem tidak pernah menarik dana)
+          cb=https://axto.io/api/indodax
+          [ "$(curl -sf "$cb")" = "axto.io" ] || { echo "::error::URL callback pembayaran tidak hidup"; exit 1; }
+          [ "$(curl -s -X POST -d 'request_id=uji&withdraw_currency=eth&withdraw_amount=1' "$cb")" = "refused" ] || { echo "::error::URL callback tidak menolak penarikan"; exit 1; }
+          opts=$(curl -sf https://axto.io/api/pay/options || echo '{}')
+          n=$(printf '%s' "$opts" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{try{const j=JSON.parse(s);console.log(j.ready?(j.coins||[]).length:-1)}catch{console.log(-2)}})")
+          if [ "$n" -gt 0 ]; then echo "- Pembayaran kripto: $n koin siap (alamat deposit & jaringan terbaca) ✅" >> "$GITHUB_STEP_SUMMARY"
+          else echo "::warning::pembayaran kripto belum siap ($n) — periksa kunci API izin lihat"; echo "- Pembayaran kripto: belum siap ($n) ⚠️" >> "$GITHUB_STEP_SUMMARY"; fi
+          # keranjang & checkout wajib masuk
+          [ "$(curl -s -o /dev/null -w '%{http_code}' https://axto.io/api/cart)" = "401" ] || { echo "::error::keranjang terbuka tanpa masuk"; exit 1; }
+          echo "- Callback pembayaran hidup & menolak penarikan · keranjang wajib masuk ✅" >> "$GITHUB_STEP_SUMMARY"
           {
             echo "## axto.io live ✅"
-            echo "- AdSense: loader ca-pub-5928074389292014 · 4 tag meta · ads.txt 4 baris · tanpa akun lama"
+            echo "- AdSense: loader ca-pub-5928074389292014 · 5 tag meta · ads.txt 5 baris · tanpa akun lama"
           } >> "$GITHUB_STEP_SUMMARY"

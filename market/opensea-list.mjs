@@ -77,7 +77,7 @@ export function realIO() {
     const r = await fetch(`${base}${path}`, { method, headers: { 'content-type': 'application/json', 'x-axto-ts': String(ts), 'x-axto-sig': sig }, body: method === 'GET' ? undefined : body });
     return r.json();
   };
-  return { r2get, r2put, stakeApi, sdk: async (wallet, chain) => { const { OpenSeaSDK } = await import('@opensea/sdk'); return new OpenSeaSDK(wallet, { chain, apiKey: process.env.OPENSEA_API_KEY }); } };
+  return { r2get, r2put, stakeApi, api: stakeApi, sdk: async (wallet, chain) => { const { OpenSeaSDK } = await import('@opensea/sdk'); return new OpenSeaSDK(wallet, { chain, apiKey: process.env.OPENSEA_API_KEY }); } };
 }
 
 const encKey = () => createHmac('sha256', process.env.CLOUDFLARE_API_KEY || 'local').update('axto:DEPLOYER_ENC').digest();

@@ -62,7 +62,7 @@ export function page(opts) {
     ...jsonld,
   ];
   // tiga pasar terpisah (pemilik 23 Nov 2026): Eksklusif axto.io · Pasar Member · OpenSea — lalu Koin AXTO & Member
-  const nav = [['exclusive', t.nav.exclusive], ['market', t.nav.market], ['opensea', t.nav.opensea], ['coin', t.nav.coin], ['member', t.nav.member]];
+  const nav = [['exclusive', t.nav.exclusive], ['market', t.nav.market], ['opensea', t.nav.opensea], ['coin', t.nav.coin], ['cart', t.nav.cart], ['member', t.nav.member]];
   return `<!doctype html>
 <html lang="${t.htmlLang}">
 <head>

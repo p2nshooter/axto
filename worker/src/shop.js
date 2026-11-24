@@ -34,7 +34,7 @@
  *   x/rev/<hari>/<id>             pendapatan perusahaan (meta {micro, kind})
  *   x/pending/<kind>/<id>         pekerjaan yang belum selesai (dipungut cron)
  */
-import { readJSON, putJSON, appendLog, listKeys, createOnce, casMeta } from './r2.js';
+import { readJSON, putJSON, appendLog, listKeys, createOnce, casMeta, update } from './r2.js';
 import * as COIN from './coin.js';
 import { COLLECTIONS } from '../../engine/src/core.js';
 import { EXCLUSIVE_SUPPLY, EXCLUSIVE_PRICE_USD } from '../../engine/src/editions.js';
@@ -50,8 +50,8 @@ const MIN_MICRO = 10_000n; // 0,01 AXTO
 const WD_MAX_ITEMS = 200; // per voucher (vault coinaxto) — WD massal hemat gas (pemilik 24 Nov 2026)
 
 const lw = (w) => String(w).toLowerCase();
-const isEx = (c) => EX_KEYS.includes(c);
-const validId = (c, id) => Number.isSafeInteger(id) && id >= 1 && id <= (COLLECTIONS[c]?.max ?? 0);
+export const isEx = (c) => EX_KEYS.includes(c);
+export const validId = (c, id) => Number.isSafeInteger(id) && id >= 1 && id <= (COLLECTIONS[c]?.max ?? 0);
 const rid = () => [...crypto.getRandomValues(new Uint8Array(9))].map((x) => x.toString(16).padStart(2, '0')).join('');
 const okRef = (r) => typeof r === 'string' && /^[0-9a-z-]{8,40}$/.test(r);
 const day = (t = Date.now()) => new Date(t).toISOString().slice(0, 10);
@@ -175,6 +175,144 @@ export async function completeOrder(env, oid) {
   await putJSON(env.STORE, `x/rev/${day(o.at)}/${oid}`, { oid }, { micro: o.micro, kind: 'shop' });
   await appendLog(env.STORE, 'shop', { oid, wallet: o.wallet, c: o.c, id: o.id, qty: o.qty, micro: o.micro });
   return finish('done');
+}
+
+// ---------------------------------------------------------------- 1b. dibayar kripto (keranjang, pay.js)
+// Pemilik, 24 Nov 2026: „Yg bisa di beli dengan usdc/eth … bukan cuma yg $1 tp semua harganya bisa, jd pembelian tidak harus
+// make coin axto" · „jika pembayaran di Terima baru pembelian berhasil". Saat checkout kripto setiap barang DIPESAN (stok
+// eksklusif / edisi listing ditahan) lalu baru diserahkan setelah pembayaran diterima. Pesanan yang tidak dibayar dilepas.
+//   x/order/<oid>.json   {…, pay:'crypto', intent, status:'await'|'done'|'released'}
+//   listing.sales[]      {sid, …, status:'await', escrow:true, intent} — escrow: tanpa debit koin pembeli
+
+/** Harga satu barang keranjang: {usdCents, micro}. Edisi eksklusif $1; listing = harga AXTO × kurs koin. */
+export async function itemPrice(env, it) {
+  const { priceCents } = await COIN.coinCfg(env);
+  if (it.t === 'ex') return { usdCents: it.qty * EXCLUSIVE_PRICE_USD * 100, micro: (await editionMicro(env)) * BigInt(it.qty) };
+  const L = await getListing(env, it.lid);
+  const micro = BigInt(L?.priceMicro ?? 0) * BigInt(it.qty);
+  return { usdCents: Number(COIN.centsForMicro(micro, priceCents)), micro };
+}
+
+export async function reserveExclusive(env, wallet, { c, id, qty, ref, intent }) {
+  if (!isEx(c) || !validId(c, id) || !Number.isSafeInteger(qty) || qty < 1 || qty > EXCLUSIVE_SUPPLY) return fail('item');
+  const oid = `k-${(await sha(`${lw(wallet)}:${ref}`)).slice(0, 24)}`;
+  const order = { oid, wallet: lw(wallet), c, id, qty, usd: qty * EXCLUSIVE_PRICE_USD, pay: 'crypto', intent: intent ?? null, status: 'await', at: Date.now() };
+  await createOnce(env.STORE, `x/order/${oid}.json`, order);
+  try {
+    await casMeta(env.STORE, stockKey(c, id), (cur) => {
+      const s = cur ?? { sold: 0, orders: {} };
+      if (s.orders[oid]) return undefined;
+      if (s.sold + qty > EXCLUSIVE_SUPPLY) throw new Error('sold_out');
+      return { sold: s.sold + qty, orders: { ...s.orders, [oid]: qty } };
+    }, (s) => ({ sold: String(s.sold) }));
+  } catch (e) {
+    if (e.message !== 'sold_out') throw e;
+    await putJSON(env.STORE, `x/order/${oid}.json`, { ...order, status: 'released', error: 'sold_out' });
+    return fail('sold_out');
+  }
+  return { ok: true, oid };
+}
+
+export async function releaseExclusive(env, oid) {
+  const key = `x/order/${oid}.json`;
+  const o = await readJSON(env.STORE, key);
+  if (!o || o.status !== 'await') return;
+  await casMeta(env.STORE, stockKey(o.c, o.id), (cur) => {
+    if (!cur?.orders[oid]) return undefined;
+    const orders = { ...cur.orders };
+    delete orders[oid];
+    return { sold: cur.sold - o.qty, orders };
+  }, (s) => ({ sold: String(s.sold) }));
+  await update(env.STORE, key, (cur) => (cur?.status === 'await' ? { ...cur, status: 'released', doneAt: Date.now() } : undefined));
+}
+
+/** Pembayaran diterima → edisi masuk kustodi. Stok sempat dilepas (bayar terlambat) → dipesan ulang; habis → 'sold_out'. */
+export async function completeExclusiveCrypto(env, oid, intentId) {
+  const key = `x/order/${oid}.json`;
+  const o = await readJSON(env.STORE, key);
+  if (!o) return fail('not_found');
+  if (o.status === 'done') return { ok: true };
+  try {
+    await casMeta(env.STORE, stockKey(o.c, o.id), (cur) => {
+      const s = cur ?? { sold: 0, orders: {} };
+      if (s.orders[oid]) return undefined;
+      if (s.sold + o.qty > EXCLUSIVE_SUPPLY) throw new Error('sold_out');
+      return { sold: s.sold + o.qty, orders: { ...s.orders, [oid]: o.qty } };
+    }, (s) => ({ sold: String(s.sold) }));
+  } catch (e) {
+    if (e.message !== 'sold_out') throw e;
+    await update(env.STORE, key, (cur) => (cur && cur.status !== 'done' ? { ...cur, status: 'released', error: 'sold_out' } : undefined));
+    return fail('sold_out');
+  }
+  await moveOwn(env, o.wallet, o.c, o.id, o.qty, `buy:${oid}`);
+  await putJSON(env.STORE, `x/rev/${day()}/${oid}`, { oid }, { usd: String(o.usd), kind: 'crypto', intent: String(intentId ?? '') });
+  await update(env.STORE, key, (cur) => (cur && cur.status !== 'done' ? { ...cur, status: 'done', intent: intentId ?? cur.intent, doneAt: Date.now() } : undefined));
+  await putJSON(env.STORE, `x/by/${o.wallet}/o/${oid}`, { oid }, { c: o.c, id: String(o.id), qty: String(o.qty), micro: '0', usd: String(o.usd), status: 'done', at: String(o.at) });
+  await appendLog(env.STORE, 'shop', { oid, wallet: o.wallet, c: o.c, id: o.id, qty: o.qty, pay: 'crypto', intent: intentId ?? null });
+  return { ok: true };
+}
+
+export async function reserveListing(env, wallet, { lid, qty, ref, intent }) {
+  const L0 = await getListing(env, lid);
+  if (!L0) return fail('not_found');
+  if (!(L0.mode === 'fixed' || L0.mode === 'fixed_offer')) return fail('mode');
+  if (lw(wallet) === L0.seller) return fail('own');
+  if (!Number.isSafeInteger(qty) || qty < 1) return fail('qty');
+  const sid = `k-${(await sha(`${lw(wallet)}:${ref}`)).slice(0, 24)}`;
+  const micro = BigInt(L0.priceMicro) * BigInt(qty);
+  try {
+    const L = await editListing(env, lid, (x) => {
+      if (x.sales.some((s) => s.sid === sid)) return undefined;
+      if (x.status !== 'open' || Date.now() > x.endsAt) throw new Error('closed');
+      if (x.left < qty) throw new Error('qty');
+      return { ...x, left: x.left - qty, sales: [...x.sales, { sid, buyer: lw(wallet), qty, micro: micro.toString(), status: 'await', escrow: true, intent: intent ?? null, at: Date.now() }] };
+    });
+    await refreshOpen(env, L);
+  } catch (e) { if (['closed', 'qty'].includes(e.message)) return fail(e.message === 'qty' ? 'sold_out' : 'closed'); throw e; }
+  return { ok: true, sid, micro: micro.toString() };
+}
+
+export async function releaseListing(env, lid, sid) {
+  let unlock = 0;
+  const L = await editListing(env, lid, (x) => {
+    const s = x.sales.find((y) => y.sid === sid);
+    if (!s || s.status !== 'await') return undefined;
+    unlock = x.closed ? s.qty : 0; // listing sudah ditutup: edisi kembali bebas milik penjual
+    return { ...x, left: x.closed ? x.left : x.left + s.qty, sales: x.sales.map((y) => (y.sid === sid ? { ...y, status: 'failed', error: 'expired' } : y)) };
+  }).catch(() => null);
+  if (!L) return;
+  if (unlock) {
+    await casMeta(env.STORE, ownKey(L.seller, L.c, L.id), (cur) => {
+      if (!cur || !(lid in (cur.locked ?? {}))) return undefined;
+      const locked = { ...cur.locked };
+      const n = locked[lid] - unlock;
+      if (n > 0) locked[lid] = n; else delete locked[lid];
+      return { ...cur, locked, at: Date.now() };
+    }, ownMeta);
+  } else await refreshOpen(env, L);
+}
+
+/** Pembayaran diterima → edisi dari penjual ke pembeli, penjual menerima 90% dalam koin AXTO, fee 10%. */
+export async function completeListingCrypto(env, lid, sid, intentId) {
+  let L = await getListing(env, lid);
+  let s = L?.sales.find((x) => x.sid === sid);
+  if (!s) return fail('not_found');
+  if (s.status === 'done') return { ok: true };
+  if (s.status === 'failed') {
+    // dilepas karena terlambat bayar: pesan ulang bila edisi masih ada
+    try {
+      L = await editListing(env, lid, (x) => {
+        const y = x.sales.find((z) => z.sid === sid);
+        if (y.status !== 'failed') return undefined;
+        if (x.status !== 'open' || x.left < y.qty) throw new Error('gone');
+        return { ...x, left: x.left - y.qty, sales: x.sales.map((z) => (z.sid === sid ? { ...z, status: 'await', error: undefined } : z)) };
+      });
+    } catch { return fail('sold_out'); }
+    s = L.sales.find((x) => x.sid === sid);
+  }
+  await editListing(env, lid, (x) => ({ ...x, sales: x.sales.map((y) => (y.sid === sid && y.status === 'await' ? { ...y, status: 'new', intent: intentId ?? y.intent } : y)) }));
+  await putJSON(env.STORE, `x/pending/sale/${sid}`, { lid });
+  return completeSale(env, lid, sid);
 }
 
 // ---------------------------------------------------------------- 2. pasar member (koin AXTO, fee 10%)
@@ -356,6 +494,7 @@ export async function completeSale(env, lid, sid) {
   if (!s) { await env.STORE.delete(`x/pending/sale/${sid}`); return fail('not_found'); }
   if (s.status === 'done') { await env.STORE.delete(`x/pending/sale/${sid}`); return { ok: true, listing: publicListing(L) }; }
   if (s.status === 'failed') { await env.STORE.delete(`x/pending/sale/${sid}`); return fail(s.error ?? 'failed'); }
+  if (s.status === 'await') { await env.STORE.delete(`x/pending/sale/${sid}`); return fail('await'); } // menunggu pembayaran kripto
   const setSale = (status, error) => editListing(env, lid, (x) => {
     const sales = x.sales.map((y) => (y.sid === sid ? { ...y, status, ...(error ? { error } : {}) } : y));
     const left = status === 'failed' ? x.left + s.qty : x.left;
@@ -494,10 +633,12 @@ export async function cancelListing(env, wallet, b) {
 async function closeListing(env, lid, status) {
   const L = await editListing(env, lid, (x) => (x.closed ? undefined : { ...x, status: x.status === 'sold' ? 'sold' : status, closed: Date.now(), offers: x.offers.map((y) => (y.status === 'open' ? { ...y, status: 'returned' } : y)) }));
   await releaseFunds(env, lid);
+  // edisi yang sedang menunggu pembayaran kripto pembeli tetap terkunci sampai dibayar atau dilepas
+  const pending = L.sales.filter((y) => y.status === 'await' || y.status === 'new').reduce((a, y) => a + y.qty, 0);
   await casMeta(env.STORE, ownKey(L.seller, L.c, L.id), (cur) => {
     if (!cur || !(lid in (cur.locked ?? {}))) return undefined;
     const locked = { ...cur.locked };
-    delete locked[lid];
+    if (pending > 0) { if (locked[lid] === pending) return undefined; locked[lid] = Math.min(locked[lid], pending); } else delete locked[lid];
     return { ...cur, locked, at: Date.now() };
   }, ownMeta);
   await env.STORE.delete(`x/open/${lid}`);
@@ -584,8 +725,10 @@ export async function completeWithdraw(env, ref, colAddr, names) {
   // 3) voucher vault (idempoten per wdRef)
   const v = await vault(env, 'mintBatchVoucher', { collection: colAddr(w.c), collectionName: names[w.c], items: w.items, owner: w.wallet, wdRef: ref });
   if (v?.error) throw new Error(`vault:${v.error}`);
-  const rec = { ...w, status: 'voucher', voucher: v, at2: Date.now() };
+  const rec = { ...w, status: 'voucher', voucher: v, relay: true, at2: Date.now() };
   await putJSON(env.STORE, key, rec);
+  // gas ditanggung axto.io (pemilik, 24 Nov 2026): wallet gas sistem mengirim transaksi mint voucher ini (market/gas-relay.mjs)
+  await putJSON(env.STORE, `x/relay/${ref}`, { ref }, { c: w.c, at: String(Date.now()) });
   await putJSON(env.STORE, `x/by/${w.wallet}/w/${ref}`, { ref }, { c: w.c, n: String(w.items.reduce((a, b) => a + b.amount, 0)), at: String(w.at) });
   await env.STORE.delete(`x/pending/wd/${ref}`);
   await appendLog(env.STORE, 'wd', { ref, wallet: w.wallet, c: w.c, items: w.items });
@@ -610,6 +753,30 @@ export async function markMinted(env, wallet, b) {
   const w = await readJSON(env.STORE, `x/wd/${ref}.json`);
   if (!w || w.wallet !== lw(wallet)) return fail('not_found');
   await putJSON(env.STORE, `x/wd/${ref}.json`, { ...w, status: 'minted', tx: b.tx, mintedAt: Date.now() });
+  await env.STORE.delete(`x/relay/${ref}`);
+  return { ok: true };
+}
+
+// ---------------------------------------------------------------- WD tanpa gas: antrean wallet gas sistem
+// Pemilik, 24 Nov 2026: „Seluruh gas fee di tanggung axto.io" · „gas fee tetep dari alamat 0x2AB7…". Voucher WD masuk
+// antrean x/relay/<ref>; market/gas-relay.mjs (wallet gas) mengirim mintWithVoucher lalu melapor lewat API internal.
+export async function relayQueue(env, colAddr, max = 50) {
+  const out = [];
+  for (const o of await listKeys(env.STORE, 'x/relay/', max)) {
+    const w = await readJSON(env.STORE, `x/wd/${o.key.split('/').pop()}.json`);
+    if (!w || w.status !== 'voucher') { await env.STORE.delete(o.key); continue; }
+    out.push({ ref: w.ref, c: w.c, contract: colAddr(w.c), voucher: w.voucher });
+  }
+  return out;
+}
+
+export async function relayDone(env, b) {
+  const ref = String(b?.ref ?? '');
+  if (!/^[0-9a-f]{20}-ex-[a-z]+$/.test(ref)) return fail('input');
+  const tx = /^0x[0-9a-fA-F]{64}$/.test(String(b?.tx ?? '')) ? b.tx : null;
+  const w = await update(env.STORE, `x/wd/${ref}.json`, (cur) => (cur && cur.status === 'voucher' ? { ...cur, status: 'minted', tx, by: 'relay', mintedAt: Date.now() } : undefined));
+  await env.STORE.delete(`x/relay/${ref}`);
+  if (w) await appendLog(env.STORE, 'wd', { ev: 'relayed', ref, tx });
   return { ok: true };
 }
 
@@ -713,14 +880,16 @@ export async function adminView(env) {
   let shop = 0n;
   let fees = 0n;
   let orders = 0;
+  let cryptoUsd = 0;
+  let cryptoOrders = 0;
   for (const d of days) {
     for (const o of await listKeys(env.STORE, `x/rev/${d}/`, 20_000)) {
-      if (o.customMetadata?.kind === 'shop') { shop += BigInt(o.customMetadata.micro ?? 0); orders += 1; } else fees += BigInt(o.customMetadata?.micro ?? 0);
+      if (o.customMetadata?.kind === 'shop') { shop += BigInt(o.customMetadata.micro ?? 0); orders += 1; } else if (o.customMetadata?.kind === 'crypto') { cryptoUsd += Number(o.customMetadata.usd ?? 0); cryptoOrders += 1; } else fees += BigInt(o.customMetadata?.micro ?? 0);
     }
   }
   const sold = {};
   for (const c of EX_KEYS) sold[c] = Object.values(await soldMap(env, c)).reduce((a, b) => a + b, 0);
-  return { last30: { shopCoins: COIN.fmtCoins(shop), feeCoins: COIN.fmtCoins(fees), orders }, editionsSold: sold, editionsTotal: Object.fromEntries(EX_KEYS.map((c) => [c, COLLECTIONS[c].max * EXCLUSIVE_SUPPLY])), open: (await listKeys(env.STORE, 'x/open/', 20_000)).length, pending: (await listKeys(env.STORE, 'x/pending/', 1000)).length };
+  return { last30: { shopCoins: COIN.fmtCoins(shop), feeCoins: COIN.fmtCoins(fees), orders, cryptoUsd, cryptoOrders }, editionsSold: sold, editionsTotal: Object.fromEntries(EX_KEYS.map((c) => [c, COLLECTIONS[c].max * EXCLUSIVE_SUPPLY])), open: (await listKeys(env.STORE, 'x/open/', 20_000)).length, pending: (await listKeys(env.STORE, 'x/pending/', 1000)).length };
 }
 
 async function sha(s) {
