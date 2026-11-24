@@ -2,7 +2,7 @@
 
 Museum digital hidup di jaringan Base dengan tiga pasar terpisah: **Eksklusif** (toko axto.io, $1 per edisi dengan koin
 AXTO atau langsung kripto, 10 edisi per karya), **Pasar Member** (jual-beli antar member: harga tetap, lelang, penawaran;
-fee 10%, tanpa gas) dan **OpenSea** (koleksi publik, edisi 1–10, harga tetap $1–$250 menurut kelangkaan; 100 juta karya
+fee 10%, tanpa gas) dan **OpenSea** (koleksi publik, edisi 1–10, harga tetap $1–$250 menurut kelangkaan; 150 juta karya
 1/1; galeri hadiah AXTO Staking). Keranjang untuk beli & WD massal; gas transaksi axto.io ditanggung axto.io. Royalti 10%
 untuk setiap penjualan ulang. Seri **G-** dilukis GPU dari DNA karya dan dianimasikan GPU sebelum tampil.
 

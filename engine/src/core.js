@@ -169,9 +169,9 @@ export const STAKE_SETS = {
  * desain SESUDAH bagian I (`skip` + jumlah karya bagian I) → tetap satu urutan, tidak ada desain kembar.
  */
 const W1 = 16_666_667;
-/** Jumlah karya per bagian. Bagian I & II = 100 jt karya inti; III & IV = tambahan (pemilik 25 Nov 2026: sisa dana deployer
- *  dipakai untuk karya 1/1 tambahan ke OpenSea, bukan seri G-) — hanya dideploy bila sisa saldo deployer cukup. */
-const ONE_PARTS = { quran: [W1, W1, W1, W1], hadith: [W1, W1 - 1, W1, W1], stamp: [W1, W1 - 1, W1, W1] };
+/** Jumlah karya per bagian. Bagian I & II = 100 jt karya inti; III = tambahan 50 jt (pemilik 25 Nov 2026: „Tambahin aja 50jt
+ *  lg, jgn 80jt biar cukup" — dari sisa dana deployer, bukan seri G-), dideploy setelah inti aktif bila sisa saldo cukup. */
+const ONE_PARTS = { quran: [W1, W1, W1], hadith: [W1, W1 - 1, W1], stamp: [W1, W1 - 1, W1 - 1] };
 const ONE_SYM = { quran: 'AX1QURAN', hadith: 'AX1HADITH', stamp: 'AX1STAMP' };
 export const ONE_SETS = Object.fromEntries(Object.entries(ONE_PARTS).flatMap(([kind, parts]) => parts.map((max, i) => {
   const key = i === 0 ? `one-${kind}` : `one-${kind}-${i + 1}`;

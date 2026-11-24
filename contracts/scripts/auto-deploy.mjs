@@ -386,8 +386,8 @@ async function main() {
     log(`✓ col:${k} ${st.collections[k]} (1/1 tambahan)`);
   }
   const extraDone = EXTRA_DEPLOY.filter(([k]) => st.collections[k]).length;
-  const contracts = fresh > before || LOCAL ? await register({ extra: { aktif: extraDone, menunggu: waitingExtra } }) : { chainId, token, store: STORE, collections: st.collections };
-  if (!LOCAL && fresh === before && waitingExtra) status('selesai', { extra: { aktif: extraDone, menunggu: waitingExtra } });
+  const contracts = fresh > before || LOCAL ? await register({ extra: { aktif: extraDone, menunggu: waitingExtra } }) : { chainId, token, store: STORE, collections: st.collections, standard: 'erc721-editions', works: OS_WORKS };
+  if (!LOCAL && fresh === before && waitingExtra) status('selesai', { contracts, extra: { aktif: extraDone, menunggu: waitingExtra } });
   log(`✅ Semua kontrak aktif di ${net.name}. 1/1 tambahan: ${extraDone}/${EXTRA_DEPLOY.length}. Gas terpakai: ${st.gasUsed} (transaksi terbesar ${st.maxTxGas})`);
   return { done: true, gasUsed: BigInt(st.gasUsed), maxTxGas: BigInt(st.maxTxGas ?? 0), contracts, deployer: me, extraDone, waitingExtra };
 }

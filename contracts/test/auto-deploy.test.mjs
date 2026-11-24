@@ -51,10 +51,10 @@ test('setiap transaksi jauh di bawah batas gas per transaksi Base (16.777.216, E
   assert.ok(mod.TX_GAS_SAFE < 16_777_216n);
 });
 
-test('kepemilikan langsung ke pemilik: 22 koleksi → admin, AxtoToken → wallet koin; tanpa AuctionHouse/AxtoSale', async () => {
+test('kepemilikan langsung ke pemilik: 25 koleksi (22 inti + 3 tambahan 1/1) → admin, AxtoToken → wallet koin; tanpa AuctionHouse/AxtoSale', async () => {
   const own = async (a) => new ethers.Contract(a, ['function owner() view returns (address)'], provider).owner();
   const c = result.contracts;
-  assert.equal(Object.keys(c.collections).length, 22);
+  assert.equal(Object.keys(c.collections).length, 25);
   for (const a of Object.values(c.collections)) assert.equal(await own(a), ADMIN);
   assert.equal(await own(c.token), COIN);
   assert.equal(c.standard, 'erc721-editions');
@@ -85,7 +85,7 @@ test('koleksi hadiah staking: 10 jt karya 1/1 ke wallet toko, tidak disetujui ko
 
 test('100 juta karya 1/1 baru (3 tema × 2 kontrak): semua tercetak ke wallet toko, disetujui konduit OpenSea, tanpa edisi berikutnya', async () => {
   const c = result.contracts;
-  const want = { 'one-quran': 16_666_667n, 'one-quran-2': 16_666_667n, 'one-hadith': 16_666_667n, 'one-hadith-2': 16_666_666n, 'one-stamp': 16_666_667n, 'one-stamp-2': 16_666_666n };
+  const want = { 'one-quran': 16_666_667n, 'one-quran-2': 16_666_667n, 'one-hadith': 16_666_667n, 'one-hadith-2': 16_666_666n, 'one-stamp': 16_666_667n, 'one-stamp-2': 16_666_666n, 'one-quran-3': 16_666_667n, 'one-hadith-3': 16_666_667n, 'one-stamp-3': 16_666_666n };
   let total = 0n;
   for (const [k, n] of Object.entries(want)) {
     const col = new ethers.Contract(c.collections[k], art('AxtoCollection').abi, provider);
@@ -98,7 +98,15 @@ test('100 juta karya 1/1 baru (3 tema × 2 kontrak): semua tercetak ke wallet to
     assert.equal(await col.tokenURI(7), `https://axto.io/api/token/${k}/7`);
     total += n;
   }
-  assert.equal(total, 100_000_000n);
+  assert.equal(total, 150_000_000n, '100 jt inti + 50 jt tambahan');
+  assert.equal(result.extraDone, 3);
+});
+
+test('1/1 tambahan hanya bila saldo cukup: batas gas × maxFee + cadangan', () => {
+  const g = 12_800_000n;
+  const fee = 8_500_000n; // 0,0085 gwei
+  assert.equal(mod.fitsBudget(g * fee + 5_000_000_000_000n, g, fee), true);
+  assert.equal(mod.fitsBudget(g * fee + 4_999_999_999_999n, g, fee), false);
 });
 
 test('10 koleksi OpenSea: edisi 1 dari 10 juta karya tercetak ke wallet toko (100 juta NFT); edisi berikutnya urut oleh wallet toko; konduit & royalti', async () => {
