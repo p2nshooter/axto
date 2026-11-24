@@ -110,7 +110,7 @@ async function render() {
       const sellBtn = h('button', { class: 'btn sm', type: 'button', disabled: it.free < 1, onclick: () => row.after(sellForm(it, out)) }, L.sell);
       const giftBtn = h('button', { class: 'btn sm', type: 'button', disabled: it.free < 1, onclick: () => row.after(giftForm(it, out)) }, `🎁 ${L.gift}`);
       const wdBtn = h('button', { class: 'btn ghost sm', type: 'button', disabled: it.free < 1 || !d.contractsLive[it.c], title: d.contractsLive[it.c] ? L.wdHint : L.contract_pending, onclick: () => withdraw([{ c: it.c, id: it.id, amount: Number(n.value) }], out) }, L.wd);
-      const row = h('tr', {}, h('td', {}, cb), h('td', {}, h('a', { href: `/${lang}/nft/${it.c}/${it.id}` }, h('img', { src: `/img/${it.c}/${it.id}.svg?v=9`, width: 48, height: 48, alt: '', loading: 'lazy' }), ' ', name(it.c, it.id))), h('td', {}, `${it.qty} (${it.free} ${L.free}${it.qty > it.free ? ` · ${it.qty - it.free} ${L.locked}` : ''})`), h('td', {}, n), h('td', {}, sellBtn, ' ', giftBtn, ' ', wdBtn, ' ', out));
+      const row = h('tr', {}, h('td', {}, cb), h('td', {}, h('a', { href: `/${lang}/nft/${it.c}/${it.id}` }, h('img', { src: `/img/${it.c}/${it.id}.svg?v=10`, width: 48, height: 48, alt: '', loading: 'lazy' }), ' ', name(it.c, it.id))), h('td', {}, `${it.qty} (${it.free} ${L.free}${it.qty > it.free ? ` · ${it.qty - it.free} ${L.locked}` : ''})`), h('td', {}, n), h('td', {}, sellBtn, ' ', giftBtn, ' ', wdBtn, ' ', out));
       return row;
     });
     const bulkOut = h('span', { class: 'mk-msg', role: 'status' });
@@ -131,7 +131,7 @@ async function render() {
   // sudah ditarik → tidak lagi di database axto.io
   if (d.gone?.length) {
     box.push(h('h3', {}, L.gone), h('p', { class: 'note' }, L.goneNote));
-    box.push(h('ul', { class: 'mk-gone' }, d.gone.map((g) => h('li', {}, h('img', { src: `/img/${g.c}/${g.id}.svg?v=9`, width: 40, height: 40, alt: '', loading: 'lazy' }), ' ', name(g.c, g.id), ` × ${g.qty}`))));
+    box.push(h('ul', { class: 'mk-gone' }, d.gone.map((g) => h('li', {}, h('img', { src: `/img/${g.c}/${g.id}.svg?v=10`, width: 40, height: 40, alt: '', loading: 'lazy' }), ' ', name(g.c, g.id), ` × ${g.qty}`))));
   }
   // listing saya: penawaran masuk, tutup listing
   if (d.listings?.length) {

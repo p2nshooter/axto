@@ -29,7 +29,7 @@ import { vault } from './vault.js';
 import * as COIN from './coin.js';
 import * as SHOP from './shop.js';
 import * as GPUP from './gpu.js';
-import { QA_V, promptFor as gpuPrompt } from '../../engine/src/gpu.js';
+import { QA_V, vGambar, promptFor as gpuPrompt } from '../../engine/src/gpu.js';
 import * as OSX from '../../engine/src/opensea.js';
 import { hadithItem, translateHadith } from './translate.js';
 
@@ -73,7 +73,7 @@ async function gpuSet(env, c) {
   // ulang (nomor seri tetap). Karya G- BARU (cap mutu QA_V, src/gpu.js) tampil hanya setelah videonya dibuat GPU (doc.vid)
   // dan diputar di player interaktif — „hasil NFT 100% sudah keluar dengan animasi yg interaktif".
   const baru = (x) => doc?.qa?.[x]?.v === QA_V;
-  const lama = (x) => !doc?.qa?.[x] && !GPUP.PERLU_ULANG.has(String(doc?.by?.[x] ?? ''));
+  const lama = (x) => GPUP.lamaTampil(doc, c, x);
   const semua = Array.isArray(doc?.ids) ? doc.ids.filter((x) => Number.isSafeInteger(x) && x >= 1 && x <= COLLECTIONS[c].max && (lama(x) || baru(x))) : [];
   const ids = semua.filter((x) => lama(x) || doc?.vid?.[x] === true);
   const serial = Object.fromEntries(ids.map((x) => [x, doc.serial?.[x]]));
@@ -86,7 +86,7 @@ async function gpuSet(env, c) {
 }
 const gpuIds = async (env, c) => (await gpuSet(env, c)).ids;
 /** Kartu seri G-: terbaru di depan, nomor seri G-n, gambar GPU. */
-const gpuItems = (g, items) => items.map((it) => ({ ...it, gpu: true, g: Number(g.serial[it.id] ?? 0) }));
+const gpuItems = (g, items) => items.map((it) => ({ ...it, gpu: true, g: Number(g.serial[it.id] ?? 0), v: vGambar(Boolean(g.qa[it.id])) }));
 /** Edisi eksklusif terjual per karya (cache 60 dtk per isolate). */
 const SOLD = new Map();
 async function soldOf(env, c) {
@@ -124,7 +124,7 @@ function assetProvider(env, origin) {
 }
 
 /** Versi render: naikkan saat tampilan karya berubah → cache tepi lama otomatis tidak terpakai. */
-const RENDER_V = '11';
+const RENDER_V = '12';
 async function cached(request, ctx, make) {
   const cache = caches.default;
   const u = new URL(request.url);
@@ -208,7 +208,7 @@ async function api(request, env, ctx, url) {
     let gpu = null;
     if (info.g) {
       const gs = await gpuSet(env, info.base);
-      if (gs.bersih.has(info.work)) gpu = { img: `${env.BASE_URL}/gpu/${info.base}/${info.work}.png?v=${QA_V}`, anim: gs.anim.has(info.work) ? `${env.BASE_URL}/gplay/${info.base}/${info.work}` : null, serial: Number(gs.serialAll?.[info.work] ?? 0) };
+      if (gs.bersih.has(info.work)) gpu = { img: `${env.BASE_URL}/gpu/${info.base}/${info.work}.png?v=${vGambar(Boolean(gs.qa[info.work]))}`, anim: gs.anim.has(info.work) ? `${env.BASE_URL}/gplay/${info.base}/${info.work}` : null, serial: Number(gs.serialAll?.[info.work] ?? 0) };
     }
     return json(OSX.tokenMetadata(info, meta, env.BASE_URL, gpu), 200, { 'cache-control': info.g ? 'public, max-age=3600' : IMMUTABLE, 'access-control-allow-origin': '*' });
   }
@@ -522,7 +522,7 @@ async function gpuPlay(env, c, id, origin) {
   const meta = metadata(c, id, env.BASE_URL);
   const H = { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'public, max-age=300', 'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer' };
   // karya G- lama: lukisan GPU aslinya saja, diam, tanpa animasi & tanpa tempelan apa pun
-  if (!gs.anim.has(id)) return new Response(gpuGambar(meta, { img: `/gpu/${c}/${id}.png?v=${QA_V}`, g: Number(gs.serial[id] ?? 0), kode: kode(c, id, Number(gs.serial[id] ?? 0)) }), { headers: H });
+  if (!gs.anim.has(id)) return new Response(gpuGambar(meta, { img: `/gpu/${c}/${id}.png?v=${vGambar(false)}`, g: Number(gs.serial[id] ?? 0), kode: kode(c, id, Number(gs.serial[id] ?? 0)) }), { headers: H });
   let ctx = {};
   let ref = '';
   if (d.kind === 'quran' || d.kind === 'hadith') {
@@ -530,7 +530,7 @@ async function gpuPlay(env, c, id, origin) {
     if (d.kind === 'quran' && ctx.surah) ref = ctx.ayah ? `${ctx.surahLt ?? ''} · ${ctx.surah}:${ctx.ayah}` : `${ctx.surahLt ?? ''}`;
     if (d.kind === 'hadith') { const hr = hadithRef(d); ref = `${hr.nameId} · No. ${hr.number}`; }
   }
-  const html = gpuPlayer(d, meta, ctx, { img: `/gpu/${c}/${id}.png?v=${QA_V}`, video: `/gpu/${c}/${id}.mp4?v=${QA_V}`, g: Number(gs.serial[id] ?? 0), kode: kode(c, id, Number(gs.serial[id] ?? 0)), ref, qa: gs.qa[id] ?? null });
+  const html = gpuPlayer(d, meta, ctx, { img: `/gpu/${c}/${id}.png?v=${vGambar(true)}`, video: `/gpu/${c}/${id}.mp4?v=${QA_V}`, g: Number(gs.serial[id] ?? 0), kode: kode(c, id, Number(gs.serial[id] ?? 0)), ref, qa: gs.qa[id] ?? null });
   return new Response(html, { headers: H });
 }
 

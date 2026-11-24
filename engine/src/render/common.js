@@ -109,9 +109,12 @@ export function exclusiveBadge(w, tokenId, max, finish) {
   return `<g><rect x="${w / 2 - 150}" y="18" width="300" height="34" rx="17" fill="#0b0b10" opacity=".72" stroke="#f2cf6b" stroke-width="1.5"/>${text(w / 2, 41, `EXCLUSIVE · ${finish} · ${tokenId.toLocaleString('en-US')} / ${max.toLocaleString('en-US')}`, 'text-anchor="middle" font-family="Georgia,serif" font-size="14" fill="#f2cf6b" letter-spacing="1.5"')}</g>`;
 }
 
-/** Tanda kecil AXTO pojok (bukan logo kripto). */
-export function hallmark(w, h, color = '#ffffff') {
-  return text(w - 22, h - 18, 'AXTO', `text-anchor="end" font-family="Georgia,serif" font-size="13" letter-spacing="3" fill="${color}" opacity=".55"`);
+/**
+ * Dulu tanda kecil „AXTO" di pojok karya. Pemilik, 24 Nov 2026: „Hati2, jgn ada logo apapun di semua karya" — karya tidak
+ * lagi membawa tanda/logo apa pun (nama & nomor karya ada di metadata dan halaman, bukan di dalam gambar).
+ */
+export function hallmark() {
+  return '';
 }
 
 /** Luminans relatif warna hex (0..1). */

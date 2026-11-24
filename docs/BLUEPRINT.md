@@ -9,3 +9,7 @@ Aturan kerja yang terbuka untuk kontributor:
 - Tidak ada alamat wallet perusahaan, kunci, atau rencana bisnis di repo publik — gunakan saluran tersegel
   (`ops/seal-private.mjs`).
 - Setiap perubahan teruji (`npm test` di `engine/`, `worker/`, `contracts/`, `market/`, `ops/test`) sebelum push.
+- **Tidak ada logo apa pun di dalam karya** (pemilik, 24 Nov 2026: „Hati2, jgn ada logo apapun di semua karya termasuk
+  GPU"): tanpa tanda „AXTO", tanda air, merek, tanda tangan atau tulisan buatan mesin — dijaga tes `engine/test` dan
+  pemeriksa mesin seri G- (`worker/src/gpu.js`). Karya G- lama yang berlogo disembunyikan & dilukis ulang beranimasi
+  dengan nomor seri yang sama; karya G- baru tampil hanya bersama video GPU di player interaktif.
