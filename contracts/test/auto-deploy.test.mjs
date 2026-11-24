@@ -40,8 +40,10 @@ after(async () => { await server.close(); });
 
 test('urutan lengkap selesai; gas di bawah anggaran yang dipakai untuk menghitung kebutuhan ETH', () => {
   assert.equal(result.done, true);
-  console.log(`gas total deploy otomatis: ${result.gasUsed}`);
-  assert.ok(result.gasUsed <= mod.TOTAL_GAS, `gas ${result.gasUsed} > anggaran ${mod.TOTAL_GAS}`);
+  console.log(`gas deploy inti: ${result.coreGas} · total dengan 1/1 tambahan: ${result.gasUsed}`);
+  assert.ok(result.coreGas <= mod.TOTAL_GAS, `gas inti ${result.coreGas} > anggaran ${mod.TOTAL_GAS}`);
+  // tambahan 50 jt (3 kontrak) dibayar dari sisa dana: ±11,6 jt gas per kontrak
+  assert.ok(result.gasUsed - result.coreGas <= 3n * 12_000_000n, `gas tambahan ${result.gasUsed - result.coreGas}`);
 });
 
 test('setiap transaksi jauh di bawah batas gas per transaksi Base (16.777.216, EIP-7825)', () => {
@@ -83,7 +85,7 @@ test('koleksi hadiah staking: 10 jt karya 1/1 ke wallet toko, tidak disetujui ko
   await assert.rejects(col.connect(store).transferBatch(member, [3]), 'token yang sudah dikirim tidak bisa dikirim lagi');
 });
 
-test('100 juta karya 1/1 baru (3 tema × 2 kontrak): semua tercetak ke wallet toko, disetujui konduit OpenSea, tanpa edisi berikutnya', async () => {
+test('150 juta karya 1/1 (3 tema × 3 kontrak; bagian III dari sisa dana): semua tercetak ke wallet toko, disetujui konduit OpenSea, tanpa edisi berikutnya', async () => {
   const c = result.contracts;
   const want = { 'one-quran': 16_666_667n, 'one-quran-2': 16_666_667n, 'one-hadith': 16_666_667n, 'one-hadith-2': 16_666_666n, 'one-stamp': 16_666_667n, 'one-stamp-2': 16_666_666n, 'one-quran-3': 16_666_667n, 'one-hadith-3': 16_666_667n, 'one-stamp-3': 16_666_666n };
   let total = 0n;

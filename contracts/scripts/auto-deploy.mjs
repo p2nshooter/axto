@@ -341,6 +341,7 @@ async function main() {
   await step('untrust deployer', (o) => T.setTrusted(me, false, o));
   await step('owner token → wallet koin', (o) => T.transferOwnership(COIN, o));
   st.done = true;
+  st.coreGas ??= st.gasUsed; // gas koin + koleksi inti (dasar kebutuhan dana TOTAL_GAS); tambahan dihitung terpisah
   save();
   const register = async (extra = {}) => {
     const body = JSON.stringify({ chainId, token, store: STORE, collections: st.collections, standard: 'erc721-editions', works: OS_WORKS });
@@ -389,7 +390,7 @@ async function main() {
   const contracts = fresh > before || LOCAL ? await register({ extra: { aktif: extraDone, menunggu: waitingExtra } }) : { chainId, token, store: STORE, collections: st.collections, standard: 'erc721-editions', works: OS_WORKS };
   if (!LOCAL && fresh === before && waitingExtra) status('selesai', { contracts, extra: { aktif: extraDone, menunggu: waitingExtra } });
   log(`✅ Semua kontrak aktif di ${net.name}. 1/1 tambahan: ${extraDone}/${EXTRA_DEPLOY.length}. Gas terpakai: ${st.gasUsed} (transaksi terbesar ${st.maxTxGas})`);
-  return { done: true, gasUsed: BigInt(st.gasUsed), maxTxGas: BigInt(st.maxTxGas ?? 0), contracts, deployer: me, extraDone, waitingExtra };
+  return { done: true, gasUsed: BigInt(st.gasUsed), coreGas: BigInt(st.coreGas ?? st.gasUsed), maxTxGas: BigInt(st.maxTxGas ?? 0), contracts, deployer: me, extraDone, waitingExtra };
 }
 
 export { main, LOCALSTORE };
