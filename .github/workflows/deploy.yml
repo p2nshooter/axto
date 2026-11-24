@@ -197,18 +197,18 @@ jobs:
         run: |
           for i in $(seq 1 24); do
             ads=$(curl -sf https://axto.io/ads.txt || true)
-            [ "$(echo "$ads" | grep -c '^google.com, pub-')" = "4" ] && break
+            [ "$(echo "$ads" | grep -c '^google.com, pub-')" = "5" ] && break
             sleep 15
           done
-          for p in 6560360898389273 4906992051458194 5928074389292014 6701063918838796; do
+          for p in 6560360898389273 4906992051458194 5928074389292014 6701063918838796 5092800160376210; do
             echo "$ads" | grep -qx "google.com, pub-$p, DIRECT, f08c47fec0942fa0" || { echo "::error::ads.txt pub-$p hilang"; echo "$ads"; exit 1; }
           done
           home=$(curl -sfL https://axto.io/en)
-          for p in 6560360898389273 4906992051458194 5928074389292014 6701063918838796; do
+          for p in 6560360898389273 4906992051458194 5928074389292014 6701063918838796 5092800160376210; do
             echo "$home" | grep -q "name=\"google-adsense-account\" content=\"ca-pub-$p\"" || { echo "::error::meta ca-pub-$p hilang"; exit 1; }
           done
           [ "$(echo "$home" | grep -o 'adsbygoogle.js?client=' | wc -l)" = "1" ] || { echo "::error::harus tepat satu loader"; exit 1; }
-          old=$(echo "$home$ads" | grep -oE 'pub-[0-9]{16}' | sort -u | grep -vE '6560360898389273|4906992051458194|5928074389292014|6701063918838796' || true)
+          old=$(echo "$home$ads" | grep -oE 'pub-[0-9]{16}' | sort -u | grep -vE '6560360898389273|4906992051458194|5928074389292014|6701063918838796|5092800160376210' || true)
           [ -z "$old" ] || { echo "::error::akun AdSense lama masih ada: $old"; exit 1; }
           curl -sf https://axto.io/api/meta/time/1 | grep -q '"name"'
           # 100 juta NFT ERC-721 (pemilik 24 Nov 2026): metadata token OpenSea, kode OS-/OS-G-, edisi di luar jumlah ditolak
