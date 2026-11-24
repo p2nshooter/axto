@@ -23,7 +23,7 @@ const CAND = {
   ETH: ['BASE', 'ARB', 'OP', 'ETH', 'ERC20'],
   BTC: ['BTC', 'BITCOIN', 'SEGWIT', 'BTCSEGWIT', 'LEGACY', 'BTC_LEGACY'], BNB: ['BEP20', 'BSC'], SOL: ['SOL'], TRX: ['TRC20', 'TRX'], POL: ['POLYGON', 'POL', 'MATIC'], DOGE: ['DOGE'], LTC: ['LTC'],
 };
-for (const [coin, nets] of Object.entries(CAND)) {
+for (const [coin, nets] of Object.entries(process.env.FULL ? CAND : {})) {
   const got = [];
   for (const n of nets) {
     const r = await call('/api/v2/capital/deposit/address/list', { coin, network: n });
@@ -34,8 +34,12 @@ for (const [coin, nets] of Object.entries(CAND)) {
   }
   console.log(`${coin}: ${got.join(' · ') || 'tidak ada alamat'}`);
 }
-// tanpa parameter jaringan: daftar semua jaringan BTC yang punya alamat (hanya nama jaringan dicetak)
-const all = await call('/api/v2/capital/deposit/address/list', { coin: 'BTC' });
-console.log('BTC tanpa jaringan: HTTP', all.status, Array.isArray(all.j) ? all.j.map((x) => `${x.network}:${x.address ? 'ada' : 'kosong'}`).join(' · ') : `${all.j?.code ?? ''} ${String(all.j?.msg ?? all.t).slice(0, 80)}`);
+// tanpa parameter jaringan: satu panggilan per koin (hanya nama jaringan & ada/kosong dicetak)
+const t0 = Date.now();
+for (const coin of Object.keys(CAND)) {
+  const all = await call('/api/v2/capital/deposit/address/list', { coin });
+  console.log(`${coin} tanpa jaringan: HTTP ${all.status}`, Array.isArray(all.j) ? all.j.map((x) => `${x.network}:${x.address ? 'ada' : 'kosong'}${x.tag ? '(memo)' : ''}`).join(' · ') : `${all.j?.code ?? ''} ${String(all.j?.msg ?? all.t).slice(0, 80)}`);
+}
+console.log(`10 panggilan tanpa jeda: ${Date.now() - t0} ms`);
 const h = await call('/api/v2/capital/deposit/hisrec', { coin: 'USDT', startTime: String(Date.now() - 7 * 86400000), endTime: String(Date.now()), limit: '10' });
 console.log('riwayat deposit USDT 7 hari: HTTP', h.status, Array.isArray(h.j) ? `${h.j.length} baris, kolom ${h.j[0] ? Object.keys(h.j[0]).join(',') : '-'}` : `${h.j?.code ?? ''} ${String(h.j?.msg ?? h.t).slice(0, 80)}`);
