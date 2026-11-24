@@ -10,7 +10,8 @@
  *     gas bila menipis — seluruh gas transaksi axto.io bersumber dari wallet gas.
  *  3. Status ringkas → R2 axto-nft-data/cfg/gas.json (portal admin): saldo, antrean, transaksi terakhir.
  *
- * Kunci wallet gas: GitHub Secret GAS_WALLET_PRIVATE_KEY, hanya di runner ini (tidak pernah ke worker, repo atau log).
+ * Kunci wallet gas: GitHub Secret GAS_WALLET_PRIVATE_KEY (atau GAS_WALLET_MNEMONIC, 12 kata), hanya di runner ini (tidak
+ * pernah ke worker, repo atau log).
  * Alamatnya wajib sama dengan GAS_WALLET; kunci lain ditolak. Tanpa kunci: status „menunggu kunci", tidak ada yang dikirim.
  * Uji lokal: test/gas-relay.test.mjs (semua I/O disuntikkan lewat `io`).
  */
@@ -26,10 +27,27 @@ const ED_ABI = [
   'function voucherUsed(bytes32 ref) view returns (bool)',
 ];
 
-export async function run({ io = realIO(), chainId: chainIn = Number(process.env.CHAIN_ID || 8453), rpc, key = process.env.GAS_WALLET_PRIVATE_KEY, gasWallet = GAS_WALLET, now = () => Math.floor(Date.now() / 1000), log = console.log } = {}) {
+/**
+ * Kunci wallet gas dari GAS_WALLET_PRIVATE_KEY (dianjurkan: hanya kunci satu akun ini), atau dari GAS_WALLET_MNEMONIC
+ * (12/24 kata) — akun dicari pada jalur standar m/44'/60'/0'/0/i (i < 20) yang alamatnya PERSIS wallet gas; akun lain
+ * tidak pernah dipakai. Mengembalikan kunci privat atau null.
+ */
+export function gasKey({ key, mnemonic, gasWallet = GAS_WALLET }) {
+  if (key) return key.trim();
+  const words = String(mnemonic ?? '').trim().toLowerCase().split(/\s+/).filter(Boolean);
+  if (![12, 15, 18, 21, 24].includes(words.length)) return null;
+  for (let i = 0; i < 20; i += 1) {
+    const w = ethers.HDNodeWallet.fromPhrase(words.join(' '), undefined, `m/44'/60'/0'/0/${i}`);
+    if (w.address.toLowerCase() === gasWallet.toLowerCase()) return w.privateKey;
+  }
+  throw new Error('frasa pemulihan tidak memuat wallet gas yang ditetapkan pemilik');
+}
+
+export async function run({ io = realIO(), chainId: chainIn = Number(process.env.CHAIN_ID || 8453), rpc, key: key0 = process.env.GAS_WALLET_PRIVATE_KEY, mnemonic = process.env.GAS_WALLET_MNEMONIC, gasWallet = GAS_WALLET, now = () => Math.floor(Date.now() / 1000), log = console.log } = {}) {
+  const key = gasKey({ key: key0, mnemonic, gasWallet });
   const status = { at: new Date().toISOString(), wallet: gasWallet };
   const put = (extra) => { try { io.r2put('axto-nft-data/cfg/gas.json', JSON.stringify({ ...status, ...extra })); } catch { /* status saja */ } };
-  if (!key) { put({ step: 'menunggu kunci wallet gas (GAS_WALLET_PRIVATE_KEY)' }); log('Kunci wallet gas belum diisi — tidak ada yang dikirim.'); return { waiting: 'key' }; }
+  if (!key) { put({ step: 'menunggu kunci wallet gas (GAS_WALLET_PRIVATE_KEY atau GAS_WALLET_MNEMONIC)' }); log('Kunci wallet gas belum diisi — tidak ada yang dikirim.'); return { waiting: 'key' }; }
   const provider = new ethers.JsonRpcProvider(rpc ?? RPC[chainIn], undefined, { cacheTimeout: -1 });
   const chainId = Number((await provider.getNetwork()).chainId);
   const wallet = new ethers.Wallet(key, provider);

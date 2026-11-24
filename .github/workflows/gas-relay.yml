@@ -35,5 +35,6 @@ jobs:
           CLOUDFLARE_EMAIL: ${{ secrets.CLOUDFLARE_EMAIL }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           GAS_WALLET_PRIVATE_KEY: ${{ secrets.GAS_WALLET_PRIVATE_KEY }}
+          GAS_WALLET_MNEMONIC: ${{ secrets.GAS_WALLET_MNEMONIC }}
           CHAIN_ID: '8453'
         run: node gas-relay.mjs

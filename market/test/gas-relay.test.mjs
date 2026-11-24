@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import ganache from 'ganache';
 import { ethers } from 'ethers';
-import { run, STORE_FILL } from '../gas-relay.mjs';
+import { run, STORE_FILL, gasKey } from '../gas-relay.mjs';
 
 const art = (n) => JSON.parse(readFileSync(new URL(`../../contracts/out/${n}.json`, import.meta.url), 'utf8'));
 const RPC = 'http://127.0.0.1:18547';
@@ -76,4 +76,14 @@ test('WD massal dikirim wallet gas: karya tiba di wallet member tanpa gas member
   assert.deepEqual(reported.map((x) => x.tx), [null]);
   const st = JSON.parse(R2['axto-nft-data/cfg/gas.json']);
   assert.equal(st.step, 'berjalan');
+});
+
+test('frasa 12 kata: hanya akun yang alamatnya persis wallet gas yang dipakai', () => {
+  const phrase = 'test test test test test test test test test test test junk';
+  const acc3 = ethers.HDNodeWallet.fromPhrase(phrase, undefined, "m/44'/60'/0'/0/3");
+  assert.equal(gasKey({ mnemonic: phrase, gasWallet: acc3.address }), acc3.privateKey);
+  assert.equal(gasKey({ mnemonic: ` ${phrase.toUpperCase()} `, gasWallet: acc3.address }), acc3.privateKey);
+  assert.throws(() => gasKey({ mnemonic: phrase, gasWallet: '0x2AB7f55Be9412a42556484Cf38Fd9B91fA34Fed8' }), /tidak memuat/);
+  assert.equal(gasKey({ mnemonic: 'kurang kata' }), null);
+  assert.equal(gasKey({ key: ' 0xabc ' }), '0xabc');
 });
