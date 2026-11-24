@@ -176,6 +176,8 @@ async function stakeBox(root, me) {
 
 // ---------------------------------------------------------------- saldo & cairkan (Portal member)
 async function memberBox(root) {
+  // belum masuk: tidak memanggil API privat (menghindari 401 di konsol)
+  if (!(await get('/api/me')).wallet) { root.replaceChildren(); return; }
   const v = await get('/api/coin/me');
   if (v.error) { root.replaceChildren(); return; }
   const stakeEl = h('div', { class: 'np stake' });
