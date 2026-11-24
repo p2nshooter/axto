@@ -10,8 +10,18 @@ const mask = (s) => String(s).replace(/hf_[A-Za-z0-9]+/g, 'hf_…');
 const K = loadKeys(realIO(), process.env.CLOUDFLARE_API_KEY);
 const hf = K.keys.filter((k) => /^hf/i.test(String(k.provider)));
 console.log(`kunci HF: ${hf.length} (zerogpu ${hf.filter((k) => k.provider === 'hf-zerogpu').length})`);
-const key = (hf.find((k) => k.provider === 'hf-zerogpu') ?? hf[0])?.key;
-const auth = key ? { Authorization: `Bearer ${key}` } : {};
+// validitas kunci (hanya status & jenis akun yang dicetak)
+let key = null;
+let sah = 0;
+for (const k of hf.slice(0, 12)) {
+  const w = await fetch('https://huggingface.co/api/whoami-v2', { headers: { Authorization: `Bearer ${k.key}` } });
+  const j = await w.json().catch(() => ({}));
+  console.log(`kunci ${k.provider}: whoami HTTP ${w.status}${w.ok ? ` · pro=${Boolean(j.isPro)} · jenis=${j.type ?? '?'}` : ''}`);
+  if (w.ok) { sah += 1; key ??= k.key; }
+}
+console.log(`kunci sah: ${sah}/12 diuji`);
+const MODE = process.env.ANON ? 'anon' : 'key';
+const auth = key && MODE === 'key' ? { Authorization: `Bearer ${key}` } : {};
 let imgRes = await fetch(IMG);
 if (!imgRes.ok) imgRes = await fetch('https://axto.io/logo-512.png'); // uji pipa saja, hasil tidak disimpan
 console.log(`gambar uji: HTTP ${imgRes.status} ${imgRes.headers.get('content-type')}`);
@@ -26,7 +36,9 @@ for (const sp of CAND) {
     if (!name) continue;
     const fd = new FormData();
     fd.append('files', new Blob([png], { type: 'image/png' }), 'g.png');
-    const up = await (await fetch(`${base}/upload`, { method: 'POST', headers: auth, body: fd })).json().catch(() => null);
+    const ur = await fetch(`${base}/upload`, { method: 'POST', headers: auth, body: fd });
+    const up = await ur.json().catch(() => null);
+    console.log(`   unggah: HTTP ${ur.status} ${Array.isArray(up) ? 'ok' : mask(JSON.stringify(up)).slice(0, 100)}`);
     const file = { path: up?.[0], orig_name: 'g.png', meta: { _type: 'gradio.FileData' } };
     const data = ep.parameters.map((p) => {
       const n = String(p.parameter_name || p.label || '').toLowerCase();
