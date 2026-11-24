@@ -120,7 +120,7 @@ img.inl{display:inline-block;vertical-align:middle;border-radius:50%}
 .coin-guide{margin:26px 0;padding:18px;border:1px solid var(--line);border-radius:var(--radius);background:var(--panel)}.coin-guide h3{margin:14px 0 6px}
 .wguide details{border:1px solid var(--line);border-radius:12px;padding:10px 14px;margin:8px 0;background:#0e0e1c}.wguide summary{cursor:pointer;font-weight:700}.wguide ol{margin:8px 0 2px;padding-left:1.3em}
 .coin-guide .warn{color:#ffb4a8;font-size:.9em}.coin-guide .ok{color:#9be3c4}
-/* Koin AXTO lewat NOWPayments */
+/* Koin AXTO: beli, saldo, staking, pencairan */
 .np{margin:2rem 0;padding:1.25rem;border:1px solid rgba(212,175,55,.35);border-radius:16px;background:rgba(212,175,55,.04)}
 .np-form{display:grid;gap:.75rem;max-width:560px}
 .np-form label{display:grid;gap:.3rem;font-size:.95rem}
