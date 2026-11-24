@@ -1,0 +1,29 @@
+name: Diagnosis pembayaran kripto
+
+# Hanya mencetak status & kode galat (tanpa alamat, saldo, nama, email, kunci).
+on:
+  push:
+    branches: [claude/pay-diagnose]
+    paths: ['ops/pay-diagnose.mjs', '.github/workflows/pay-diagnose.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Diagnosis
+        env:
+          CLOUDFLARE_API_KEY: ${{ secrets.CLOUDFLARE_API_KEY }}
+          CLOUDFLARE_EMAIL: ${{ secrets.CLOUDFLARE_EMAIL }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          PAY_API_KEY: ${{ secrets.INDODAX_API_KEY_2 }}
+          PAY_API_SECRET: ${{ secrets.INDODAX_API_SECRET_2 }}
+        run: node ops/pay-diagnose.mjs
