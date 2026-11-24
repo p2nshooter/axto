@@ -47,6 +47,9 @@ const ABI = [
   'function exists(uint256 tokenId) view returns (bool)',
 ];
 
+/** Koleksi hadiah staking (engine/src/stake.js): dikirim wallet toko dengan transferBatch — gas oleh axto.io. */
+const STAKE_ABI = ['function transferBatch(address to, uint256[] tokenIds)', 'function ownerOf(uint256 tokenId) view returns (address)'];
+
 // ---------------------------------------------------------------- I/O sungguhan (R2 lewat wrangler, RPC, OpenSea SDK)
 export function realIO() {
   const tmp = mkdtempSync(join(tmpdir(), 'axto-os-'));
@@ -62,7 +65,17 @@ export function realIO() {
     writeFileSync(f, text);
     execFileSync('npx', ['--yes', 'wrangler@4.156.1', 'r2', 'object', 'put', bucketKey, '--file', f, '--content-type', 'application/json', '--remote'], { stdio: 'pipe' });
   };
-  return { r2get, r2put, sdk: async (wallet, chain) => { const { OpenSeaSDK } = await import('@opensea/sdk'); return new OpenSeaSDK(wallet, { chain, apiKey: process.env.OPENSEA_API_KEY }); } };
+  // API internal worker (HMAC sama dengan contracts/scripts/auto-deploy.mjs): antrean kirim hadiah staking
+  const stakeApi = async (method, path, payload) => {
+    const base = process.env.AXTO_API || 'https://axto.io';
+    const key = process.env.ENGINE_HMAC_KEY || createHmac('sha256', process.env.CLOUDFLARE_API_KEY || 'local').update('axto:ENGINE_HMAC_KEY').digest('hex');
+    const body = payload ? JSON.stringify(payload) : '';
+    const ts = Date.now();
+    const sig = createHmac('sha256', key).update(`${ts}.${body}`).digest('hex');
+    const r = await fetch(`${base}${path}`, { method, headers: { 'content-type': 'application/json', 'x-axto-ts': String(ts), 'x-axto-sig': sig }, body: method === 'GET' ? undefined : body });
+    return r.json();
+  };
+  return { r2get, r2put, stakeApi, sdk: async (wallet, chain) => { const { OpenSeaSDK } = await import('@opensea/sdk'); return new OpenSeaSDK(wallet, { chain, apiKey: process.env.OPENSEA_API_KEY }); } };
 }
 
 const encKey = () => createHmac('sha256', process.env.CLOUDFLARE_API_KEY || 'local').update('axto:DEPLOYER_ENC').digest();
@@ -191,6 +204,34 @@ export async function run({ io = realIO(), chainId: chainIn = Number(process.env
     if (!c.g) io.r2put(`axto-nft-data/os/showcase-${c.base}.json`, JSON.stringify({ c: c.base, ids: works, available: works.length, soldOut: summary[k].soldOut, at: new Date().toISOString() }));
   }
   save();
+
+  // 3b) hadiah staking koin AXTO yang jatuh tempo: kirim ke alamat penerima, gas dari wallet toko (gratis bagi member)
+  status.stake = { sent: 0 };
+  const stakeAddr = cfg.collections?.stake;
+  if (ethers.isAddress(stakeAddr ?? '') && io.stakeApi) {
+    const scol = new ethers.Contract(stakeAddr, STAKE_ABI, wallet);
+    const todo = await io.stakeApi('GET', '/internal/stake/kirim').catch((e) => ({ items: [], error: String(e?.message ?? e) }));
+    for (const it of todo.items ?? []) {
+      if (Date.now() - t0 > budgetMs) break;
+      if (!it.ids?.length || !ethers.isAddress(it.payout ?? '')) continue;
+      const owner0 = String(await scol.ownerOf(it.ids[0]).catch(() => '')).toLowerCase();
+      let tx = null;
+      if (owner0 === wallet.address.toLowerCase()) {
+        const gasLimit = BigInt(it.ids.length) * 60_000n + 80_000n;
+        if ((await provider.getBalance(wallet.address)) < gasLimit * maxFee) { status.stake.waiting = 'gas'; break; }
+        const t = await scol.transferBatch(it.payout, it.ids, { gasLimit, maxFeePerGas: maxFee, maxPriorityFeePerGas: tip, nonce: nonce++ });
+        await t.wait();
+        tx = t.hash;
+      } else if (owner0 !== it.payout.toLowerCase()) {
+        st.errors = [...st.errors.slice(-20), { at: new Date().toISOString(), stake: it.id, e: `pemilik token ${it.ids[0]} bukan wallet toko` }];
+        continue;
+      }
+      // batch yang sudah terkirim (tx null) tetap dicatat agar tidak dikirim ulang
+      await io.stakeApi('POST', '/internal/stake/terkirim', { id: it.id, tier: it.tier, offset: it.offset, count: it.ids.length, tx });
+      status.stake.sent += it.ids.length;
+      log(`Hadiah staking ${it.id}: ${it.ids.length} NFT ${it.tier} → ${it.payout}${tx ? ` (${tx})` : ' (sudah terkirim)'}`);
+    }
+  }
 
   // 6) teruskan hasil penjualan ke treasury, sisakan cadangan gas pencetakan edisi berikutnya
   const bal = await provider.getBalance(wallet.address);

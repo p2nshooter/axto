@@ -259,10 +259,10 @@ document.addEventListener('click', (e) => {
   navigator.clipboard?.writeText(b.dataset.copy).then(() => { const t = b.textContent; b.textContent = '✓'; setTimeout(() => { b.textContent = t; }, 1500); });
 });
 
-// Koin AXTO lewat NOWPayments (beli, saldo & cairkan, pantauan admin) — dimuat hanya di halaman yang memakainya
+// Koin AXTO (beli, saldo, staking & jual kembali, pantauan admin) — dimuat hanya di halaman yang memakainya
 if (document.querySelector('[data-np]')) {
   const x = document.createElement('script');
   x.type = 'module';
-  x.src = '/coin.js?v=1';
+  x.src = '/coin.js?v=2';
   document.head.append(x);
 }

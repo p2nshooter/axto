@@ -171,6 +171,12 @@ contract AxtoCollection is ERC721, ERC2981, Ownable2Step, Pausable, EIP712, ICre
         for (uint256 i; i < tokenIds.length; ++i) _mintChecked(to, tokenIds[i]);
     }
 
+    /// @notice Kirim banyak token milik pengirim ke satu alamat dalam satu transaksi — hadiah staking koin AXTO yang
+    ///         dikirim wallet toko tanpa biaya gas bagi member (pemilik, 24 Nov 2026), juga WD massal yang hemat gas.
+    function transferBatch(address to, uint256[] calldata tokenIds) external {
+        for (uint256 i; i < tokenIds.length; ++i) transferFrom(msg.sender, to, tokenIds[i]);
+    }
+
     /// @notice Penarikan edisi eksklusif: member mengirim sendiri (gas oleh member).
     function mintWithVoucher(address to, uint256 tokenId, bytes32 ref, uint256 deadline, bytes calldata sig)
         external

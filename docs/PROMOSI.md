@@ -2,7 +2,7 @@
 
 Nada: elegan, hangat, jujur. Tidak pernah menyebut NFT atau koin AXTO sebagai „investasi", tanpa janji keuntungan.
 Angka selalu sesuai situs: eksklusif **$1 per edisi** (koin AXTO, 10 edisi per karya), pasar member fee 10%, koleksi
-publik **edisi 1–10, harga tetap $1–$10.000** di OpenSea, royalti 10%.
+publik **edisi 1–10, harga tetap $1–$250** di OpenSea, royalti 10%.
 
 ## Narasi utama
 
@@ -37,6 +37,6 @@ instant, no gas. Withdraw to your wallet one by one or in bulk whenever you like
 - Pasar member: harga tetap, lelang, penawaran, harga tetap + penawaran; penjual menerima 90%.
 - Koleksi publik: Jam Hidup, Prangko Semesta, Kaligrafi Al-Qur'an, Figur Model, Kaligrafi Hadits — masing-masing 10 juta
   karya, ditambah 5 kembaran seri G- (versi lukisan GPU) = **100 juta karya di OpenSea** (jaringan Base). Setiap karya
-  1–10 edisi menurut kelangkaan, harga tetap $1–$10.000; edisi berikutnya muncul otomatis begitu edisi sebelumnya
+  1–10 edisi menurut kelangkaan, harga tetap $1–$250; edisi berikutnya muncul otomatis begitu edisi sebelumnya
   terjual. Sebutkan „segera hadir di OpenSea" sampai kontrak aktif.
 - Teks Al-Qur'an disalin apa adanya dari mushaf Utsmani riwayat Hafs; tidak pernah dibuat mesin.

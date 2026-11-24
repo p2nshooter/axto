@@ -44,16 +44,36 @@ test('urutan lengkap selesai; gas di bawah anggaran yang dipakai untuk menghitun
   assert.ok(result.gasUsed <= mod.TOTAL_GAS, `gas ${result.gasUsed} > anggaran ${mod.TOTAL_GAS}`);
 });
 
-test('kepemilikan langsung ke pemilik: 15 koleksi → admin, AxtoToken → wallet koin; tanpa AuctionHouse/AxtoSale', async () => {
+test('kepemilikan langsung ke pemilik: 16 koleksi → admin, AxtoToken → wallet koin; tanpa AuctionHouse/AxtoSale', async () => {
   const own = async (a) => new ethers.Contract(a, ['function owner() view returns (address)'], provider).owner();
   const c = result.contracts;
-  assert.equal(Object.keys(c.collections).length, 15);
+  assert.equal(Object.keys(c.collections).length, 16);
   for (const a of Object.values(c.collections)) assert.equal(await own(a), ADMIN);
   assert.equal(await own(c.token), COIN);
   assert.equal(c.standard, 'erc721-editions');
   assert.equal(c.works, 10_000_000);
   assert.equal(c.auctionHouse, undefined);
   assert.equal(c.sale, undefined);
+});
+
+test('koleksi hadiah staking: 10 jt karya 1/1 ke wallet toko, tidak disetujui konduit OpenSea (tidak bisa dijual), dikirim massal tanpa gas bagi member', async () => {
+  const c = result.contracts;
+  const col = new ethers.Contract(c.collections.stake, art('AxtoCollection').abi, provider);
+  assert.equal(await col.balanceOf(storeW.address), 10_000_000n);
+  assert.equal(await col.maxSupply(), 50_000_000n);
+  assert.equal(await col.isApprovedForAll(storeW.address, mod.OPENSEA_CONDUIT), false, 'tidak pernah di-listing');
+  assert.equal(await col.tokenURI(9), 'https://axto.io/api/token/stake/9');
+  assert.equal(await col.editionStride(), 0n);
+  const member = ethers.Wallet.createRandom().address;
+  await provider.send('evm_setAccountBalance', [storeW.address, '0x56BC75E2D63100000']).catch(() => null);
+  const store = storeW.connect(provider);
+  const ids = [3, 77, 9_999_999, 123_456];
+  const tx = await col.connect(store).transferBatch(member, ids);
+  const rc = await tx.wait();
+  for (const id of ids) assert.equal(await col.ownerOf(id), member);
+  assert.equal(await col.balanceOf(member), 4n);
+  console.log(`transferBatch 4 hadiah staking: ${rc.gasUsed} gas`);
+  await assert.rejects(col.connect(store).transferBatch(member, [3]), 'token yang sudah dikirim tidak bisa dikirim lagi');
 });
 
 test('10 koleksi OpenSea: edisi 1 dari 10 juta karya tercetak ke wallet toko (100 juta NFT); edisi berikutnya urut oleh wallet toko; konduit & royalti', async () => {

@@ -75,7 +75,8 @@ export async function listKeys(bucket, prefix, limit = 1000) {
 export async function dailyBackup(bucket, now = Date.now()) {
   const day = new Date(now).toISOString().slice(0, 10);
   let n = 0;
-  for (const prefix of ['e/', 'r/', 'u/', 'c/']) {
+  // koin (saldo, pembelian, pencairan), staking & konfigurasi ikut dicadangkan (aturan pemilik: cadangan harian 35 hari)
+  for (const prefix of ['e/', 'r/', 'u/', 'c/', 'coin/', 'stake/', 'cfg/']) {
     for (const o of await listKeys(bucket, prefix, 100_000)) {
       const src = await bucket.get(o.key);
       if (src) { await bucket.put(`backup/${day}/${o.key}`, src.body, JSON_META); n += 1; }

@@ -7,7 +7,7 @@
  *    kembaran seri G- (versi lukisan GPU dari karya yang sama). Masing-masing 10.000.000 karya.
  *  - EDISI 1 setiap karya tercetak saat deploy ke wallet toko (premint) → 100.000.000 NFT langsung ada di OpenSea.
  *  - Edisi berikutnya dicetak otomatis oleh wallet toko saat edisi sebelumnya laku (gas dari hasil penjualan), sampai
- *    jumlah edisi karya itu (1–10 menurut kelangkaan, engine/src/editions.js); harga tetap $1–$10.000.
+ *    jumlah edisi karya itu (1–10 menurut kelangkaan, engine/src/editions.js); harga tetap $1–$250.
  *  - Nomor token: edisi e karya k = (e − 1) × 10.000.000 + k. Tanpa penyimpanan tambahan di rantai atau di R2.
  * Murni: kontrak deploy, worker (metadata) dan mesin listing memakai fungsi yang sama.
  */
@@ -82,7 +82,7 @@ export function gContractMetadata(baseMeta, key, base = 'https://axto.io') {
   return {
     ...baseMeta,
     name: `AXTO G- ${baseMeta.name.replace(/^AXTO /, "")}`,
-    description: `G- series: the GPU-painted twin of ${baseMeta.name}. ${WORKS.toLocaleString('en-US')} works, each issued in 1 to 10 editions (the rarer, the fewer) at a fixed price from $1 to $10,000. Until a work is painted by GPU it shows its original living artwork. / Seri G-: kembaran lukisan GPU dari ${baseMeta.name}; ${WORKS.toLocaleString('id-ID')} karya, 1–10 edisi per karya, harga tetap $1–$10.000.`,
+    description: `G- series: the GPU-painted twin of ${baseMeta.name}. ${WORKS.toLocaleString('en-US')} works, each issued in 1 to 10 editions (the rarer, the fewer) at a fixed price from $1 to $250. Until a work is painted by GPU it shows its original living artwork. / Seri G-: kembaran lukisan GPU dari ${baseMeta.name}; ${WORKS.toLocaleString('id-ID')} karya, 1–10 edisi per karya, harga tetap $1–$250.`,
     external_link: `${base}/en/c/${key.replace(/^g-/, '')}?maker=gpu`,
   };
 }

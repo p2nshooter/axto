@@ -139,8 +139,28 @@ export function kode(key, id, g = 0) {
   return g ? `${pre}-G-${g}` : `${pre}-${id}`;
 }
 
+/**
+ * Koleksi hadiah staking koin AXTO (pemilik, 24 Nov 2026: „buatkan husus untuk hadiah staking, jgn versi G-, bikin versi OS
+ * aja … bikin aja 10jt dulu … Supply 1/1 aja husus Stacking Komunis biar lebih VVIP" · „Pastikan tidak ada karya yg sama").
+ * Satu kontrak „AXTO Staking"; token t dipetakan ke salah satu himpunan di bawah (engine/src/stake.js). Sengaja DI LUAR
+ * COLLECTIONS: tidak dijual, tidak masuk galeri/etalase/sitemap publik.
+ *
+ * Tidak pernah sama dengan karya lain — dijamin oleh konstruksi, bukan kebetulan: desain diambil dari urutan acak (permutasi
+ * bijektif) yang SAMA dengan koleksi publiknya (`after`), tetapi pada nomor SESUDAH jatah koleksi publik itu:
+ *   · Qur'an: ayat ke-(k mod 6.236) dengan nomor gaya sesudah ±1.602 gaya publik ayat itu;
+ *   · hadits: hadits ke-(k mod 38.144) dengan nomor gaya sesudah gaya publik hadits itu;
+ *   · prangko: kombinasi ke-(10.000.000 + k) dari 1,4 miliar kombinasi.
+ * Jam & model tidak dipakai: ruang sifatnya (±10,3 jt) sudah hampir habis dipakai 10 jt karya publik. Karya eksklusif
+ * membawa sifat Finish sehingga juga tidak pernah identik.
+ */
+export const STAKE_SETS = {
+  'st-quran': { key: 'st-quran', kind: 'quran', max: 100_000_000, salt: 'axto/stake-quran/v1', exclusive: false, stake: true, after: 'quran', symbol: 'AXSTAKE' },
+  'st-hadith': { key: 'st-hadith', kind: 'hadith', max: 100_000_000, salt: 'axto/stake-hadith/v1', exclusive: false, stake: true, after: 'hadith', symbol: 'AXSTAKE' },
+  'st-stamp': { key: 'st-stamp', kind: 'stamp', max: 100_000_000, salt: 'axto/stake-stamp/v1', exclusive: false, stake: true, after: 'stamp', symbol: 'AXSTAKE' },
+};
+
 export function collection(key) {
-  const c = COLLECTIONS[key];
+  const c = COLLECTIONS[key] ?? STAKE_SETS[key];
   if (!c) throw new Error(`Koleksi tidak dikenal: ${key}`);
   return c;
 }

@@ -65,7 +65,7 @@ test('tier = label kelangkaan (5 tingkat); harga tetap & edisi menurut kelangkaa
     assert.ok(e.supply >= b.supply[1] && e.supply <= b.supply[0], `${c} edisi ${e.supply} di luar tier ${b.name}`);
   }
   assert.equal(BANDS[0].price[0], 1);
-  assert.equal(BANDS[4].price.at(-1), 10_000);
+  assert.equal(BANDS[4].price.at(-1), 250); // pemilik 24 Nov 2026: Classic $1–5 … Masterpiece $100–250
   assert.deepEqual(BANDS[4].supply, [1, 1]);
   // eksklusif: harga tetap $1, 10 edisi
   for (const [c, id] of [['ex-time', 10_000], ['ex-quran', 1], ['ex-model', 77], ['ex-hadith', 5]]) {

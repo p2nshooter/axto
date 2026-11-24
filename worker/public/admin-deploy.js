@@ -52,7 +52,7 @@ function openseaBox(s) {
   if (st.store) say(`${id ? 'Wallet toko' : 'Store wallet'}: ${st.store}`, 'meta');
   say(`${id ? 'Langkah' : 'Step'}: ${st.step ?? (id ? 'belum berjalan' : 'not started')}${st.at ? ` · ${new Date(st.at).toLocaleString()}` : ''}`);
   if (st.listedTotal != null) say(`${id ? 'Listing harga tetap terkirim' : 'Fixed-price listings sent'}: ${Number(st.listedTotal).toLocaleString()}${st.ethUsd ? ` · ETH $${st.ethUsd}` : ''}`, 'meta');
-  // per koleksi: karya dirilis · masih tersedia · habis · edisi terjual (supply 1–10 per karya, harga tetap $1–$10.000)
+  // per koleksi: karya dirilis · masih tersedia · habis · edisi terjual (supply 1–10 per karya, harga tetap $1–$250)
   for (const [c, x] of Object.entries(st.collections ?? {})) {
     say(`${c}: ${id ? 'dirilis' : 'released'} ${Number(x.released).toLocaleString()} · ${id ? 'tersedia' : 'available'} ${Number(x.available).toLocaleString()} · ${id ? 'habis' : 'sold out'} ${Number(x.soldOut).toLocaleString()} · ${id ? 'edisi terjual' : 'editions sold'} ${Number(x.soldUnits).toLocaleString()} / ${Number(x.editions).toLocaleString()}`, 'meta');
   }

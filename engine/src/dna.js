@@ -45,6 +45,9 @@ function percentileFn(c) {
   return pctCache.get(k);
 }
 
+/** Jumlah opsi tiap sifat (radix campuran) sebuah koleksi — untuk audit keunikan. */
+export const radicesOf = (key) => spaceFor(collection(key)).map((o) => o.length);
+
 /** Ukuran ruang kombinasi (untuk tes & audit). */
 export function spaceSize(key) {
   return product(spaceFor(collection(key)).map((o) => o.length));
@@ -64,15 +67,35 @@ export function dna(key, tokenId) {
   const names = c.exclusive ? [...TRAIT_NAMES[c.kind], 'Finish'] : TRAIT_NAMES[c.kind];
   let digits;
   let series = null;
-  if (c.kind === 'quran') {
-    const plan = QURAN.PLANS[c.key];
+  if (c.after) {
+    // koleksi staking: nomor SESUDAH jatah koleksi publik dalam permutasi yang sama → tidak pernah sama (lihat STAKE_SETS)
+    const pub = collection(c.after);
+    if (c.kind === 'quran') {
+      const plan = QURAN.PLANS[pub.key];
+      const unit = index % QURAN.TOTAL_AYAH;
+      const base = Math.floor(plan.ayah / QURAN.TOTAL_AYAH);
+      const pubVariants = unit < plan.ayah - base * QURAN.TOTAL_AYAH ? base + 1 : base;
+      series = { series: 'ayah', unit, variant: pubVariants + Math.floor(index / QURAN.TOTAL_AYAH), variants: pubVariants };
+      digits = decodeRadix(permute(series.variant, product(radices), `${pub.salt}:style:ayah:${unit}`), radices);
+    } else if (c.kind === 'hadith') {
+      const total = HADITH.PLANS[pub.key].total;
+      const unit = index % HADITH.TOTAL_HADITH;
+      const base = Math.floor(total / HADITH.TOTAL_HADITH);
+      const pubVariants = unit < total - base * HADITH.TOTAL_HADITH ? base + 1 : base;
+      series = { series: HADITH.hadithAt(unit).key, unit, variant: pubVariants + Math.floor(index / HADITH.TOTAL_HADITH), variants: pubVariants };
+      digits = decodeRadix(permute(series.variant, product(radices), `${pub.salt}:style:${unit}`), radices);
+    } else {
+      digits = decodeRadix(permute(pub.max + index, product(radices), `${pub.salt}:combo`), radices);
+    }
+  } else if (c.kind === 'quran') {
+    const plan = QURAN.PLANS[c.plan ?? c.key];
     const slot = permute(index, c.max, `${c.salt}:slot`);
     series = QURAN.decodeSlot(plan, slot);
     const combo = permute(series.variant, product(radices), `${c.salt}:style:${series.series}:${series.unit}`);
     digits = decodeRadix(combo, radices);
   } else if (c.kind === 'hadith') {
     const slot = permute(index, c.max, `${c.salt}:slot`);
-    series = HADITH.decodeSlot(c.key, slot, c.salt);
+    series = HADITH.decodeSlot(c.plan ?? c.key, slot, c.salt);
     const combo = permute(series.variant, product(radices), `${c.salt}:style:${series.unit}`);
     digits = decodeRadix(combo, radices);
   } else {
