@@ -223,7 +223,7 @@ async function api(request, env, ctx, url) {
   // koleksi 1/1 (3 tema × 2 kontrak, 100 jt karya unik; engine/src/core.js ONE_SETS) — metadata token lewat rute OpenSea di bawah
   m = /^\/api\/contract\/(one-[a-z]+(?:-[2-9])?)$/.exec(p);
   if (m && OSX.osCol(m[1])) return json(OSX.oneContractMetadata(m[1], env.BASE_URL), 200, { 'cache-control': 'public, max-age=86400', 'access-control-allow-origin': '*' });
-  m = /^\/api\/token\/([a-z-]+)\/(\d+)$/.exec(p);
+  m = /^\/api\/token\/([a-z0-9-]+)\/(\d+)$/.exec(p); // kunci koleksi boleh berangka (one-quran-2, one-stamp-3)
   if (m && OSX.osCol(m[1])) {
     const info = OSX.tokenInfo(m[1], Number(m[2]));
     if (!info) return json({ error: 'not_found' }, 404);

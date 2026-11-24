@@ -213,6 +213,12 @@ jobs:
           curl -sf https://axto.io/api/token/g-time/42 | grep -q '"name":"OS-G' || { echo "::error::metadata seri G- /api/token/g-time/42 tidak berkode OS-G"; exit 1; }
           [ "$(curl -s -o /dev/null -w '%{http_code}' https://axto.io/api/token/time/100000001)" = "404" ] || { echo "::error::token di luar 10 edisi tidak ditolak"; exit 1; }
           curl -sf https://axto.io/api/contract/g-time | grep -q 'AXTO G- Time' || { echo "::error::metadata koleksi G- tidak ada"; exit 1; }
+          # koleksi 1/1 bagian I–III (kunci berangka): metadata token, gambar & koleksi harus hidup — tokenURI OpenSea
+          for k in one-quran one-quran-2 one-hadith-2 one-stamp-2 one-quran-3 one-hadith-3 one-stamp-3; do
+            curl -sf "https://axto.io/api/token/$k/7" | grep -q '"image"' || { echo "::error::metadata token /api/token/$k/7 tidak ada"; exit 1; }
+            curl -sf "https://axto.io/api/contract/$k" | grep -q '"name"' || { echo "::error::metadata koleksi /api/contract/$k tidak ada"; exit 1; }
+          done
+          [ "$(curl -s -o /dev/null -w '%{http_code}' https://axto.io/api/token/one-stamp-3/16666667)" = "404" ] || { echo "::error::token di luar koleksi one-stamp-3 tidak ditolak"; exit 1; }
           # jgn ada logo apapun di semua karya (pemilik 24 Nov 2026): karya hidup tanpa tanda „AXTO"
           for k in time stamp quran hadith ex-stamp ex-time; do
             if curl -sf "https://axto.io/img/$k/42.svg?v=live$GITHUB_RUN_ID" | grep -q '>AXTO<\|>AXTO·\|>EXCLUSIVE ·'; then echo "::error::karya $k/42 masih membawa tanda/label"; exit 1; fi
