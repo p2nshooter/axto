@@ -187,6 +187,13 @@ export async function markSent(env, { id, tier, offset, count, tx }) {
   return { ok: changed, finished };
 }
 
+/** Internal (mesin wallet toko): staking masih dibuka? + kursor stok tiap tier (untuk melepas sisa hadiah ke pasar). */
+export async function stockState(env) {
+  const pools = {};
+  for (const tier of TIERS) pools[tier] = Number((await readJSON(env.STORE, poolKey(tier)))?.next ?? 0);
+  return { open: await isOpen(env), pools };
+}
+
 /** Portal admin: ringkasan seluruh staking. */
 export async function adminView(env) {
   const all = await listKeys(env.STORE, 'stake/pos/', 100_000);

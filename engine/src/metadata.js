@@ -336,9 +336,11 @@ export function renderPlayerLive(d, meta, ctx, opts) {
 
 /**
  * Penjelajah atas daftar tetap (etalase 5.000 acak per jenis, perintah pemilik #45). `from` = posisi 1-based dalam
- * daftar; saringan tier, seri dan surah (kaligrafi Al-Qur'an). Mengembalikan harga tetap OpenSea per karya.
+ * daftar; saringan tier, seri, surah (kaligrafi Al-Qur'an) dan harga (pemilik 24 Nov 2026: „hidupkan filter harga jika ada
+ * member ingin melihat NFT dengan harga tertentu" — `pmin`..`pmax` USD, sama = satu harga tertentu). Mengembalikan harga tetap
+ * OpenSea per karya.
  */
-export function browseList(key, ids, { from = 1, n = 60, tier = null, series = '', surah = 0 } = {}) {
+export function browseList(key, ids, { from = 1, n = 60, tier = null, series = '', surah = 0, pmin = 0, pmax = 0 } = {}) {
   const items = [];
   let i = Math.max(1, from);
   for (; i <= ids.length && items.length < n; i += 1) {
@@ -349,6 +351,8 @@ export function browseList(key, ids, { from = 1, n = 60, tier = null, series = '
     const ref = d.kind === 'quran' ? quranRef(d) : null;
     if (surah && !(ref && ref.series === 'ayah' && ref.surah === surah)) continue;
     const e = editionOf(key, id);
+    if (pmin && e.priceUsd < pmin) continue;
+    if (pmax && e.priceUsd > pmax) continue;
     items.push({ id, name: title(d, ref), tier: d.tier.rank, series: seriesKey(d), usd: e.priceUsd, ed: e.supply });
   }
   return { items, next: i <= ids.length ? i : null };

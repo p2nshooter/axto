@@ -24,7 +24,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHmac, createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 import { ethers } from 'ethers';
-import { OS_COLS, WORKS, MAX_EDITIONS } from '../../engine/src/opensea.js';
+import { OS_COLS, WORKS, MAX_EDITIONS, ONE_COLS } from '../../engine/src/opensea.js';
 import { STAKE_KEY, STAKE_WORKS, STAKE_MAX } from '../../engine/src/stake.js';
 import { collection } from '../../engine/src/core.js';
 
@@ -44,7 +44,11 @@ const OPENSEA_COLS = OS_COLS.map((c) => [c.key, c.name, c.symbol]);
 const EXCLUSIVE_COLS = [['ex-time', 'AXTO Exclusive Time', 'AXXTIME'], ['ex-stamp', 'AXTO Exclusive Stamp', 'AXXSTAMP'], ['ex-quran', "AXTO Exclusive Qur'an", 'AXXQURAN'], ['ex-model', 'AXTO Exclusive Model', 'AXXMODEL'], ['ex-hadith', 'AXTO Exclusive Hadith', 'AXXHADITH']];
 /** Koleksi hadiah staking koin AXTO (pemilik 24 Nov 2026): 10 jt karya 1/1 tercetak ke wallet toko, tidak pernah di-listing. */
 const STAKE_COLS = [[STAKE_KEY, 'AXTO Staking', 'AXSTAKE']];
-const COLS = [...OPENSEA_COLS, ...EXCLUSIVE_COLS, ...STAKE_COLS];
+/** 3 koleksi 1/1 baru (pemilik 24 Nov 2026: 100 jt karya 1/1 ke OpenSea, „3 koleksi besar"). */
+const ONE_DEPLOY = ONE_COLS.map((c) => [c.key, c.name, c.symbol]);
+const COLS = [...OPENSEA_COLS, ...EXCLUSIVE_COLS, ...STAKE_COLS, ...ONE_DEPLOY];
+/** Karya per koleksi 1/1 yang tercetak saat deploy (uji lokal boleh mengecilkannya lewat ONE_WORKS). */
+export const oneWorks = (key) => Number(process.env.ONE_WORKS || ONE_COLS.find((c) => c.key === key).works);
 /** Karya staking yang tercetak saat deploy (uji lokal boleh mengecilkannya). */
 export const STAKE_PREMINT = Number(process.env.STAKE_WORKS || STAKE_WORKS);
 /** Karya per koleksi OpenSea (= edisi 1 yang tercetak saat deploy). Uji lokal boleh mengecilkannya. */
@@ -65,9 +69,9 @@ export const ROYALTY_OPERATORS = [
   '0x0E00009d00d1000069ed00A908e00081F5006008',
 ].map((a) => ethers.getAddress(a.toLowerCase()));
 /** Gas terukur di ganache untuk seluruh urutan ini (lihat test/auto-deploy.test.mjs), dibulatkan ke atas: token + 10 koleksi
- *  OpenSea dengan edisi 1 (10 × ±7,7 jt) + 5 koleksi eksklusif + koleksi staking 10 jt karya 1/1 (±7,7 jt) + daftar operator
- *  royalti. */
-export const TOTAL_GAS = BigInt(process.env.TOTAL_GAS_OVERRIDE || 113_000_000);
+ *  OpenSea dengan edisi 1 (10 × ±7,7 jt) + 5 koleksi eksklusif + koleksi staking 10 jt karya 1/1 (±7,9 jt) + 3 koleksi 1/1
+ *  × 33,3 jt karya (3 × ±19,9 jt) + daftar operator royalti. Pemilik 24 Nov 2026: dana deploy 0,00145539 ETH. */
+export const TOTAL_GAS = BigInt(process.env.TOTAL_GAS_OVERRIDE || 172_000_000);
 
 const LOCAL = !!process.env.LOCAL_RPC;
 const CHAIN = Number(process.env.CHAIN_ID || 8453);
@@ -274,6 +278,17 @@ async function main() {
         baseURI: `${BASE}/api/token/${k}/`, contractURI: `${BASE}/api/contract/${k}`,
         custody: STORE, premint: STAKE_PREMINT, operator: ethers.ZeroAddress, signer: ethers.ZeroAddress,
         minter: STORE, editionStride: 0, validator: TRANSFER_VALIDATOR, operators: ROYALTY_OPERATORS,
+      };
+      st.collections[k] = await deploy(`col:${k}`, 'AxtoCollection', cfg);
+    } else if (k.startsWith('one-')) {
+      // 1/1: ERC-721 + ERC-2309, semua karya (satu edisi) tercetak ke wallet toko, disetujui konduit OpenSea → dilisting
+      // mesin wallet toko dengan harga tetap menurut tier. Tanpa minter: tidak ada edisi berikutnya.
+      const n = oneWorks(k);
+      const cfg = {
+        name, symbol: sym, maxSupply: n, owner: ADMIN, royaltyReceiver: TREASURY,
+        baseURI: `${BASE}/api/token/${k}/`, contractURI: `${BASE}/api/contract/${k}`,
+        custody: STORE, premint: n, operator: OPENSEA_CONDUIT, signer: ethers.ZeroAddress,
+        minter: ethers.ZeroAddress, editionStride: 0, validator: TRANSFER_VALIDATOR, operators: ROYALTY_OPERATORS,
       };
       st.collections[k] = await deploy(`col:${k}`, 'AxtoCollection', cfg);
     } else {

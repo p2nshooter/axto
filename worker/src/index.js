@@ -12,7 +12,7 @@ import { edition, designOf } from '../../engine/src/editions.js';
 import { hadithRef } from '../../engine/src/render/hadith.js';
 import { gpuPlayer, gpuGambar } from '../../engine/src/render/gpu-player.js';
 import { collectionSeo, seriesSeo, surahSeo, hubSeo, breadcrumb, itemList, seriesLabel, surahInfo, BREAD } from './seo.js';
-import { COLLECTIONS, sha256Hex, kode } from '../../engine/src/core.js';
+import { COLLECTIONS, sha256Hex, kode, ONE_SETS } from '../../engine/src/core.js';
 import { canonical } from '../../engine/src/dna.js';
 import { MODELS } from '../../engine/src/catalog/model.js';
 import { LANGS, T, PATHS, LEGACY, pickLang, pageFromSlug } from './i18n.js';
@@ -98,6 +98,15 @@ async function soldOf(env, c) {
   return map;
 }
 const validToken = (c, id) => COLLECTIONS[c] && Number.isSafeInteger(id) && id >= 1 && id <= COLLECTIONS[c].max;
+/** Saringan harga galeri (?pmin=&pmax=, USD bulat $1–$250; sama = satu harga tertentu). */
+const priceRange = (q) => {
+  const v = (k) => Math.min(250, Math.max(0, Number(q.get(k) ?? 0) | 0));
+  const pmin = v('pmin');
+  const pmax = v('pmax');
+  return { pmin, pmax: pmax && pmax < pmin ? pmin : pmax };
+};
+/** Karya koleksi 1/1 (ONE_SETS): 1..jumlah karya koleksi itu. */
+const validOne = (c, id) => Boolean(ONE_SETS[c]) && Number.isSafeInteger(id) && id >= 1 && id <= ONE_SETS[c].max;
 
 /** Penyedia data Qur'an & foto model dari ASSETS (tanpa R2). */
 function assetProvider(env, origin) {
@@ -205,6 +214,9 @@ async function api(request, env, ctx, url) {
   m = /^\/api\/token\/stake\/(\d+)$/.exec(p);
   if (m) return validStake(Number(m[1])) ? json(stakeMetadata(Number(m[1]), env.BASE_URL), 200, { 'cache-control': IMMUTABLE, 'access-control-allow-origin': '*' }) : json({ error: 'not_found' }, 404);
   if (p === '/api/contract/stake') return json(stakeContractMetadata(env.BASE_URL), 200, { 'cache-control': 'public, max-age=86400', 'access-control-allow-origin': '*' });
+  // 3 koleksi 1/1 (100 jt karya unik; engine/src/core.js ONE_SETS) — metadata token lewat rute OpenSea di bawah
+  m = /^\/api\/contract\/(one-[a-z]+)$/.exec(p);
+  if (m && OSX.osCol(m[1])) return json(OSX.oneContractMetadata(m[1], env.BASE_URL), 200, { 'cache-control': 'public, max-age=86400', 'access-control-allow-origin': '*' });
   m = /^\/api\/token\/([a-z-]+)\/(\d+)$/.exec(p);
   if (m && OSX.osCol(m[1])) {
     const info = OSX.tokenInfo(m[1], Number(m[2]));
@@ -239,7 +251,7 @@ async function api(request, env, ctx, url) {
       const gs = gpu ? await gpuSet(env, m[1]) : null;
       const ids = gpu ? [...gs.ids].reverse() : (await showcase(env, m[1])).ids;
       const surah = Math.min(114, Math.max(0, Number(q.get('surah') ?? 0) | 0));
-      const r = browseList(m[1], ids, { from: Number(q.get('from') ?? 1) | 0, n, tier: Number.isInteger(tier) && tier >= 0 && tier <= 4 ? tier : null, series: String(q.get('series') ?? '').slice(0, 32), surah });
+      const r = browseList(m[1], ids, { from: Number(q.get('from') ?? 1) | 0, n, tier: Number.isInteger(tier) && tier >= 0 && tier <= 4 ? tier : null, series: String(q.get('series') ?? '').slice(0, 32), surah, ...priceRange(q) });
       if (gpu) r.items = gpuItems(gs, r.items);
       return json(r, 200, { 'cache-control': 'public, max-age=60' });
     }
@@ -503,6 +515,10 @@ async function api(request, env, ctx, url) {
     if (!(await engineAuth(request, env, ''))) return json({ error: 'auth' }, 401);
     return json({ items: await STAKE.pendingSends(env) });
   }
+  if (p === '/internal/stake/stok') {
+    if (!(await engineAuth(request, env, ''))) return json({ error: 'auth' }, 401);
+    return json(await STAKE.stockState(env));
+  }
   if (p === '/internal/stake/terkirim' && method === 'POST') {
     const body = await request.text();
     if (!(await engineAuth(request, env, body))) return json({ error: 'auth' }, 401);
@@ -658,13 +674,14 @@ async function html(request, env, ctx, url) {
     const from = Math.max(1, Number(url.searchParams.get('from') ?? 1) | 0);
     const tq = url.searchParams.get('tier');
     const tier = tq !== null && tq !== '' && /^[0-4]$/.test(tq) ? Number(tq) : null;
-    const first = browseList(c, maker ? gpu : sc.ids, { from, n: 60, tier, series, surah });
+    const price = priceRange(url.searchParams);
+    const first = browseList(c, maker ? gpu : sc.ids, { from, n: 60, tier, series, surah, ...price });
     if (maker) first.items = gpuItems(gs, first.items);
     const crumbs = [[BREAD[lang].home, `/${lang}`], [BREAD[lang].hub, `/${lang}/${PATHS.opensea[lang]}`], [P.collName(lang, c), `/${lang}/c/${c}`]];
     if (surah) crumbs.push([`${surah}. ${surahInfo(surah)[2]}`, `/${lang}${rest}`]);
     else if (parts[3]) crumbs.push([seriesLabel(c, series, lang), `/${lang}${rest}`]);
-    const filtered = url.searchParams.has('from') || tier !== null || url.searchParams.has('series') || !!maker;
-    return out({ page: 'home', rest, title: seo.title, desc: seo.desc, image: `${base}/img/${c}/${first.items[0]?.id ?? sc.ids[0] ?? 1}.svg`, noindex: filtered || count === 0, jsonld: [breadcrumb(base, crumbs.map(([nm, h]) => [nm, h])), itemList(base, lang, c, first.items, seo.h1)], body: P.collectionPage(lang, c, { produced: maker ? gpu.length : sc.ids.length, from, tier, series, surah, first, facets, seo, crumbs, view: url.searchParams.get('view') ?? 'mosaic', live, maker, gpuCount: gpu.length }) });
+    const filtered = url.searchParams.has('from') || tier !== null || url.searchParams.has('series') || !!maker || !!price.pmin || !!price.pmax;
+    return out({ page: 'home', rest, title: seo.title, desc: seo.desc, image: `${base}/img/${c}/${first.items[0]?.id ?? sc.ids[0] ?? 1}.svg`, noindex: filtered || count === 0, jsonld: [breadcrumb(base, crumbs.map(([nm, h]) => [nm, h])), itemList(base, lang, c, first.items, seo.h1)], body: P.collectionPage(lang, c, { produced: maker ? gpu.length : sc.ids.length, from, tier, series, surah, ...price, first, facets, seo, crumbs, view: url.searchParams.get('view') ?? 'mosaic', live, maker, gpuCount: gpu.length }) });
   }
   if (sub === 'c' && COLLECTIONS[parts[2]] && !parts[3]) {
     // koleksi eksklusif: semua 10.000 karya dijual di toko axto.io ($1/edisi)
@@ -787,6 +804,8 @@ export default {
       if (m && validStake(Number(m[1]))) { const sd = stakeDesign(Number(m[1])); return await svg(request, env, ctx, sd.key, sd.id, url.origin); }
       m = /^\/play\/stake\/(\d+)$/.exec(p);
       if (m && validStake(Number(m[1]))) { const sd = stakeDesign(Number(m[1])); return await player(request, env, ctx, sd.key, sd.id, url.origin); }
+      m = /^\/(img|play)\/(one-[a-z]+)\/(\d+)(\.svg)?$/.exec(p);
+      if (m && validOne(m[2], Number(m[3])) && (m[1] === 'img') === Boolean(m[4])) return m[1] === 'img' ? await svg(request, env, ctx, m[2], Number(m[3]), url.origin) : await player(request, env, ctx, m[2], Number(m[3]), url.origin);
       m = /^\/img\/([a-z-]+)\/(\d+)\.svg$/.exec(p);
       if (m && validToken(m[1], Number(m[2]))) return await svg(request, env, ctx, m[1], Number(m[2]), url.origin);
       m = /^\/gpu\/([a-z-]+)\/(\d+)\.png$/.exec(p);

@@ -45,6 +45,15 @@ function percentileFn(c) {
   return pctCache.get(k);
 }
 
+/**
+ * Persentil tersebar: karya berskor sama menempati rentang persentil skor itu secara merata menurut seed uniknya
+ * (urutan kelangkaan antar-skor tetap). Dipakai harga & jumlah edisi di dalam satu tier (engine/src/editions.js).
+ */
+export function spreadPercentile(d) {
+  const [lo, w] = percentileFn(collection(d.key)).range(d.score);
+  return lo + w * ((d.seed % 1_000_003) / 1_000_003);
+}
+
 /** Jumlah opsi tiap sifat (radix campuran) sebuah koleksi — untuk audit keunikan. */
 export const radicesOf = (key) => spaceFor(collection(key)).map((o) => o.length);
 
@@ -68,8 +77,10 @@ export function dna(key, tokenId) {
   let digits;
   let series = null;
   if (c.after) {
-    // koleksi staking: nomor SESUDAH jatah koleksi publik dalam permutasi yang sama → tidak pernah sama (lihat STAKE_SETS)
+    // staking & 1/1: nomor SESUDAH jatah koleksi publik dalam permutasi yang sama → tidak pernah sama (STAKE_SETS, ONE_SETS);
+    // koleksi 1/1 melewati `skip` nomor pertama (cadangan staking)
     const pub = collection(c.after);
+    const index = tokenId - 1 + (c.skip ?? 0);
     if (c.kind === 'quran') {
       const plan = QURAN.PLANS[pub.key];
       const unit = index % QURAN.TOTAL_AYAH;

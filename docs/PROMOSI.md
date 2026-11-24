@@ -30,8 +30,9 @@ AXTO adalah investasi koin komunitas yang menghidupkan sebuah museum karya digit
 asli, jam yang berdetak mengikuti kota Anda, prangko dari negeri-negeri imajiner, dan figur yang bergerak. Setiap koin membuka
 karya eksklusif, staking berhadiah NFT 1/1, dan perjalanan bersama komunitas yang tumbuh setiap hari.
 Kunci koin Anda 3, 6 atau 12 bulan dan saksikan hadiahnya seketika: karya hidup 1/1 dari galeri **AXTO Staking** — koleksi
-VVIP yang tidak pernah dijual — dikirim ke wallet Anda tanpa biaya gas begitu kontrak selesai. Setiap 1 AXTO berbuah 3, 8 atau
-20 karya Classic; satu tahun penuh membuka Rare, Epic hingga Masterpiece. Staking dibuka sampai koin AXTO dirilis ke DEX.
+VVIP yang tidak dijual selama staking dibuka — dikirim ke wallet Anda tanpa biaya gas begitu kontrak selesai. Setiap 1 AXTO berbuah 3, 8 atau
+20 karya Classic; satu tahun penuh membuka Rare, Epic hingga Masterpiece. Staking dibuka selama presale — sampai 20.000.000
+koin terjual habis dan koin AXTO dirilis ke DEX; hadiah yang tidak terpakai saat itu dilepas ke pasar OpenSea.
 *Seperti setiap aset kripto, nilai AXTO dapat naik maupun turun dan tidak dijamin.*
 
 **EN — The community coin of the axto.io NFT museum, from just $1.**
@@ -39,9 +40,9 @@ AXTO is a community coin investment that brings a museum of digital art to life:
 text, clocks that keep the time of your city, stamps from imaginary realms and figures in motion. Every coin opens exclusive
 works, staking rewarded with one-of-one NFTs, and a journey with a community that grows every day.
 Lock your coins for 3, 6 or 12 months and see your rewards at once: one-of-one living artworks from the **AXTO Staking**
-gallery — a VVIP collection that is never sold — delivered to your wallet gas-free the moment your term completes. Every 1 AXTO
-earns 3, 8 or 20 Classic works; a full year unlocks Rare, Epic and Masterpiece. Staking is open until the AXTO coin is released
-to a DEX. *Like every crypto asset, AXTO can rise or fall in value and is not guaranteed.*
+gallery — a VVIP collection not sold while staking is open — delivered to your wallet gas-free the moment your term completes. Every 1 AXTO
+earns 3, 8 or 20 Classic works; a full year unlocks Rare, Epic and Masterpiece. Staking is open throughout the presale — until all
+20,000,000 coins are sold and AXTO is released to a DEX; rewards left unclaimed then are released to the OpenSea market. *Like every crypto asset, AXTO can rise or fall in value and is not guaranteed.*
 
 **Untuk komunitas (kajian, sekolah, kreator muslim):** karya eksklusif $1 per edisi bisa dikirim ke banyak wallet sekaligus tanpa
 biaya gas — suvenir digital kajian, kenang-kenangan wisuda, atau sertifikat keanggotaan yang hidup, bukan sekadar gambar.

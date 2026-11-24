@@ -17,7 +17,8 @@
  * HANYA mengambil token yang tier DNA-nya sama → dua tier tidak pernah berebut token, dan satu posisi staking cukup
  * menyimpan rentang posisi [from, to) per tier (idnya dihitung ulang kapan saja). Murni & deterministik.
  */
-import { permute, STAKE_SETS, TIERS } from './core.js';
+import { permute, unpermute, STAKE_SETS, TIERS } from './core.js';
+import { edition } from './editions.js';
 import { dna } from './dna.js';
 import { metadata } from './metadata.js';
 
@@ -115,6 +116,26 @@ export function poolIds(tier, from, to, { offset = 0, limit = Infinity } = {}) {
   return out;
 }
 
+// ---------------------------------------------------------------- sisa hadiah → pasar OpenSea
+/**
+ * Pemilik, 24 Nov 2026: „Klo 10jt hadiah NFT staking tidak habis, langsung lepas ke pasar opensea, artinya otomatis bisa d
+ * beli." Saat staking ditutup, token yang belum pernah diundikan bebas dijual. Token bertier T bebas bila posisinya di urutan
+ * acak tier T ≥ kursor stok tier itu (`pools[T]`); Legendary tidak pernah menjadi hadiah sehingga selalu bebas.
+ */
+export function stakeFree(t, pools) {
+  const rank = stakeTier(t);
+  const tier = Object.keys(REWARD_TIERS).find((k) => REWARD_TIERS[k] === rank);
+  if (!tier) return true;
+  return unpermute(t - 1, STAKE_WORKS, poolSalt(tier)) >= Number(pools?.[tier] ?? 0);
+}
+/** Urutan etalase pasar untuk sisa hadiah staking. */
+export const stakeShowcase = (i) => permute(i, STAKE_WORKS, 'axto/stake/showcase/v1') + 1;
+/** Satu edisi, harga tetap menurut tier ($1–$250) — sama dengan koleksi 1/1. */
+export function stakeEdition(t) {
+  const s = stakeDesign(t);
+  return edition(s.key, s.id);
+}
+
 // ---------------------------------------------------------------- metadata (OpenSea)
 const TIER_NAME = Object.fromEntries(TIERS.map((t) => [t.rank, t.name]));
 
@@ -130,7 +151,7 @@ export function stakeMetadata(t, base = 'https://axto.io') {
   attributes.push({ trait_type: 'Reward', value: 'AXTO coin staking' }, { display_type: 'number', trait_type: 'Edition Size', value: 1 });
   return {
     name: `${stakeKode(t)} · AXTO Staking — ${nama}`,
-    description: `A one-of-one living artwork from the AXTO Staking gallery — the VVIP reward of the AXTO community coin. Never sold: it is given only to members who lock AXTO coin at axto.io, revealed the moment they stake and delivered gas-free when their term completes. Rarity: ${TIER_NAME[d.tier.rank]} · Edition 1/1.\n\nKarya hidup 1/1 dari galeri AXTO Staking — hadiah VVIP koin komunitas AXTO. Tidak pernah dijual: hanya diberikan kepada member yang mengunci koin AXTO di axto.io, tampil seketika saat staking dan dikirim tanpa biaya gas begitu masa kontraknya selesai.\n\n© AXTO (axto.io). The owner may display the artwork for personal and promotional use; copyright of the artwork remains with AXTO. Resale royalty 10%.`,
+    description: `A one-of-one living artwork from the AXTO Staking gallery — the VVIP reward of the AXTO community coin. Not sold while staking is open: it is given to members who lock AXTO coin at axto.io, revealed the moment they stake and delivered gas-free when their term completes. Rarity: ${TIER_NAME[d.tier.rank]} · Edition 1/1.\n\nKarya hidup 1/1 dari galeri AXTO Staking — hadiah VVIP koin komunitas AXTO. Tidak dijual selama staking dibuka: diberikan kepada member yang mengunci koin AXTO di axto.io, tampil seketika saat staking dan dikirim tanpa biaya gas begitu masa kontraknya selesai.\n\n© AXTO (axto.io). The owner may display the artwork for personal and promotional use; copyright of the artwork remains with AXTO. Resale royalty 10%.`,
     image: `${base}/img/${STAKE_KEY}/${t}.svg`,
     animation_url: `${base}/play/${STAKE_KEY}/${t}`,
     external_url: `${base}/en/staking`,
@@ -143,7 +164,7 @@ export function stakeMetadata(t, base = 'https://axto.io') {
 export function stakeContractMetadata(base = 'https://axto.io') {
   return {
     name: 'AXTO Staking',
-    description: `The VVIP gallery of the AXTO community coin. ${STAKE_WORKS.toLocaleString('en-US')} one-of-one living artworks — Qur'an and hadith calligraphy with unaltered text and stamps from imaginary realms, each a design that exists nowhere else — reserved for the members who stake AXTO coin at axto.io. Nothing here is for sale. Lock AXTO for 3, 6 or 12 months: your rewards are revealed the moment you stake and arrive in your wallet gas-free when your term completes. Every 1 AXTO earns 3, 8 or 20 Classic works, and a full year unlocks Rare, Epic and Masterpiece rewards. Staking is open until the AXTO coin is released to a DEX. Begin from $1 at axto.io.\n\nGaleri VVIP koin komunitas AXTO: ${STAKE_WORKS.toLocaleString('id-ID')} karya hidup 1/1 — kaligrafi Al-Qur'an & hadits dengan teks asli dan prangko negeri imajiner, masing-masing desain yang tidak ada duanya — khusus bagi member yang men-staking koin AXTO di axto.io. Tidak ada yang dijual di sini. Kunci AXTO 3, 6 atau 12 bulan: hadiah Anda tampil seketika dan masuk ke wallet tanpa biaya gas saat kontrak selesai. Setiap 1 AXTO berbuah 3, 8 atau 20 karya Classic, dan satu tahun penuh membuka hadiah Rare, Epic dan Masterpiece. Staking dibuka sampai koin AXTO dirilis ke DEX. Mulai dari $1 di axto.io.`,
+    description: `The VVIP gallery of the AXTO community coin. ${STAKE_WORKS.toLocaleString('en-US')} one-of-one living artworks — Qur'an and hadith calligraphy with unaltered text and stamps from imaginary realms, each a design that exists nowhere else — reserved for the members who stake AXTO coin at axto.io — not for sale while staking is open. Lock AXTO for 3, 6 or 12 months: your rewards are revealed the moment you stake and arrive in your wallet gas-free when your term completes. Every 1 AXTO earns 3, 8 or 20 Classic works, and a full year unlocks Rare, Epic and Masterpiece rewards. Staking is open throughout the presale, until all 20,000,000 presale coins are sold and AXTO is released to a DEX; rewards left unclaimed then are released to the OpenSea market. Begin from $1 at axto.io.\n\nGaleri VVIP koin komunitas AXTO: ${STAKE_WORKS.toLocaleString('id-ID')} karya hidup 1/1 — kaligrafi Al-Qur'an & hadits dengan teks asli dan prangko negeri imajiner, masing-masing desain yang tidak ada duanya — khusus bagi member yang men-staking koin AXTO di axto.io — tidak dijual selama staking dibuka. Kunci AXTO 3, 6 atau 12 bulan: hadiah Anda tampil seketika dan masuk ke wallet tanpa biaya gas saat kontrak selesai. Setiap 1 AXTO berbuah 3, 8 atau 20 karya Classic, dan satu tahun penuh membuka hadiah Rare, Epic dan Masterpiece. Staking dibuka selama presale, sampai 20.000.000 koin presale terjual habis dan AXTO dirilis ke DEX; hadiah yang tidak terpakai saat itu dilepas ke pasar OpenSea. Mulai dari $1 di axto.io.`,
     image: `${base}/logo-512.png`,
     banner_image: `${base}/og/${STAKE_KEY}.svg`,
     external_link: `${base}/en/staking`,

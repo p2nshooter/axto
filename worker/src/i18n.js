@@ -84,7 +84,7 @@ export const T = {
     nft: { traits: 'Sifat', history: 'Riwayat', certificate: 'Sertifikat', owner: 'Pemilik', edition: 'Edisi', editionOf: 'edisi', rarity: 'Kelangkaan', play: 'Buka player', opensea: 'Lihat di OpenSea' },
     coin: {
       title: 'Koin AXTO', supply: 'Total suplai', price: 'Harga presale', sold: 'Terjual',
-      split: [['Presale axto.io ($10)', '20% · 20.000.000'], ['Likuiditas DEX (setelah presale ditutup atau 365 hari)', '30% · 30.000.000'], ['Cadangan jangka panjang (5 tahun)', '30% · 30.000.000'], ['Perusahaan', '20% · 20.000.000']],
+      split: [['Presale axto.io ($10)', '20% · 20.000.000'], ['Likuiditas DEX (dirilis setelah 20.000.000 koin presale terjual habis)', '30% · 30.000.000'], ['Cadangan jangka panjang (5 tahun)', '30% · 30.000.000'], ['Perusahaan', '20% · 20.000.000']],
       disclaimer: 'AXTO adalah koin komunitas NFT axto.io — investasi bersama yang tumbuh bersama karya, kolektor dan komunitasnya. Seperti setiap aset kripto, nilainya dapat naik maupun turun dan tidak dijamin; tidak ada janji keuntungan. Mulailah dari $1, berinvestasilah dengan bijak sesuai kemampuan, dan pastikan sesuai aturan di negara Anda.',
     },
     coinBlurb: ['Koin AXTO', 'Koin komunitas NFT axto.io: 100.000.000 koin tanpa burn, harga presale tetap $10 sampai 20.000.000 terjual — mulai dari $1. Bayar dengan USDT, USDC, BTC atau BNB, lalu staking untuk hadiah NFT 1/1 yang dikirim tanpa biaya gas.'],
@@ -174,7 +174,7 @@ export const T = {
     nft: { traits: 'Traits', history: 'History', certificate: 'Certificate', owner: 'Owner', edition: 'Edition', editionOf: 'editions', rarity: 'Rarity', play: 'Open player', opensea: 'View on OpenSea' },
     coin: {
       title: 'AXTO Coin', supply: 'Total supply', price: 'Presale price', sold: 'Sold',
-      split: [['axto.io presale ($10)', '20% · 20,000,000'], ['DEX liquidity (after the presale closes or 365 days)', '30% · 30,000,000'], ['Long-term reserve (5 years)', '30% · 30,000,000'], ['Company', '20% · 20,000,000']],
+      split: [['axto.io presale ($10)', '20% · 20,000,000'], ['DEX liquidity (released once all 20,000,000 presale coins are sold)', '30% · 30,000,000'], ['Long-term reserve (5 years)', '30% · 30,000,000'], ['Company', '20% · 20,000,000']],
       disclaimer: 'AXTO is the community coin of the axto.io NFT museum — a shared investment that grows with its artworks, collectors and community. Like every crypto asset, its value can rise or fall and is not guaranteed; no profit is promised. Start from $1, invest wisely within your means, and make sure it complies with the rules of your country.',
     },
     coinBlurb: ['AXTO Coin', 'The community coin of the axto.io NFT museum: 100,000,000 coins, no burn, a fixed $10 presale price until 20,000,000 are sold — from just $1. Pay with USDT, USDC, BTC or BNB, then stake for one-of-one NFT rewards delivered gas-free.'],

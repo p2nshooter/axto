@@ -172,13 +172,23 @@ export function collectionPage(lang, c, o) {
     ? `<p class="osstate ${o.live ? 'live' : 'soon'}">${esc(o.live ? t.liveBanner : t.soonBanner)}</p><p class="prices">${BANDS.map((b, i) => `<span class="tr t${i}">${esc(TIER_NAMES[lang][i])} $${fmt(b.price[0], lang)}–$${fmt(b.price.at(-1), lang)} · ${b.supply[0] === b.supply[1] ? b.supply[0] : `${b.supply[1]}–${b.supply[0]}`} ${esc(t.nft.editionOf)}</span>`).join('')}</p>`
     : `<p class="prices"><span class="tr ex">$1 · ${EXCLUSIVE_SUPPLY} ${esc(t.nft.editionOf)} · ${esc(lang === 'id' ? 'koin AXTO' : 'AXTO coin')}</span> <a class="link" href="${altPath('exclusive', lang)}">${esc(t.nav.exclusive)} →</a></p>`;
   const gpuNote = o.maker === 'gpu' && !o.first.items.length ? `<p class="empty">${esc(t.opensea.gpuNone)}</p>` : '';
-  const qs = (extra) => new URLSearchParams({ ...(o.tier !== null ? { tier: String(o.tier) } : {}), ...(o.series ? { series: o.series } : {}), view, ...extra }).toString().replace(/&/g, '&amp;');
+  const qs = (extra) => new URLSearchParams({ ...(o.tier !== null ? { tier: String(o.tier) } : {}), ...(o.series ? { series: o.series } : {}), ...(o.pmin ? { pmin: String(o.pmin) } : {}), ...(o.pmax ? { pmax: String(o.pmax) } : {}), view, ...extra }).toString().replace(/&/g, '&amp;');
+  // saringan harga (pemilik 24 Nov 2026): rentang per kelangkaan atau satu harga tertentu — hanya koleksi publik (eksklusif semuanya $1)
+  const pval = o.pmin || o.pmax ? `${o.pmin || 0}-${o.pmax || 0}` : '';
+  const priceOpt = (v, label) => `<option value="${v}"${pval === v ? ' selected' : ''}>${esc(label)}</option>`;
+  const exactPrices = [...new Set(BANDS.flatMap((b) => b.price))].sort((a, b) => a - b);
+  const priceSel = pub
+    ? `<select class="fprice" aria-label="${esc(lang === 'id' ? 'Harga' : 'Price')}"><option value="">${esc(lang === 'id' ? 'Semua harga' : 'All prices')}</option>`
+      + `<optgroup label="${esc(lang === 'id' ? 'Rentang' : 'Range')}">${BANDS.map((b, i) => priceOpt(`${b.price[0]}-${b.price.at(-1)}`, `${TIER_NAMES[lang][i]} $${fmt(b.price[0], lang)}–$${fmt(b.price.at(-1), lang)}`)).join('')}</optgroup>`
+      + `<optgroup label="${esc(lang === 'id' ? 'Harga tertentu' : 'Exact price')}">${exactPrices.map((x) => priceOpt(`${x}-${x}`, `$${fmt(x, lang)}`)).join('')}</optgroup></select>`
+    : '';
   return `<section class="page explorer" id="explorer" data-c="${c}" data-lang="${lang}" data-produced="${o.produced}" data-maker="${o.maker === 'gpu' ? 'gpu' : ''}" data-next="${o.first.next ?? ''}" data-from="${o.from}" data-surah="${o.surah || ''}">
   ${crumbs}<h1>${esc(o.seo?.h1 ?? collName(lang, c))}</h1><p class="kindline">${badge(lang, c, true)}</p><p class="lead">${esc(o.seo?.intro ?? t.collections[base][1])}</p>${priceRow}${chips}${exChips}${surahs}${gpuNote}
   <div class="xbar">
     <div class="views" role="group" aria-label="View">${['mosaic', 'gallery', 'list'].map((v, i) => `<button type="button" data-view="${v}"${v === view ? ' aria-pressed="true"' : ' aria-pressed="false"'}>${esc(L.views[i])}</button>`).join('')}</div>
     <label class="jump"><span>${esc(L.jump)}<output>${fmt(o.from, lang)}</output></span><input type="range" min="1" max="${Math.max(1, o.produced)}" step="1" value="${o.from}" aria-label="${esc(L.jump)}"></label>
     <select class="ftier" aria-label="Tier"><option value="">${esc(L.tier)}</option>${TIER_NAMES[lang].map((n, i) => `<option value="${i}"${o.tier === i ? ' selected' : ''}>${esc(n)}</option>`).join('')}</select>
+    ${priceSel}
     ${opts.length ? `<select class="fseries" aria-label="Series"><option value="">${esc(L.series)}</option>${opts.map(([k, en, id]) => `<option value="${esc(k)}"${o.series === k ? ' selected' : ''}>${esc(lang === 'id' ? id : en)}</option>`).join('')}</select>` : ''}
     <span class="meta xcount">${pub ? `${fmt(o.produced, lang)} ${lang === 'id' ? 'karya pilihan dari' : 'picks of'} ${fmt(COLLECTIONS[c].max, lang)}` : `${fmt(o.produced, lang)} ${esc(T[lang].exclusive.works)} × ${EXCLUSIVE_SUPPLY} ${esc(T[lang].exclusive.editions)} · $1`}</span>
   </div>
@@ -329,10 +339,10 @@ export function coinPage(lang, sale, paypalOn, a = {}) {
   <div data-np="buy"><p class="muted">…</p></div>
   <p><button class="btn ghost" type="button" data-watch-axto>${id ? 'Tambahkan AXTO ke wallet' : 'Add AXTO to wallet'}</button></p></section>
   <section class="np stake" id="staking"><h2>${id ? 'Staking AXTO — hadiah NFT 1/1 VVIP' : 'AXTO staking — one-of-one VVIP NFT rewards'}</h2>
-  <p class="lead">${id ? 'Kunci koin AXTO Anda dan terima karya hidup 1/1 dari galeri AXTO Staking — koleksi khusus yang tidak pernah dijual. Hadiah diundi acak dan langsung tampil di Portal member; dikirim tanpa biaya gas ke alamat yang Anda cantumkan begitu kontrak selesai, dan koin Anda kembali utuh ke saldo. Berlaku kelipatan, per 1 AXTO:' : 'Lock your AXTO coins and receive one-of-one living artworks from the AXTO Staking gallery — a collection that is never sold. Rewards are drawn at random and appear in the Member portal at once; they are delivered gas-free to the address you name as soon as the term completes, and your coins return to your balance in full. Multiples apply, per 1 AXTO:'}</p>
+  <p class="lead">${id ? 'Kunci koin AXTO Anda dan terima karya hidup 1/1 dari galeri AXTO Staking — koleksi khusus yang tidak dijual selama staking dibuka. Hadiah diundi acak dan langsung tampil di Portal member; dikirim tanpa biaya gas ke alamat yang Anda cantumkan begitu kontrak selesai, dan koin Anda kembali utuh ke saldo. Berlaku kelipatan, per 1 AXTO:' : 'Lock your AXTO coins and receive one-of-one living artworks from the AXTO Staking gallery — a collection not sold while staking is open. Rewards are drawn at random and appear in the Member portal at once; they are delivered gas-free to the address you name as soon as the term completes, and your coins return to your balance in full. Multiples apply, per 1 AXTO:'}</p>
   <table class="split"><tbody>${stakeRows.map(([x, y]) => `<tr><th>${esc(x)}</th><td>${esc(y)}</td></tr>`).join('')}</tbody></table>
   <p><strong>${id ? 'Bonus kunci 12 bulan penuh (berlaku kelipatan):' : 'Full 12-month lock bonus (multiples apply):'}</strong></p><ul>${bonus.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>
-  <p class="meta">${id ? 'Staking dibuka sampai koin AXTO dirilis ke DEX; kontrak yang sudah berjalan tetap selesai sesuai masanya.' : 'Staking is open until the AXTO coin is released to a DEX; contracts already running complete their full term.'}</p>
+  <p class="meta">${id ? 'Staking dibuka selama presale — sampai 20.000.000 koin terjual habis dan koin AXTO dirilis ke DEX. Kontrak yang sudah berjalan tetap selesai sesuai masanya; NFT hadiah yang tidak terpakai saat staking ditutup dilepas ke pasar OpenSea.' : 'Staking is open throughout the presale — until all 20,000,000 coins are sold and AXTO is released to a DEX. Contracts already running complete their full term; reward NFTs left unclaimed when staking closes are released to the OpenSea market.'}</p>
   <div data-stake="calc"><p class="muted">…</p></div></section>
   ${coinWalletBox(lang, a)}
   ${coinGuide(lang, a)}

@@ -9,7 +9,7 @@
  * (rilis), mesin listing OpenSea, metadata dan halaman axto.io menghitung angka yang sama.
  */
 import { collection, TIERS } from './core.js';
-import { dna } from './dna.js';
+import { dna, spreadPercentile } from './dna.js';
 import { showcaseCandidate } from './showcase.js';
 
 export const EXCLUSIVE_SUPPLY = 10;
@@ -30,12 +30,16 @@ export const BANDS = [
 export const PRICE_MIN_USD = BANDS[0].price[0];
 export const PRICE_MAX_USD = BANDS[BANDS.length - 1].price[BANDS[BANDS.length - 1].price.length - 1];
 
-/** Posisi 0..1 sebuah karya di dalam tiernya (0 = paling umum di tier itu, ~1 = paling langka). */
+/**
+ * Posisi 0..1 sebuah karya di dalam tiernya (0 = paling umum di tier itu, ~1 = paling langka). Karya berskor sama disebar
+ * merata di rentang persentil skornya (seed unik) sehingga setiap titik harga tier terisi — penting untuk saringan harga.
+ */
 function withinTier(d) {
   const i = TIERS.findIndex((t) => t.rank === d.tier.rank);
   const lo = i > 0 ? TIERS[i - 1].upTo : 0;
   const hi = Math.min(1, TIERS[i].upTo);
-  return Math.min(0.999999, Math.max(0, (d.percentile - lo) / Math.max(1e-9, hi - lo)));
+  const pct = d.series && ['mushaf', 'juz', 'page'].includes(d.series.series) ? d.percentile : spreadPercentile(d);
+  return Math.min(0.999999, Math.max(0, (pct - lo) / Math.max(1e-9, hi - lo)));
 }
 
 /** Edisi & harga sebuah KARYA (tokenId desain). Eksklusif: 10 edisi, $1. */
@@ -45,6 +49,7 @@ export function edition(key, designId) {
   if (c.exclusive) return { supply: EXCLUSIVE_SUPPLY, priceUsd: EXCLUSIVE_PRICE_USD, tier: d.tier.name, rank: d.tier.rank };
   const b = BANDS[d.tier.rank];
   const p = withinTier(d);
+  if (c.one || c.stake) return { supply: 1, priceUsd: b.price[Math.floor(p * b.price.length)], tier: d.tier.name, rank: d.tier.rank }; // 1/1 & hadiah staking
   const [maxS, minS] = b.supply;
   const supply = maxS - Math.floor(p * (maxS - minS + 1));
   const priceUsd = b.price[Math.floor(p * b.price.length)];

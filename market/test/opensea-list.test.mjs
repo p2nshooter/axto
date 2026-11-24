@@ -169,3 +169,33 @@ test('hadiah staking koin AXTO: wallet toko mengirim NFT hadiah dengan transferB
   assert.equal(sent[1].tx, null);
   assert.equal(await scol.isApprovedForAll(store.address, CONDUIT), false, 'koleksi staking tidak pernah disetujui konduit OpenSea');
 });
+
+test('staking ditutup: sisa hadiah yang belum pernah diundikan dilepas ke pasar OpenSea (1/1, harga tier), konduit disetujui sekali', async () => {
+  const { stakeFree, poolToken, stakeTier, REWARD_TIERS } = await import('../../engine/src/stake.js');
+  const c = JSON.parse(R2['axto-nft-data/cfg/contracts-8453.json']);
+  const scol = new ethers.Contract(c.collections.stake, art('AxtoCollection').abi, provider);
+  assert.equal(await scol.isApprovedForAll(store.address, CONDUIT), false);
+  const pools = { classic: 50, rare: 10, epic: 0, masterpiece: 0 };
+  const api = (open) => async (method, path) => {
+    if (path === '/internal/stake/stok') return { open, pools };
+    if (path === '/internal/stake/kirim') return { items: [] };
+    return { ok: true };
+  };
+  // staking masih dibuka → tidak ada yang dilisting dari koleksi staking
+  const before = posted.length;
+  const x0 = io(); x0.feed = await feed.getAddress(); x0.stakeApi = api(true);
+  await run({ io: x0, chainId: 8453, rpc: 'http://127.0.0.1:18546', log: () => {}, window: WIN, budgetMs: 60_000 });
+  assert.equal(posted.slice(before).filter((p) => p.asset.tokenAddress === c.collections.stake).length, 0);
+  // staking ditutup → dilepas
+  const x = io(); x.feed = await feed.getAddress(); x.stakeApi = api(false);
+  await run({ io: x, chainId: 8453, rpc: 'http://127.0.0.1:18546', log: () => {}, window: WIN, budgetMs: 60_000 });
+  assert.equal(await scol.isApprovedForAll(store.address, CONDUIT), true);
+  const listed = posted.slice(before).filter((p) => p.asset.tokenAddress === c.collections.stake).map((p) => Number(p.asset.tokenId));
+  assert.equal(listed.length, WIN);
+  for (const t of listed) assert.ok(stakeFree(t, pools), `token ${t} sudah menjadi hadiah`);
+  // token yang sudah diundikan (posisi < kursor) tidak pernah dilisting
+  const given = poolToken('classic', 3);
+  assert.equal(stakeTier(given), REWARD_TIERS.classic);
+  assert.equal(stakeFree(given, pools), false);
+  assert.ok(!listed.includes(given));
+});

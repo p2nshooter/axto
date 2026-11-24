@@ -63,7 +63,9 @@ test('koleksi staking: 1/1, Qur\'an & hadits lebih dulu, metadata OS-ST tanpa ha
   assert.equal(m.attributes.find((a) => a.trait_type === 'Edition Size').value, 1);
   assert.equal(m.image, 'https://axto.io/img/stake/1.svg');
   const c = stakeContractMetadata();
-  assert.match(c.description, /never sold|Nothing here is for sale/);
+  assert.match(c.description, /not for sale while staking is open/);
+  assert.match(c.description, /20,000,000 presale coins are sold/);
+  assert.doesNotMatch(c.description, /365/);
   assert.match(c.description, /Mulai dari \$1/);
   assert.match(c.description, /dirilis ke DEX/);
 });
@@ -171,4 +173,35 @@ test('pemilik: „Pastikan tidak ada karya yg sama" — desain staking tidak per
     assert.ok(!seen.has(k), `token staking ${t} kembar`);
     seen.add(k);
   }
+});
+
+test('100 juta karya 1/1 baru: tidak pernah sama dengan karya publik, hadiah staking, atau sesamanya', async () => {
+  const { dna, radicesOf } = await import('../../engine/src/dna.js');
+  const { unpermute, product, collection, STAKE_RESERVED } = await import('../../engine/src/core.js');
+  const { STAKE_MAX, STAKE_ORDER, stakeDna } = await import('../../engine/src/stake.js');
+  const { tokenInfo } = await import('../../engine/src/opensea.js');
+  assert.ok(Math.ceil(STAKE_MAX / STAKE_ORDER.length) <= STAKE_RESERVED, 'cadangan staking cukup untuk seluruh kontrak staking');
+  const comboOf = (digits, radices) => digits.reduce((acc, x, i) => acc * radices[i] + x, 0);
+  // Qur'an & hadits: nomor gaya di permutasi publik ayat/hadits itu sesudah publik DAN sesudah cadangan staking
+  for (const [key, saltOf, units] of [['one-quran', (u) => `axto/quran/v1:style:ayah:${u}`, 6236], ['one-hadith', (u) => `axto/hadith/v1:style:${u}`, 38_144]]) {
+    const R = radicesOf(key);
+    for (const id of [1, 2, 6236, 1_000_000, collection(key).max]) {
+      const d = dna(key, id);
+      const v = unpermute(comboOf(d.digits, R), product(R), saltOf(d.series.unit));
+      assert.equal(v, d.series.variant);
+      assert.ok(v - d.series.variants >= Math.floor(STAKE_RESERVED / units), `${key} #${id} masuk wilayah publik/staking`);
+    }
+  }
+  const R = radicesOf('stamp');
+  for (const id of [1, 33_333_333]) assert.ok(unpermute(comboOf(dna('one-stamp', id).digits, R), product(R), 'axto/stamp/v1:combo') >= collection('stamp').max + STAKE_RESERVED);
+  // sampel silang: 1/1 vs staking vs sesama 1/1
+  const seen = new Set();
+  const add = (d, label) => { const k = `${d.kind}:${d.series?.unit ?? ''}:${d.digits.join('.')}`; assert.ok(!seen.has(k), `${label} kembar`); seen.add(k); };
+  for (let t = 1; t <= 15_000; t += 1) add(stakeDna(t), `staking ${t}`);
+  for (const key of ['one-quran', 'one-hadith', 'one-stamp']) for (let id = 1; id <= 5_000; id += 1) add(dna(key, id), `${key} ${id}`);
+  // satu edisi, harga tier $1–$250
+  const i = tokenInfo('one-quran', 42);
+  assert.equal(i.supply, 1);
+  assert.ok(i.priceUsd >= 1 && i.priceUsd <= 250);
+  assert.equal(tokenInfo('one-quran', 33_333_335), null);
 });
