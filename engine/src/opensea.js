@@ -13,6 +13,7 @@
  */
 import { edition } from './editions.js';
 import { STAKE_WORKS, stakeEdition } from './stake.js';
+import { ONE_SETS } from './core.js';
 
 export const WORKS = 10_000_000;
 export const MAX_EDITIONS = 10;
@@ -30,12 +31,13 @@ export const OS_KEYS = OS_COLS.map((c) => c.key);
 /**
  * 100 juta karya 1/1 baru (pemilik 24 Nov 2026, „Ya, 3 koleksi besar"): kaligrafi Al-Qur'an, kaligrafi hadits, prangko —
  * satu edisi per karya, semua tercetak saat deploy, harga tetap menurut tier ($1–$250). Desain unik: engine/src/core.js ONE_SETS.
+ * Tiap tema = 2 kontrak (I & II, ±16,7 jt karya) karena batas gas per transaksi Base (EIP-7825, 16.777.216 gas).
  */
-export const ONE_COLS = [
-  { key: 'one-quran', base: 'one-quran', g: false, one: true, name: "AXTO 1/1 Qur'an Calligraphy", symbol: 'AX1QURAN', works: 33_333_334, editions: 1 },
-  { key: 'one-hadith', base: 'one-hadith', g: false, one: true, name: 'AXTO 1/1 Hadith Calligraphy', symbol: 'AX1HADITH', works: 33_333_333, editions: 1 },
-  { key: 'one-stamp', base: 'one-stamp', g: false, one: true, name: 'AXTO 1/1 Stamps', symbol: 'AX1STAMP', works: 33_333_333, editions: 1 },
-];
+const ONE_NAMES = { quran: "AXTO 1/1 Qur'an Calligraphy", hadith: 'AXTO 1/1 Hadith Calligraphy', stamp: 'AXTO 1/1 Stamps' };
+export const ONE_COLS = Object.values(ONE_SETS).map((s) => ({
+  key: s.key, base: s.key, g: false, one: true, kind: s.kind, part: s.key.endsWith('-2') ? 2 : 1,
+  name: s.key.endsWith('-2') ? `${ONE_NAMES[s.kind]} II` : ONE_NAMES[s.kind], symbol: s.symbol, works: s.max, editions: 1,
+}));
 export const ONE_KEYS = ONE_COLS.map((c) => c.key);
 /** Semua koleksi yang dilisting mesin OpenSea (edisi 1–10 + 1/1). */
 export const LIST_COLS = [...OS_COLS, ...ONE_COLS];
@@ -97,10 +99,10 @@ export function tokenMetadata(info, meta, base = 'https://axto.io', gpu = null) 
 /** Metadata koleksi (contractURI) untuk koleksi 1/1 — sekaligus promosi koin komunitas AXTO. */
 export function oneContractMetadata(key, base = 'https://axto.io') {
   const c = osCol(key);
-  const what = { 'one-quran': ["Qur'an calligraphy", 'kaligrafi Al-Qur\'an'], 'one-hadith': ['hadith calligraphy', 'kaligrafi hadits'], 'one-stamp': ['stamps from imaginary realms', 'prangko negeri imajiner'] }[key];
+  const what = { quran: ["Qur'an calligraphy", 'kaligrafi Al-Qur\'an'], hadith: ['hadith calligraphy', 'kaligrafi hadits'], stamp: ['stamps from imaginary realms', 'prangko negeri imajiner'] }[c.kind];
   return {
     name: c.name,
-    description: `${c.works.toLocaleString('en-US')} one-of-one living artworks of ${what[0]} by AXTO — every design exists once, never repeated in any other AXTO collection${key === 'one-stamp' ? '' : ', with the sacred text reproduced unaltered'}. A single edition each, at a fixed price by rarity from $1 (Classic) to $250 (Masterpiece). Part of the axto.io NFT museum and its community coin AXTO, open from $1. / ${c.works.toLocaleString('id-ID')} karya hidup 1/1 ${what[1]} oleh AXTO — setiap desain hanya ada sekali dan tidak pernah terulang di koleksi AXTO mana pun. Satu edisi per karya, harga tetap menurut kelangkaan $1–$250. Bagian dari museum NFT axto.io dan koin komunitasnya, AXTO, mulai dari $1.`,
+    description: `${c.works.toLocaleString('en-US')} one-of-one living artworks of ${what[0]} by AXTO — every design exists once, never repeated in any other AXTO collection${c.kind === 'stamp' ? '' : ', with the sacred text reproduced unaltered'}. A single edition each, at a fixed price by rarity from $1 (Classic) to $250 (Masterpiece). Part of the axto.io NFT museum and its community coin AXTO, open from $1. / ${c.works.toLocaleString('id-ID')} karya hidup 1/1 ${what[1]} oleh AXTO — setiap desain hanya ada sekali dan tidak pernah terulang di koleksi AXTO mana pun. Satu edisi per karya, harga tetap menurut kelangkaan $1–$250. Bagian dari museum NFT axto.io dan koin komunitasnya, AXTO, mulai dari $1.`,
     image: `${base}/logo-512.png`,
     banner_image: `${base}/og/${key}.svg`,
     external_link: `${base}/en/opensea`,

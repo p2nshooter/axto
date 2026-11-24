@@ -13,7 +13,9 @@
  *     publik ditulis ke R2 axto-nft-data/os/showcase-<c>.json (dibaca worker).
  *  5. Listing HARGA TETAP per token (USD → ETH memakai Chainlink ETH/USD di Base, satu tanda tangan Seaport bulk per
  *     batch), kedaluwarsa sendiri setelah 30 hari lalu diperbarui dengan harga ETH terbaru. Tanpa lelang.
- *  6. ETH hasil penjualan di atas cadangan gas pencetakan diteruskan ke treasury pemilik (alamat dari R2 privat).
+ *  6. ETH hasil penjualan + royalti 10% (keduanya masuk wallet toko) di atas cadangan gas pencetakan diteruskan ke alamat
+ *     deposit ETH jaringan Base milik akun Indodax (axto-nft-data/pay/cfg.json, dibaca worker dari API Indodax); bila
+ *     alamat itu belum dibuat di Indodax, ke treasury pemilik (R2 privat). Setiap kiriman dicatat (pay/sweep/<tx>).
  *  7. Status ringkas → axto-nft-data/cfg/opensea.json (Portal admin).
  *
  * ENV: CLOUDFLARE_API_KEY, CLOUDFLARE_EMAIL, CLOUDFLARE_ACCOUNT_ID, OPENSEA_API_KEY, CHAIN_ID (8453), [BUDGET_MIN], [OS_WINDOW]
@@ -42,6 +44,8 @@ const MINT_GAS = (n) => 60_000n + 60_000n * BigInt(n); // batas gas mintBatch (t
 const LOG_CHUNK = 5_000; // blok per eth_getLogs
 export const RESERVE = ethers.parseEther('0.0005'); // cadangan gas pencetakan edisi berikutnya di wallet toko
 const SWEEP_MIN = ethers.parseEther('0.002'); // teruskan ke treasury bila saldo wallet toko ≥ 0,002 ETH
+/** Kiriman ke Indodax minimal 0,01 ETH: deposit di bawah batas minimum bursa tidak dikreditkan. */
+export const SWEEP_MIN_EXCHANGE = ethers.parseEther('0.01');
 const ABI = [
   'event Transfer(address indexed from, address indexed to, uint256 indexed tokenId)',
   'function mintBatch(address to, uint256[] tokenIds)',
@@ -124,6 +128,13 @@ export async function run({ io = realIO(), chainId: chainIn = Number(process.env
   let priv = {};
   try { priv = JSON.parse(io.r2get('axto-nft-data/private/config.json') || '{}'); } catch { priv = {}; }
   const treasury = ethers.isAddress(priv.wallets?.treasury ?? '') ? priv.wallets.treasury : null;
+  // alamat deposit ETH jaringan Base milik akun Indodax (pemilik: „semua ter central menggunakan indodax")
+  let exchange = null;
+  try {
+    const pc = JSON.parse(io.r2get('axto-nft-data/pay/cfg.json') || '{}');
+    const a = pc.opts?.find((o) => o.coin === 'eth')?.nets?.find((n) => n.net === 'base')?.addr ?? '';
+    if (ethers.isAddress(a)) exchange = ethers.getAddress(a);
+  } catch { exchange = null; }
 
   const stKey = `axto-vault-data/opensea-${chainId}.json`;
   const st = JSON.parse(io.r2get(stKey) || '{}');
@@ -254,17 +265,21 @@ export async function run({ io = realIO(), chainId: chainIn = Number(process.env
     }
   }
 
-  // 6) teruskan hasil penjualan ke treasury, sisakan cadangan gas pencetakan edisi berikutnya
+  // 6) teruskan hasil penjualan + royalti ke Indodax (atau treasury), sisakan cadangan gas pencetakan edisi berikutnya
   const bal = await provider.getBalance(wallet.address);
-  if (treasury && bal >= SWEEP_MIN) {
-    const reserve = 21_000n * maxFee + RESERVE;
-    if (bal > reserve) {
-      const tx = await wallet.sendTransaction({ to: treasury, value: bal - reserve, gasLimit: 21_000n, maxFeePerGas: maxFee, maxPriorityFeePerGas: tip, nonce: nonce++ });
-      await tx.wait();
-      status.swept = { eth: ethers.formatEther(bal - reserve), tx: tx.hash };
-      log(`Hasil penjualan ${ethers.formatEther(bal - reserve)} ETH → treasury (${tx.hash})`);
-    }
-  } else if (!treasury && bal >= SWEEP_MIN) status.sweep = 'alamat treasury belum ada di R2 privat';
+  const dest = exchange ?? treasury;
+  const reserve = 21_000n * maxFee + RESERVE;
+  const amount = bal > reserve ? bal - reserve : 0n;
+  if (dest && amount >= (exchange ? SWEEP_MIN_EXCHANGE : SWEEP_MIN)) {
+    const tx = await wallet.sendTransaction({ to: dest, value: amount, gasLimit: 21_000n, maxFeePerGas: maxFee, maxPriorityFeePerGas: tip, nonce: nonce++ });
+    await tx.wait();
+    const to = exchange ? 'indodax' : 'treasury';
+    // dicatat agar sinkron deposit Indodax mengenalinya sebagai setoran hasil penjualan, bukan pembayaran member
+    io.r2put(`axto-nft-data/pay/sweep/${tx.hash.toLowerCase()}.json`, JSON.stringify({ tx: tx.hash, to, eth: ethers.formatEther(amount), at: new Date().toISOString() }));
+    status.swept = { eth: ethers.formatEther(amount), tx: tx.hash, to };
+    log(`Hasil penjualan ${ethers.formatEther(amount)} ETH → ${to} (${tx.hash})`);
+  } else if (!dest && amount >= SWEEP_MIN) status.sweep = 'alamat deposit ETH Base Indodax & treasury belum ada';
+  else if (!exchange && amount >= SWEEP_MIN) status.sweep = 'alamat deposit ETH jaringan Base di Indodax belum dibuat — sementara ke treasury';
 
   const base = { collections: summary, minted, sold };
   // 5) listing harga tetap. Zero hand admin (#48): berjalan sendiri; admin hanya BISA menjeda (cfg/opensea-pause.json).
