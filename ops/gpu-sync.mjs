@@ -46,7 +46,16 @@ export const SPACES = [
 
 export function realIO() {
   const tmp = mkdtempSync(join(tmpdir(), 'axto-gpu-'));
-  const wr = (args) => execFileSync('npx', ['--yes', 'wrangler@4.156.1', 'r2', 'object', ...args, '--remote'], { stdio: 'pipe' });
+  // galat sementara R2 (mis. 500 „internal error") dicoba ulang 4× berjeda 2/5/10 detik sebelum menyerah
+  const wr = (args) => {
+    for (let i = 0; ; i += 1) {
+      try { return execFileSync('npx', ['--yes', 'wrangler@4.156.1', 'r2', 'object', ...args, '--remote'], { stdio: 'pipe' }); } catch (e) {
+        if (args[0] === 'get' && /not found|10007|does not exist/i.test(String(e.stderr ?? e.message))) throw e;
+        if (i >= 3) throw e;
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, [2_000, 5_000, 10_000][i]);
+      }
+    }
+  };
   return {
     getText: (bk) => { const f = join(tmp, 'g'); try { wr(['get', bk, '--file', f]); return readFileSync(f, 'utf8'); } catch { return null; } },
     putText: (bk, text) => { const f = join(tmp, 'p'); writeFileSync(f, text); wr(['put', bk, '--file', f, '--content-type', 'application/json']); },
@@ -211,7 +220,12 @@ export async function run({ io = realIO(), fetchImpl = globalThis.fetch, now = D
       for (const spec of SPACES) {
         const r = await renderVideo(fetchImpl, ki < 0 ? null : hf[ki].key, spec, job, perMs);
         if (r.bytes) {
-          io.putBytes(`axto-nft-data/gpu/${job.c}/${job.id}.mp4`, r.bytes, 'video/mp4');
+          try { io.putBytes(`axto-nft-data/gpu/${job.c}/${job.id}.mp4`, r.bytes, 'video/mp4'); } catch (e) {
+            // penyimpanan gagal setelah dicoba ulang → karya ini dicoba lagi putaran berikutnya, putaran tetap lanjut
+            last = { err: 'r2', msg: String(e.message).slice(0, 120) };
+            errs.r2 = (errs.r2 ?? 0) + 1;
+            break;
+          }
           made[job.c].push(job.id);
           state.done[jk(job)] = { at: new Date(now()).toISOString(), bytes: r.bytes.length, space: spec.space, via: ki < 0 ? 'anonim' : 'kunci' };
           delete state.failed[jk(job)];
@@ -227,7 +241,7 @@ export async function run({ io = realIO(), fetchImpl = globalThis.fetch, now = D
     }
     n += 1;
     if (!ok) state.failed[jk(job)] = { n: (state.failed[jk(job)]?.n ?? 0) + 1, at: now(), err: last?.err ?? 'no_key', msg: last?.msg ?? null };
-    io.putText('axto-vault-data/gpu-video.json', JSON.stringify(state));
+    try { io.putText('axto-vault-data/gpu-video.json', JSON.stringify(state)); } catch (e) { log(`status sementara tidak tersimpan (dicoba lagi di akhir): ${String(e.message).slice(0, 120)}`); }
   }
 
   // 4) tandai vid: dokumen dibaca ULANG tepat sebelum ditulis

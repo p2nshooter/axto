@@ -162,3 +162,28 @@ test('versi render naik: catatan gagal cara lama dihapus, karya langsung diantre
   assert.equal(st.v, RENDER_V);
   assert.equal(st.failed[`quran:${a}:v${QA_V}`].n, 1, 'dihitung ulang dari awal');
 });
+
+test('galat penyimpanan R2 tidak menghentikan putaran: status per karya & video gagal disimpan → lanjut, dicatat', async () => {
+  const io = mkIO();
+  const CF = 'cf-test-key';
+  io.files['axto-vault-data/api-keys.enc'] = _seal.sealV(JSON.stringify({ at: 'x', keys: [] }), _seal.hkey(CF, 'axto:API_KEYS'));
+  const [a, b] = showcaseIds('hadith').ids;
+  io.files['axto-nft-data/os/gpu-hadith.json'] = JSON.stringify({ ids: [a, b], serial: { [a]: 1, [b]: 2 }, by: {}, qa: { [a]: { v: QA_V }, [b]: { v: QA_V } } });
+  let gagalTulis = 2;
+  const putText = io.putText;
+  io.putText = (k, v) => { if (k === 'axto-vault-data/gpu-video.json' && gagalTulis-- > 0) throw new Error('500 internal error'); return putText(k, v); };
+  io.putBytes = () => { throw new Error('500 internal error'); };
+  const fetchImpl = async (url) => {
+    const u = String(url);
+    if (u.endsWith('/call/image_to_video')) return new Response(JSON.stringify({ event_id: 'q' }));
+    if (u.endsWith('/call/image_to_video/q')) return new Response('event: complete\ndata: [{"video":{"url":"https://x.hf.space/file/o.mp4"}}]\n\n');
+    if (u === 'https://x.hf.space/file/o.mp4') return new Response(new Uint8Array(30_000));
+    return new Response('', { status: 500 });
+  };
+  const logs = [];
+  const r = await run({ io, fetchImpl, cf: CF, log: (x) => logs.push(x), now: () => Date.UTC(2026, 10, 24, 21), perMs: 1000 });
+  assert.equal(r.video.antrean, 2, 'kedua karya tetap diproses');
+  assert.equal(r.video.gagal.r2, 2);
+  assert.ok(logs.some((l) => /tidak tersimpan/.test(l)));
+  assert.ok(JSON.parse(io.files['axto-vault-data/gpu-video.json']).failed, 'status akhir tersimpan');
+});
