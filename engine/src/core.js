@@ -168,12 +168,16 @@ export const STAKE_SETS = {
  * Azul 28 Mei 2026), sedangkan premint 33,3 jt karya dalam satu konstruktor butuh ±20,2 jt gas. Bagian II memakai nomor
  * desain SESUDAH bagian I (`skip` + jumlah karya bagian I) → tetap satu urutan, tidak ada desain kembar.
  */
-const ONE_HALF = { quran: [16_666_667, 16_666_667], hadith: [16_666_667, 16_666_666], stamp: [16_666_667, 16_666_666] };
+const W1 = 16_666_667;
+/** Jumlah karya per bagian. Bagian I & II = 100 jt karya inti; III & IV = tambahan (pemilik 25 Nov 2026: sisa dana deployer
+ *  dipakai untuk karya 1/1 tambahan ke OpenSea, bukan seri G-) — hanya dideploy bila sisa saldo deployer cukup. */
+const ONE_PARTS = { quran: [W1, W1, W1, W1], hadith: [W1, W1 - 1, W1, W1], stamp: [W1, W1 - 1, W1, W1] };
 const ONE_SYM = { quran: 'AX1QURAN', hadith: 'AX1HADITH', stamp: 'AX1STAMP' };
-export const ONE_SETS = Object.fromEntries(Object.entries(ONE_HALF).flatMap(([kind, [a, b]]) => [
-  [`one-${kind}`, { key: `one-${kind}`, kind, max: a, salt: `axto/one-${kind}/v1`, exclusive: false, one: true, after: kind, skip: 20_000_000, symbol: ONE_SYM[kind] }],
-  [`one-${kind}-2`, { key: `one-${kind}-2`, kind, max: b, salt: `axto/one-${kind}/v1`, exclusive: false, one: true, after: kind, skip: 20_000_000 + a, symbol: `${ONE_SYM[kind]}2` }],
-]));
+export const ONE_SETS = Object.fromEntries(Object.entries(ONE_PARTS).flatMap(([kind, parts]) => parts.map((max, i) => {
+  const key = i === 0 ? `one-${kind}` : `one-${kind}-${i + 1}`;
+  const skip = 20_000_000 + parts.slice(0, i).reduce((a, b) => a + b, 0);
+  return [key, { key, kind, max, salt: `axto/one-${kind}/v1`, exclusive: false, one: true, after: kind, skip, part: i + 1, extra: i >= 2, symbol: i === 0 ? ONE_SYM[kind] : `${ONE_SYM[kind]}${i + 1}` }];
+})));
 /** Batas gas per transaksi di Base (EIP-7825). Setiap transaksi deploy harus jauh di bawahnya. */
 export const TX_GAS_CAP = 16_777_216;
 /** Nomor „sesudah publik" yang dicadangkan untuk koleksi staking (kontrak staking maks. 50 jt → ≤ 16,7 jt per himpunan). */

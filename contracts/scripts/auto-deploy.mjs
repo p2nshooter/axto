@@ -24,7 +24,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHmac, createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 import { ethers } from 'ethers';
-import { OS_COLS, WORKS, MAX_EDITIONS, ONE_COLS } from '../../engine/src/opensea.js';
+import { OS_COLS, WORKS, MAX_EDITIONS, ONE_COLS, ONE_CORE, ONE_EXTRA } from '../../engine/src/opensea.js';
 import { STAKE_KEY, STAKE_WORKS, STAKE_MAX } from '../../engine/src/stake.js';
 import { collection, TX_GAS_CAP } from '../../engine/src/core.js';
 
@@ -46,7 +46,12 @@ const EXCLUSIVE_COLS = [['ex-time', 'AXTO Exclusive Time', 'AXXTIME'], ['ex-stam
 const STAKE_COLS = [[STAKE_KEY, 'AXTO Staking', 'AXSTAKE']];
 /** Koleksi 1/1 (pemilik 24 Nov 2026: 100 jt karya 1/1 ke OpenSea, „3 koleksi besar") — tiap tema 2 kontrak ±16,7 jt karya
  *  karena batas gas per transaksi Base (EIP-7825). */
-const ONE_DEPLOY = ONE_COLS.map((c) => [c.key, c.name, c.symbol]);
+const ONE_DEPLOY = ONE_CORE.map((c) => [c.key, c.name, c.symbol]);
+/** 1/1 tambahan (bagian III, IV; pemilik 25 Nov 2026: sisa dana deployer → karya 1/1 tambahan ke OpenSea, bukan seri G-).
+ *  Dideploy SETELAH koin + semua koleksi inti aktif & terdaftar, satu per satu, hanya bila saldo deployer cukup. */
+const EXTRA_DEPLOY = ONE_EXTRA.map((c) => [c.key, c.name, c.symbol]).slice(0, Number(process.env.ONE_EXTRA_LIMIT ?? ONE_EXTRA.length));
+/** Cukupkah saldo untuk satu transaksi: batas gas × maxFee (yang diminta node di muka) + cadangan biaya data L1. */
+export const fitsBudget = (balance, gasLimit, maxFee, reserve = 5_000_000_000_000n) => balance >= gasLimit * maxFee + reserve;
 const COLS = [...OPENSEA_COLS, ...EXCLUSIVE_COLS, ...STAKE_COLS, ...ONE_DEPLOY];
 /** Karya per koleksi 1/1 yang tercetak saat deploy (uji lokal boleh mengecilkannya lewat ONE_WORKS). */
 export const oneWorks = (key) => Number(process.env.ONE_WORKS || ONE_COLS.find((c) => c.key === key).works);
@@ -156,14 +161,18 @@ async function main() {
   // kontrak sudah aktif di jaringan ini → tidak ada yang perlu dikerjakan
   const prevSt = JSON.parse((LOCAL ? null : r2get(`axto-vault-data/deploy-${chainId}.json`)) || LOCALSTORE[`axto-vault-data/deploy-${chainId}.json`] || '{}');
   const missing = COLS.filter(([k]) => !prevSt.collections?.[k]).map(([k]) => k);
+  const extraMissing = EXTRA_DEPLOY.filter(([k]) => !prevSt.collections?.[k]).length;
   if (!LOCAL && r2get(`axto-nft-data/cfg/contracts-${chainId}.json`) && !missing.length) {
     const prev = prevSt;
     if (prev.done && !prev.verified?.etherscan) {
       prev.verified = await verifyAll(chainId, prev);
       r2put(`axto-vault-data/deploy-${chainId}.json`, JSON.stringify(prev));
     }
-    log(`Kontrak ${net.name} sudah aktif — selesai.`);
-    return { done: true };
+    // 1/1 tambahan masih ada yang belum → lanjut (hanya bila saldo cukup); selain itu selesai
+    if (!extraMissing) {
+      log(`Kontrak ${net.name} sudah aktif — selesai.`);
+      return { done: true };
+    }
   }
 
   let pk = LOCAL ? process.env.LOCAL_KEY : null;
@@ -243,6 +252,18 @@ async function main() {
     if (r.gasUsed > BigInt(st.maxTxGas ?? 0)) st.maxTxGas = String(r.gasUsed);
     return r;
   };
+  // 1/1: ERC-721 + ERC-2309, semua karya (satu edisi) tercetak ke wallet toko, disetujui konduit OpenSea → dilisting mesin
+  // wallet toko dengan harga tetap menurut tier. Tanpa minter: tidak ada edisi berikutnya.
+  const oneCfg = (k, name, sym) => {
+    const n = oneWorks(k);
+    return {
+      name, symbol: sym, maxSupply: n, owner: ADMIN, royaltyReceiver: STORE,
+      baseURI: `${BASE}/api/token/${k}/`, contractURI: `${BASE}/api/contract/${k}`,
+      custody: STORE, premint: n, operator: OPENSEA_CONDUIT, signer: ethers.ZeroAddress,
+      minter: ethers.ZeroAddress, editionStride: 0, validator: TRANSFER_VALIDATOR, operators: ROYALTY_OPERATORS,
+    };
+  };
+  let fresh = 0; // kontrak yang dideploy pada putaran ini (verifikasi BaseScan hanya bila ada)
   const deploy = async (key, name, ...args) => {
     if (st[key]) return st[key];
     status(`deploy ${key}`);
@@ -258,6 +279,7 @@ async function main() {
     await track(Promise.resolve(c.deploymentTransaction()));
     st[key] = await c.getAddress();
     st.verify = { ...(st.verify ?? {}), [st[key]]: { id: `${a.source}:${a.contractName}`, args: f.interface.encodeDeploy(args).slice(2) } };
+    fresh += 1;
     save();
     log(`✓ ${key} ${st[key]}`);
     return st[key];
@@ -300,16 +322,7 @@ async function main() {
       };
       st.collections[k] = await deploy(`col:${k}`, 'AxtoCollection', cfg);
     } else if (k.startsWith('one-')) {
-      // 1/1: ERC-721 + ERC-2309, semua karya (satu edisi) tercetak ke wallet toko, disetujui konduit OpenSea → dilisting
-      // mesin wallet toko dengan harga tetap menurut tier. Tanpa minter: tidak ada edisi berikutnya.
-      const n = oneWorks(k);
-      const cfg = {
-        name, symbol: sym, maxSupply: n, owner: ADMIN, royaltyReceiver: STORE,
-        baseURI: `${BASE}/api/token/${k}/`, contractURI: `${BASE}/api/contract/${k}`,
-        custody: STORE, premint: n, operator: OPENSEA_CONDUIT, signer: ethers.ZeroAddress,
-        minter: ethers.ZeroAddress, editionStride: 0, validator: TRANSFER_VALIDATOR, operators: ROYALTY_OPERATORS,
-      };
-      st.collections[k] = await deploy(`col:${k}`, 'AxtoCollection', cfg);
+      st.collections[k] = await deploy(`col:${k}`, 'AxtoCollection', oneCfg(k, name, sym));
     } else {
       // OpenSea: ERC-721 + ERC-2309 — edisi 1 semua karya tercetak di konstruktor ke wallet toko (kustodi & minter)
       const cfg = {
@@ -329,19 +342,54 @@ async function main() {
   await step('owner token → wallet koin', (o) => T.transferOwnership(COIN, o));
   st.done = true;
   save();
-  if (!LOCAL) { st.verified = await verifyAll(chainId, st); save(); }
-
-  const body = JSON.stringify({ chainId, token, store: STORE, collections: st.collections, standard: 'erc721-editions', works: OS_WORKS });
-  if (!LOCAL) {
-    const key = process.env.ENGINE_HMAC_KEY || createHmac('sha256', process.env.CLOUDFLARE_API_KEY).update('axto:ENGINE_HMAC_KEY').digest('hex');
-    const ts = Date.now();
-    const sig = createHmac('sha256', key).update(`${ts}.${body}`).digest('hex');
-    const r = await (await fetch(`${BASE}/internal/contracts`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-axto-ts': String(ts), 'x-axto-sig': sig }, body })).json();
-    if (!r.ok) throw new Error(`simpan ke worker gagal: ${JSON.stringify(r)}`);
-    status('selesai', { contracts: JSON.parse(body) });
+  const register = async (extra = {}) => {
+    const body = JSON.stringify({ chainId, token, store: STORE, collections: st.collections, standard: 'erc721-editions', works: OS_WORKS });
+    if (!LOCAL) {
+      if (fresh || !st.verified?.etherscan) { st.verified = await verifyAll(chainId, st); save(); }
+      const key = process.env.ENGINE_HMAC_KEY || createHmac('sha256', process.env.CLOUDFLARE_API_KEY).update('axto:ENGINE_HMAC_KEY').digest('hex');
+      const ts = Date.now();
+      const sig = createHmac('sha256', key).update(`${ts}.${body}`).digest('hex');
+      const r = await (await fetch(`${BASE}/internal/contracts`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-axto-ts': String(ts), 'x-axto-sig': sig }, body })).json();
+      if (!r.ok) throw new Error(`simpan ke worker gagal: ${JSON.stringify(r)}`);
+      status('selesai', { contracts: JSON.parse(body), ...extra });
+    }
+    return JSON.parse(body);
+  };
+  // koin + koleksi inti terdaftar dulu (situs langsung jalan), baru 1/1 tambahan
+  if (fresh || !extraMissing || LOCAL) await register();
+  const before = fresh;
+  let waitingExtra = null;
+  for (const [k, name, sym] of EXTRA_DEPLOY) {
+    if (st.collections[k]) continue;
+    const a = art('AxtoCollection');
+    const f = new ethers.ContractFactory(a.abi, a.bytecode, wallet);
+    const cfg = oneCfg(k, name, sym);
+    const est = await provider.estimateGas({ ...(await f.getDeployTransaction(cfg)), from: me });
+    if (est > TX_GAS_SAFE) { log(`${k}: perkiraan gas ${est} melewati batas aman — dilewati`); break; }
+    const blk = await provider.getBlock('latest');
+    const tipX = (await provider.getFeeData()).maxPriorityFeePerGas ?? 1_000_000n;
+    const maxFee = ((blk?.baseFeePerGas ?? 10_000_000n) * 3n) / 2n + tipX;
+    const gasLimit = (est * 11n) / 10n;
+    const balNow = await provider.getBalance(me);
+    if (!fitsBudget(balNow, gasLimit, maxFee)) {
+      waitingExtra = { next: k, perluEth: ethers.formatEther(gasLimit * maxFee + 5_000_000_000_000n), saldoEth: ethers.formatEther(balNow) };
+      log(`1/1 tambahan berhenti di ${k}: saldo ${ethers.formatEther(balNow)} ETH, perlu ±${waitingExtra.perluEth} ETH per koleksi`);
+      break;
+    }
+    status(`deploy col:${k} (1/1 tambahan)`);
+    const c = await f.deploy(cfg, { nonce: nonce++, gasLimit, maxFeePerGas: maxFee, maxPriorityFeePerGas: tipX });
+    await track(Promise.resolve(c.deploymentTransaction()));
+    st.collections[k] = await c.getAddress();
+    st.verify = { ...(st.verify ?? {}), [st.collections[k]]: { id: `${a.source}:${a.contractName}`, args: f.interface.encodeDeploy([cfg]).slice(2) } };
+    fresh += 1;
+    save();
+    log(`✓ col:${k} ${st.collections[k]} (1/1 tambahan)`);
   }
-  log(`✅ Semua kontrak aktif di ${net.name}. Gas terpakai: ${st.gasUsed} (transaksi terbesar ${st.maxTxGas})`);
-  return { done: true, gasUsed: BigInt(st.gasUsed), maxTxGas: BigInt(st.maxTxGas ?? 0), contracts: JSON.parse(body), deployer: me };
+  const extraDone = EXTRA_DEPLOY.filter(([k]) => st.collections[k]).length;
+  const contracts = fresh > before || LOCAL ? await register({ extra: { aktif: extraDone, menunggu: waitingExtra } }) : { chainId, token, store: STORE, collections: st.collections };
+  if (!LOCAL && fresh === before && waitingExtra) status('selesai', { extra: { aktif: extraDone, menunggu: waitingExtra } });
+  log(`✅ Semua kontrak aktif di ${net.name}. 1/1 tambahan: ${extraDone}/${EXTRA_DEPLOY.length}. Gas terpakai: ${st.gasUsed} (transaksi terbesar ${st.maxTxGas})`);
+  return { done: true, gasUsed: BigInt(st.gasUsed), maxTxGas: BigInt(st.maxTxGas ?? 0), contracts, deployer: me, extraDone, waitingExtra };
 }
 
 export { main, LOCALSTORE };
