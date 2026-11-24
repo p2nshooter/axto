@@ -77,14 +77,27 @@ export async function run({ io = realIO(), log = console.log } = {}) {
     st[c] = { ...doc, vid: { ...(doc.vid ?? {}), ...Object.fromEntries(ok.map((id) => [id, true])) } };
     io.putText(`axto-nft-data/os/gpu-${c}.json`, JSON.stringify(st[c]));
   }
+  // diagnosis mesin video (pemilik 24 Nov 2026: „G- berhenti"): berapa yang jadi, kapan terakhir, berapa yang menyerah
+  const vf = vdone.failed ?? {};
+  const doneAt = Object.values(vdone.done ?? {}).map((d) => Date.parse(d.at)).filter(Number.isFinite).sort((a, b) => b - a);
+  const kj = (j) => `${j.c}:${j.id}:v${j.v}`;
+  const video = {
+    done: Object.keys(vdone.done ?? {}).length,
+    done24h: doneAt.filter((t) => Date.now() - t < 86_400_000).length,
+    lastDone: doneAt[0] ? new Date(doneAt[0]).toISOString() : null,
+    queuedGivenUp: videoJobs.filter((j) => (vf[kj(j)] ?? 0) >= 4).length,
+    queuedFailedOnce: videoJobs.filter((j) => (vf[kj(j)] ?? 0) > 0 && (vf[kj(j)] ?? 0) < 4).length,
+    spaces: Object.values(vdone.done ?? {}).reduce((a, d) => ({ ...a, [d.space]: (a[d.space] ?? 0) + 1 }), {}),
+  };
+  log(`Mesin video: ${JSON.stringify(video)}`);
   const summary = Object.fromEntries(GPU_KEYS.map((c) => [c, (st[c].ids ?? []).filter((id) => lolos(c, id)).length]));
   const beranimasi = Object.fromEntries(GPU_KEYS.map((c) => [c, Object.keys(st[c].vid ?? {}).length]));
   log(`Seri G- lolos mutu: ${JSON.stringify(summary)} · beranimasi (tampil) ${JSON.stringify(beranimasi)} · video baru ${made['video-gpu'] ?? 0} · antrean video ${videoJobs.length}`);
-  return { summary, made, beranimasi, videoQueued: videoJobs.length };
+  return { summary, made, beranimasi, videoQueued: videoJobs.length, video };
 }
 
 if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).href) {
   run().then((r) => {
-    if (process.env.GITHUB_STEP_SUMMARY) writeFileSync(process.env.GITHUB_STEP_SUMMARY, `## Seri G- (lolos mutu → video GPU → tampil)\n\n${Object.entries(r.summary).map(([c, n]) => `- ${c}: ${n} lolos mutu, ${r.beranimasi[c]} beranimasi`).join('\n')}\n- video baru: ${r.made['video-gpu'] ?? 0} · antrean video: ${r.videoQueued}\n`, { flag: 'a' });
+    if (process.env.GITHUB_STEP_SUMMARY) writeFileSync(process.env.GITHUB_STEP_SUMMARY, `## Seri G- (lolos mutu → video GPU → tampil)\n\n${Object.entries(r.summary).map(([c, n]) => `- ${c}: ${n} lolos mutu, ${r.beranimasi[c]} beranimasi`).join('\n')}\n- video baru: ${r.made['video-gpu'] ?? 0} · antrean video: ${r.videoQueued}\n- mesin video: ${JSON.stringify(r.video)}\n`, { flag: 'a' });
   }).catch((e) => { console.error(e.message || e); process.exit(1); });
 }
