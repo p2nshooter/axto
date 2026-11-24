@@ -26,7 +26,7 @@ import { createHmac, createCipheriv, createDecipheriv, randomBytes } from 'node:
 import { ethers } from 'ethers';
 import { OS_COLS, WORKS, MAX_EDITIONS, ONE_COLS } from '../../engine/src/opensea.js';
 import { STAKE_KEY, STAKE_WORKS, STAKE_MAX } from '../../engine/src/stake.js';
-import { collection } from '../../engine/src/core.js';
+import { collection, TX_GAS_CAP } from '../../engine/src/core.js';
 
 const ADMIN = '0x38Cd3F76a132f70b12C9E4ea6aDAFaCF62483166';
 const COIN = '0x6918A3C9a58E71B3bca993e8cDD2630D2DDB6469';
@@ -44,7 +44,8 @@ const OPENSEA_COLS = OS_COLS.map((c) => [c.key, c.name, c.symbol]);
 const EXCLUSIVE_COLS = [['ex-time', 'AXTO Exclusive Time', 'AXXTIME'], ['ex-stamp', 'AXTO Exclusive Stamp', 'AXXSTAMP'], ['ex-quran', "AXTO Exclusive Qur'an", 'AXXQURAN'], ['ex-model', 'AXTO Exclusive Model', 'AXXMODEL'], ['ex-hadith', 'AXTO Exclusive Hadith', 'AXXHADITH']];
 /** Koleksi hadiah staking koin AXTO (pemilik 24 Nov 2026): 10 jt karya 1/1 tercetak ke wallet toko, tidak pernah di-listing. */
 const STAKE_COLS = [[STAKE_KEY, 'AXTO Staking', 'AXSTAKE']];
-/** 3 koleksi 1/1 baru (pemilik 24 Nov 2026: 100 jt karya 1/1 ke OpenSea, „3 koleksi besar"). */
+/** Koleksi 1/1 (pemilik 24 Nov 2026: 100 jt karya 1/1 ke OpenSea, „3 koleksi besar") — tiap tema 2 kontrak ±16,7 jt karya
+ *  karena batas gas per transaksi Base (EIP-7825). */
 const ONE_DEPLOY = ONE_COLS.map((c) => [c.key, c.name, c.symbol]);
 const COLS = [...OPENSEA_COLS, ...EXCLUSIVE_COLS, ...STAKE_COLS, ...ONE_DEPLOY];
 /** Karya per koleksi 1/1 yang tercetak saat deploy (uji lokal boleh mengecilkannya lewat ONE_WORKS). */
@@ -69,9 +70,11 @@ export const ROYALTY_OPERATORS = [
   '0x0E00009d00d1000069ed00A908e00081F5006008',
 ].map((a) => ethers.getAddress(a.toLowerCase()));
 /** Gas terukur di ganache untuk seluruh urutan ini (lihat test/auto-deploy.test.mjs), dibulatkan ke atas: token + 10 koleksi
- *  OpenSea dengan edisi 1 (10 × ±7,7 jt) + 5 koleksi eksklusif + koleksi staking 10 jt karya 1/1 (±7,9 jt) + 3 koleksi 1/1
- *  × 33,3 jt karya (3 × ±19,9 jt) + daftar operator royalti. Pemilik 24 Nov 2026: dana deploy 0,00145539 ETH. */
-export const TOTAL_GAS = BigInt(process.env.TOTAL_GAS_OVERRIDE || 172_000_000);
+ *  OpenSea dengan edisi 1 (10 × ±8,2 jt) + 5 koleksi eksklusif + koleksi staking 10 jt karya 1/1 (±8,2 jt) + 6 kontrak 1/1
+ *  × ±16,7 jt karya (6 × ±11,6 jt) + daftar operator royalti. Pemilik 24 Nov 2026: dana deploy 0,00145539 ETH. */
+export const TOTAL_GAS = BigInt(process.env.TOTAL_GAS_OVERRIDE || 182_000_000);
+/** Batas aman satu transaksi: jauh di bawah batas Base 16.777.216 gas (EIP-7825) — melewati ini = desain salah, jangan kirim. */
+export const TX_GAS_SAFE = 15_000_000n;
 
 const LOCAL = !!process.env.LOCAL_RPC;
 const CHAIN = Number(process.env.CHAIN_ID || 8453);
@@ -194,6 +197,9 @@ async function main() {
     save();
   }
   const STORE = st.store;
+  // Royalti 10% ke wallet toko sistem (pemilik 24 Nov 2026: „hasil penjualan di opensea … dan fee nya langsung masuk ke
+  // indodax"): mesin OpenSea meneruskannya bersama hasil penjualan ke alamat deposit ETH (Base) Indodax dengan transfer
+  // biasa — royalti marketplace dibayar lewat transfer internal kontrak yang belum tentu dikreditkan bursa.
 
   // Dana pemilik pas-pasan (±0,0015 ETH, 24 Nov 2026): kebutuhan dihitung dari harga gas yang BENAR-BENAR dibayar
   // (base fee blok terakhir + tip), bukan batas maxFee (≈ 2× base fee). Tiap transaksi tetap memakai maxFee biasa; bila
@@ -204,7 +210,7 @@ async function main() {
   const paid = (head?.baseFeePerGas ?? fee.gasPrice ?? 10_000_000n) + tip;
   const spent = BigInt(st.gasUsed ?? 0);
   const left = TOTAL_GAS > spent ? TOTAL_GAS - spent : 0n;
-  const need = (left * paid * 5n) / 4n + ethers.parseEther('0.00002'); // +25% cadangan + biaya data L1 (kecil)
+  const need = (left * paid * 115n) / 100n + ethers.parseEther('0.00002'); // +15% cadangan + biaya data L1 (kecil)
   const bal = await provider.getBalance(me);
   const status = (step, extra = {}) => {
     const s = { address: me, store: st.store, chainId, network: net.name, balance: ethers.formatEther(bal), need: ethers.formatEther(need), step, at: new Date().toISOString(), ...extra };
@@ -229,13 +235,26 @@ async function main() {
 
   const art = (n) => JSON.parse(readFileSync(new URL(`../out/${n}.json`, import.meta.url), 'utf8'));
   let nonce = await provider.getTransactionCount(me, 'latest');
-  const track = async (txp) => { const tx = await txp; const r = await tx.wait(); st.gasUsed = String(BigInt(st.gasUsed ?? 0) + r.gasUsed); return r; };
+  const track = async (txp) => {
+    const tx = await txp;
+    const r = await tx.wait();
+    if (r.status !== 1) throw new Error(`transaksi gagal: ${tx.hash}`);
+    st.gasUsed = String(BigInt(st.gasUsed ?? 0) + r.gasUsed);
+    if (r.gasUsed > BigInt(st.maxTxGas ?? 0)) st.maxTxGas = String(r.gasUsed);
+    return r;
+  };
   const deploy = async (key, name, ...args) => {
     if (st[key]) return st[key];
     status(`deploy ${key}`);
     const a = art(name);
     const f = new ethers.ContractFactory(a.abi, a.bytecode, wallet);
-    const c = await f.deploy(...args, { nonce: nonce++ });
+    // gas diperkirakan dulu: di atas batas aman → berhenti dengan pesan jelas (tidak ada transaksi terkirim, tidak ada biaya)
+    const req = await f.getDeployTransaction(...args);
+    const est = await provider.estimateGas({ ...req, from: me });
+    if (est > TX_GAS_SAFE) throw new Error(`${key}: perkiraan gas ${est} melewati batas aman ${TX_GAS_SAFE} (batas Base ${TX_GAS_CAP})`);
+    let gasLimit = (est * 11n) / 10n;
+    if (gasLimit > BigInt(TX_GAS_CAP)) gasLimit = BigInt(TX_GAS_CAP);
+    const c = await f.deploy(...args, { nonce: nonce++, gasLimit });
     await track(Promise.resolve(c.deploymentTransaction()));
     st[key] = await c.getAddress();
     st.verify = { ...(st.verify ?? {}), [st[key]]: { id: `${a.source}:${a.contractName}`, args: f.interface.encodeDeploy(args).slice(2) } };
@@ -264,7 +283,7 @@ async function main() {
     if (k.startsWith('ex-')) {
       // eksklusif axto.io: ERC-1155, 10 edisi per karya, tercetak saat member WD (gas member)
       const cfg = {
-        name, symbol: sym, owner: ADMIN, royaltyReceiver: TREASURY,
+        name, symbol: sym, owner: ADMIN, royaltyReceiver: STORE,
         baseURI: `${BASE}/api/edition/${k}/`, contractURI: `${BASE}/api/contract/${k}`,
         custody: ethers.ZeroAddress, operator: ethers.ZeroAddress, releaser: ethers.ZeroAddress, signer,
         maxId: collection(k).max, editionCap: 10, validator: TRANSFER_VALIDATOR, operators: ROYALTY_OPERATORS,
@@ -274,7 +293,7 @@ async function main() {
       // hadiah staking: ERC-721 + ERC-2309, 10 jt karya 1/1 tercetak ke wallet toko; TANPA persetujuan konduit OpenSea →
       // tidak pernah di-listing (tidak bisa dibeli). Wallet toko mengirim hadiah dengan transferBatch (gas oleh axto.io).
       const cfg = {
-        name, symbol: sym, maxSupply: STAKE_MAX, owner: ADMIN, royaltyReceiver: TREASURY,
+        name, symbol: sym, maxSupply: STAKE_MAX, owner: ADMIN, royaltyReceiver: STORE,
         baseURI: `${BASE}/api/token/${k}/`, contractURI: `${BASE}/api/contract/${k}`,
         custody: STORE, premint: STAKE_PREMINT, operator: ethers.ZeroAddress, signer: ethers.ZeroAddress,
         minter: STORE, editionStride: 0, validator: TRANSFER_VALIDATOR, operators: ROYALTY_OPERATORS,
@@ -285,7 +304,7 @@ async function main() {
       // mesin wallet toko dengan harga tetap menurut tier. Tanpa minter: tidak ada edisi berikutnya.
       const n = oneWorks(k);
       const cfg = {
-        name, symbol: sym, maxSupply: n, owner: ADMIN, royaltyReceiver: TREASURY,
+        name, symbol: sym, maxSupply: n, owner: ADMIN, royaltyReceiver: STORE,
         baseURI: `${BASE}/api/token/${k}/`, contractURI: `${BASE}/api/contract/${k}`,
         custody: STORE, premint: n, operator: OPENSEA_CONDUIT, signer: ethers.ZeroAddress,
         minter: ethers.ZeroAddress, editionStride: 0, validator: TRANSFER_VALIDATOR, operators: ROYALTY_OPERATORS,
@@ -294,7 +313,7 @@ async function main() {
     } else {
       // OpenSea: ERC-721 + ERC-2309 — edisi 1 semua karya tercetak di konstruktor ke wallet toko (kustodi & minter)
       const cfg = {
-        name, symbol: sym, maxSupply: OS_WORKS * MAX_EDITIONS, owner: ADMIN, royaltyReceiver: TREASURY,
+        name, symbol: sym, maxSupply: OS_WORKS * MAX_EDITIONS, owner: ADMIN, royaltyReceiver: STORE,
         baseURI: `${BASE}/api/token/${k}/`, contractURI: `${BASE}/api/contract/${k}`,
         custody: STORE, premint: OS_WORKS, operator: OPENSEA_CONDUIT, signer: ethers.ZeroAddress,
         minter: STORE, editionStride: OS_WORKS, validator: TRANSFER_VALIDATOR, operators: ROYALTY_OPERATORS,
@@ -321,8 +340,8 @@ async function main() {
     if (!r.ok) throw new Error(`simpan ke worker gagal: ${JSON.stringify(r)}`);
     status('selesai', { contracts: JSON.parse(body) });
   }
-  log(`✅ Semua kontrak aktif di ${net.name}. Gas terpakai: ${st.gasUsed}`);
-  return { done: true, gasUsed: BigInt(st.gasUsed), contracts: JSON.parse(body), deployer: me };
+  log(`✅ Semua kontrak aktif di ${net.name}. Gas terpakai: ${st.gasUsed} (transaksi terbesar ${st.maxTxGas})`);
+  return { done: true, gasUsed: BigInt(st.gasUsed), maxTxGas: BigInt(st.maxTxGas ?? 0), contracts: JSON.parse(body), deployer: me };
 }
 
 export { main, LOCALSTORE };

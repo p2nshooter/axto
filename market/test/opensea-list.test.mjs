@@ -109,7 +109,21 @@ test('laku di OpenSea: edisi berikutnya dicetak & dilisting; karya yang edisi te
   // hasil penjualan → treasury, cadangan gas cetak tetap di wallet toko
   assert.ok(r.swept && Number(r.swept.eth) > 0);
   const left = await provider.getBalance(store.address);
-  assert.ok(left >= RESERVE && left < RESERVE + ethers.parseEther('0.001'), `sisa ${ethers.formatEther(left)}`);
+  assert.ok(left >= RESERVE && left < RESERVE + ethers.parseEther('0.001'), `sisa ${ethers.formatEther(left)}`);  assert.equal(r.swept.to, 'treasury', 'alamat deposit Indodax belum ada → treasury');
+  // alamat deposit ETH (Base) Indodax sudah dibaca worker → hasil penjualan + royalti ke Indodax, dicatat sebagai setoran
+  const EXCHANGE = '0x' + 'ec'.repeat(20);
+  R2['axto-nft-data/pay/cfg.json'] = JSON.stringify({ opts: [{ coin: 'eth', nets: [{ net: 'base', addr: EXCHANGE }] }], at: Date.now() });
+  await (await buyer.sendTransaction({ to: store.address, value: ethers.parseEther('0.004'), nonce: Number(await provider.send('eth_getTransactionCount', [buyer.address, 'latest'])) })).wait();
+  const small = await go({ budgetMs: 60_000 });
+  assert.equal(small.swept ?? null, null, 'di bawah 0,01 ETH tidak dikirim ke bursa (batas minimum deposit)');
+  await (await buyer.sendTransaction({ to: store.address, value: ethers.parseEther('0.02'), nonce: Number(await provider.send('eth_getTransactionCount', [buyer.address, 'latest'])) })).wait();
+  const balOf = async (a) => BigInt(await provider.send('eth_getBalance', [a, 'latest']));
+  const before = await balOf(EXCHANGE);
+  const r2 = await go({ budgetMs: 60_000 });
+  assert.equal(r2.swept.to, 'indodax');
+  assert.equal(await balOf(EXCHANGE) - before, ethers.parseEther(r2.swept.eth));
+  assert.ok(R2[`axto-nft-data/pay/sweep/${r2.swept.tx.toLowerCase()}.json`], 'setoran dicatat untuk sinkron deposit');
+  delete R2['axto-nft-data/pay/cfg.json'];
 });
 
 test('edisi terakhir: tidak ada edisi ke-(supply+1); admin menjeda listing; tanpa kontrak ERC-721 hanya menunggu', async () => {

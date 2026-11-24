@@ -183,7 +183,7 @@ test('100 juta karya 1/1 baru: tidak pernah sama dengan karya publik, hadiah sta
   assert.ok(Math.ceil(STAKE_MAX / STAKE_ORDER.length) <= STAKE_RESERVED, 'cadangan staking cukup untuk seluruh kontrak staking');
   const comboOf = (digits, radices) => digits.reduce((acc, x, i) => acc * radices[i] + x, 0);
   // Qur'an & hadits: nomor gaya di permutasi publik ayat/hadits itu sesudah publik DAN sesudah cadangan staking
-  for (const [key, saltOf, units] of [['one-quran', (u) => `axto/quran/v1:style:ayah:${u}`, 6236], ['one-hadith', (u) => `axto/hadith/v1:style:${u}`, 38_144]]) {
+  for (const [key, saltOf, units] of [['one-quran', (u) => `axto/quran/v1:style:ayah:${u}`, 6236], ['one-quran-2', (u) => `axto/quran/v1:style:ayah:${u}`, 6236], ['one-hadith', (u) => `axto/hadith/v1:style:${u}`, 38_144], ['one-hadith-2', (u) => `axto/hadith/v1:style:${u}`, 38_144]]) {
     const R = radicesOf(key);
     for (const id of [1, 2, 6236, 1_000_000, collection(key).max]) {
       const d = dna(key, id);
@@ -193,15 +193,25 @@ test('100 juta karya 1/1 baru: tidak pernah sama dengan karya publik, hadiah sta
     }
   }
   const R = radicesOf('stamp');
-  for (const id of [1, 33_333_333]) assert.ok(unpermute(comboOf(dna('one-stamp', id).digits, R), product(R), 'axto/stamp/v1:combo') >= collection('stamp').max + STAKE_RESERVED);
+  for (const key of ['one-stamp', 'one-stamp-2']) for (const id of [1, collection(key).max]) assert.ok(unpermute(comboOf(dna(key, id).digits, R), product(R), 'axto/stamp/v1:combo') >= collection('stamp').max + STAKE_RESERVED);
+  // bagian II melanjutkan nomor desain bagian I (satu urutan): karya 1 bagian II = nomor sesudah karya terakhir bagian I
+  assert.equal(unpermute(comboOf(dna('one-stamp-2', 1).digits, R), product(R), 'axto/stamp/v1:combo'), unpermute(comboOf(dna('one-stamp', collection('one-stamp').max).digits, R), product(R), 'axto/stamp/v1:combo') + 1);
+  for (const k of ['quran', 'hadith', 'stamp']) assert.equal(collection(`one-${k}-2`).skip, collection(`one-${k}`).skip + collection(`one-${k}`).max);
+  assert.equal(['one-quran', 'one-quran-2', 'one-hadith', 'one-hadith-2', 'one-stamp', 'one-stamp-2'].reduce((a, k) => a + collection(k).max, 0), 100_000_000);
   // sampel silang: 1/1 vs staking vs sesama 1/1
   const seen = new Set();
   const add = (d, label) => { const k = `${d.kind}:${d.series?.unit ?? ''}:${d.digits.join('.')}`; assert.ok(!seen.has(k), `${label} kembar`); seen.add(k); };
   for (let t = 1; t <= 15_000; t += 1) add(stakeDna(t), `staking ${t}`);
-  for (const key of ['one-quran', 'one-hadith', 'one-stamp']) for (let id = 1; id <= 5_000; id += 1) add(dna(key, id), `${key} ${id}`);
+  for (const key of ['one-quran', 'one-quran-2', 'one-hadith', 'one-hadith-2', 'one-stamp', 'one-stamp-2']) {
+    for (let id = 1; id <= 3_000; id += 1) add(dna(key, id), `${key} ${id}`);
+    const max = collection(key).max;
+    for (let id = max - 2_000 + 1; id <= max; id += 1) add(dna(key, id), `${key} ${id}`);
+  }
   // satu edisi, harga tier $1–$250
   const i = tokenInfo('one-quran', 42);
   assert.equal(i.supply, 1);
   assert.ok(i.priceUsd >= 1 && i.priceUsd <= 250);
-  assert.equal(tokenInfo('one-quran', 33_333_335), null);
+  assert.equal(tokenInfo('one-quran', 16_666_668), null);
+  assert.equal(tokenInfo('one-quran-2', 16_666_667).supply, 1);
+  assert.equal(tokenInfo('one-stamp-2', 16_666_667), null);
 });

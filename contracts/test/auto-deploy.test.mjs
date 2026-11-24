@@ -44,10 +44,17 @@ test('urutan lengkap selesai; gas di bawah anggaran yang dipakai untuk menghitun
   assert.ok(result.gasUsed <= mod.TOTAL_GAS, `gas ${result.gasUsed} > anggaran ${mod.TOTAL_GAS}`);
 });
 
-test('kepemilikan langsung ke pemilik: 19 koleksi → admin, AxtoToken → wallet koin; tanpa AuctionHouse/AxtoSale', async () => {
+test('setiap transaksi jauh di bawah batas gas per transaksi Base (16.777.216, EIP-7825)', () => {
+  console.log(`transaksi terbesar: ${result.maxTxGas} gas`);
+  assert.ok(result.maxTxGas > 0n);
+  assert.ok(result.maxTxGas <= mod.TX_GAS_SAFE, `transaksi ${result.maxTxGas} gas > batas aman ${mod.TX_GAS_SAFE}`);
+  assert.ok(mod.TX_GAS_SAFE < 16_777_216n);
+});
+
+test('kepemilikan langsung ke pemilik: 22 koleksi → admin, AxtoToken → wallet koin; tanpa AuctionHouse/AxtoSale', async () => {
   const own = async (a) => new ethers.Contract(a, ['function owner() view returns (address)'], provider).owner();
   const c = result.contracts;
-  assert.equal(Object.keys(c.collections).length, 19);
+  assert.equal(Object.keys(c.collections).length, 22);
   for (const a of Object.values(c.collections)) assert.equal(await own(a), ADMIN);
   assert.equal(await own(c.token), COIN);
   assert.equal(c.standard, 'erc721-editions');
@@ -76,9 +83,9 @@ test('koleksi hadiah staking: 10 jt karya 1/1 ke wallet toko, tidak disetujui ko
   await assert.rejects(col.connect(store).transferBatch(member, [3]), 'token yang sudah dikirim tidak bisa dikirim lagi');
 });
 
-test('100 juta karya 1/1 baru (3 koleksi besar): semua tercetak ke wallet toko, disetujui konduit OpenSea, tanpa edisi berikutnya', async () => {
+test('100 juta karya 1/1 baru (3 tema × 2 kontrak): semua tercetak ke wallet toko, disetujui konduit OpenSea, tanpa edisi berikutnya', async () => {
   const c = result.contracts;
-  const want = { 'one-quran': 33_333_334n, 'one-hadith': 33_333_333n, 'one-stamp': 33_333_333n };
+  const want = { 'one-quran': 16_666_667n, 'one-quran-2': 16_666_667n, 'one-hadith': 16_666_667n, 'one-hadith-2': 16_666_666n, 'one-stamp': 16_666_667n, 'one-stamp-2': 16_666_666n };
   let total = 0n;
   for (const [k, n] of Object.entries(want)) {
     const col = new ethers.Contract(c.collections[k], art('AxtoCollection').abi, provider);
@@ -110,7 +117,7 @@ test('10 koleksi OpenSea: edisi 1 dari 10 juta karya tercetak ke wallet toko (10
     assert.equal(await col.minters(storeW.address), true, k);
     assert.equal(await col.tokenURI(7), `https://axto.io/api/token/${k}/7`);
     const [recv, roy] = await col.royaltyInfo(1, 10_000n);
-    assert.equal(recv, TREASURY);
+    assert.equal(recv, storeW.address, 'royalti ke wallet toko → diteruskan ke Indodax');
     assert.equal(roy, 1000n);
     assert.equal(await col.getTransferValidator(), validator, `${k}: royalti ditegakkan sejak deploy`);
   }
@@ -188,7 +195,7 @@ test('royalti 10% tetap berlaku setelah WD (ERC-1155C): hanya marketplace dalam 
     for (const op of mod.ROYALTY_OPERATORS) assert.equal(await new ethers.Contract(validator, art('MockTransferValidator').abi, provider).isAccountWhitelistedByCollection(a, op), true);
     assert.equal(await col.supportsInterface('0x2a55205a'), true, 'ERC-2981');
     const [recv, roy] = await col.royaltyInfo(1, 10_000n);
-    assert.equal(recv, TREASURY);
+    assert.equal(recv, storeW.address, 'royalti ke wallet toko → diteruskan ke Indodax');
     assert.equal(roy, 1000n);
   }
   const col = new ethers.Contract(c.collections['ex-quran'], art('AxtoEditions').abi, member);
