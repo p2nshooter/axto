@@ -455,6 +455,12 @@ export async function syncDeposits(env, { now = Date.now(), force = false } = {}
         const okTime = !doneAt || doneAt >= Number(x?.at ?? 0) - 10 * 60_000;
         if (!x || x.coin !== coin || !okTime) id = null;
       }
+      // setoran hasil penjualan OpenSea + royalti dari wallet toko (market/opensea-list.mjs) — bukan pembayaran member
+      const sweep = e.txId ? await env.STORE.head(`pay/sweep/${String(e.txId).toLowerCase()}.json`) : null;
+      if (sweep) {
+        if (await createOnce(env.STORE, dkey, { id: null, sweep: true, units8: units8.toString(), tx: e.txId, net: e.network ?? null, at: now })) await appendLog(env.STORE, 'pay', { ev: 'sweep', coin, depositId: depId, units8: units8.toString(), tx: e.txId });
+        continue;
+      }
       if (!(await createOnce(env.STORE, dkey, { id, units8: units8.toString(), tx: e.txId ?? null, net: e.network ?? null, at: now }))) continue;
       if (!id) { await appendLog(env.STORE, 'pay', { ev: 'unmatched', coin, depositId: depId, units8: units8.toString(), tx: e.txId ?? null }); continue; }
       await applyDeposit(env, id, { id: depId, units8: units8.toString(), tx: e.txId ?? null }, now);
@@ -536,7 +542,7 @@ export async function adminView(env) {
   for (const coin of COIN_ORDER) {
     for (const o of (await listKeys(env.STORE, `pay/dep/${coin}/`, 2000)).slice(-200)) {
       const d = await readJSON(env.STORE, o.key);
-      if (d && !d.id) unmatched.push({ coin, depositId: o.key.split('/').pop(), amount: fromUnits8(BigInt(d.units8)), tx: d.tx, at: d.at });
+      if (d && !d.id && !d.sweep) unmatched.push({ coin, depositId: o.key.split('/').pop(), amount: fromUnits8(BigInt(d.units8)), tx: d.tx, at: d.at });
     }
   }
   const recent = [];

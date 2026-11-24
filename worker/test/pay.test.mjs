@@ -171,6 +171,20 @@ test('kurang bayar: ditunggu sampai kedaluwarsa, lalu dikreditkan sesuai yang di
   assert.ok(got > 990_000n && got <= 1_000_000n, `≈ 1 AXTO untuk $10 dari $20, dapat ${got}`);
 });
 
+test('setoran hasil penjualan OpenSea dari wallet toko (pay/sweep) tidak pernah dianggap pembayaran member', async () => {
+  const env = ENV();
+  const state = {};
+  globalThis.fetch = fakeGateway(state);
+  await ready(env);
+  const tx = '0x' + '5e'.repeat(32);
+  await env.STORE.put(`pay/sweep/${tx}.json`, JSON.stringify({ tx, to: 'indodax' }));
+  state.deposits = { eth: [dep('sw1', '0.05000000', tx, 'base')] };
+  await PAY.syncDeposits(env, { force: true });
+  const v = await PAY.adminView(env);
+  assert.equal(v.unmatched.length, 0, 'bukan deposit tak dikenal');
+  assert.equal((await (await env.STORE.get('pay/dep/eth/sw1')).json()).sweep, true, 'dicatat sekali sebagai setoran');
+});
+
 test('URL callback: penarikan apa pun ditolak (tidak pernah „ok") dan dicatat untuk admin', async () => {
   const env = ENV();
   const res = await PAY.callback(new Request('https://axto.io/api/indodax', { method: 'POST', body: 'request_id=x1&withdraw_currency=eth&withdraw_amount=1&withdraw_address=0xabc' }), env);
