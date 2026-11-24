@@ -1,0 +1,37 @@
+name: Sinkron pembayaran kripto
+
+# Pemilik 24 Nov 2026: „jika pembayaran di Terima baru pembelian berhasil". API akun penampung menolak jaringan worker
+# Cloudflare (403) tetapi menerima runner GitHub: runner membaca alamat & riwayat deposit (kunci izin lihat) tiap 20 detik
+# selama ±9 menit, lalu mengirimnya ke worker (/internal/pay/ingest, HMAC). Dipicu tiap 10 menit oleh jadwal ini DAN oleh
+# penjaga produksi (jadwal cron GitHub sering dilewati).
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: pay-sync
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Uji
+        run: node --test ops/test/pay-sync.test.mjs
+      - name: Baca deposit → worker
+        env:
+          PAY_API_KEY: ${{ secrets.INDODAX_API_KEY_2 }}
+          PAY_API_SECRET: ${{ secrets.INDODAX_API_SECRET_2 }}
+          CLOUDFLARE_API_KEY: ${{ secrets.CLOUDFLARE_API_KEY }}
+          ENGINE_HMAC_KEY: ${{ secrets.ENGINE_HMAC_KEY }}
+          AXTO_API: https://axto.io
+        run: node ops/pay-sync.mjs

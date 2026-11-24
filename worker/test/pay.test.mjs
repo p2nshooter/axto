@@ -124,6 +124,35 @@ test('alamat deposit dibaca satu panggilan per koin (cron 5 menit dibatasi ±30 
   assert.ok(part.errors['gw:budget'] >= 1);
 });
 
+test('runner GitHub (API menolak worker 403): alamat & deposit lewat ingest → pembelian berhasil; worker tidak menimpa', async () => {
+  const env = ENV();
+  const state = {};
+  const base = fakeGateway(state);
+  // jaringan worker ditolak API (403), harga publik tetap terbaca
+  globalThis.fetch = async (url, init) => (new URL(String(url)).origin === PAY.GW ? new Response('{"code":403}', { status: 403 }) : base(url, init));
+  await PAY.cron(env, Date.now(), { refreshPause: 0 });
+  PAY._resetCfg();
+  await assert.rejects(PAY.publicOptions(env), /gw:403/, 'kode galat akses tampil, tanpa data akun');
+  // runner mengirim alamat (format API v2 tanpa parameter jaringan)
+  const rows = [{ coin: 'USDT', address: EVM, tag: '', network: 'bep20' }, { coin: 'USDT', address: '', tag: '', network: 'xpl' }, { coin: 'BTC', address: '1BoatSLRHtKNngkdXEeobR76b53LETtpyT', tag: '', network: 'mainnet' }];
+  const r0 = await PAY.ingest(env, { addresses: rows });
+  assert.deepEqual(r0.options, ['usdt:bep20', 'btc:btc']);
+  PAY._resetCfg();
+  assert.deepEqual((await PAY.publicOptions(env)).map((o) => o.coin), ['usdt', 'btc']);
+  const r = await C.buy(env, W, { usd: 10, coin: 'usdt', net: 'bep20', payer: '0x' + '77'.repeat(20), agree: true, agreementV: C.AGREEMENT_V }, { lang: 'id' });
+  assert.ok(r.ok, JSON.stringify(r));
+  // runner mengirim riwayat deposit → dicocokkan & dikreditkan sekali
+  const d = { usdt: [dep('r1', r.intent.amount, '0x' + 'cd'.repeat(32))] };
+  assert.equal((await PAY.ingest(env, { deposits: d })).matched, 1);
+  assert.equal((await PAY.ingest(env, { deposits: d })).matched, 0, 'deposit yang sama diproses sekali');
+  assert.equal((await C.account(env, W)).micro, '1000000');
+  // worker tidak memanggil API sendiri selama runner segar, dan tidak menimpa status/konfigurasi
+  assert.equal((await PAY.syncDeposits(env, { force: true })).skipped, 'runner');
+  await PAY.cron(env, Date.now(), { refreshPause: 0 });
+  PAY._resetCfg();
+  assert.deepEqual((await PAY.publicOptions(env)).map((o) => o.coin), ['usdt', 'btc']);
+});
+
 test('jumlah unik: dua pembayaran $10 tidak pernah berjumlah sama; tambahan maksimal ±$0,10', () => {
   const p = PAY.amountPlan('usdt', 1000, 1);
   assert.equal(p.base, 1_000_000_000n); // 10 USDT dalam unit 1e-8
