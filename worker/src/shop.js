@@ -8,7 +8,7 @@
  *
  * Tiga pasar terpisah:
  *   1. Toko eksklusif axto.io — 5 koleksi × 10.000 karya × 10 edisi, harga tetap $1/edisi, dibayar koin AXTO (saldo kustodi
- *      NOWPayments di coin.js). Pendapatan → catatan x/rev/.
+ *      di coin.js). Pendapatan → catatan x/rev/.
  *   2. Pasar member — member menjual edisi miliknya: harga tetap, lelang, penawaran, atau harga tetap + penawaran. Dibayar
  *      koin AXTO antar member; fee situs 10% (penjual menerima 90%). Tawaran & penawaran menahan koin (escrow) dan
  *      dikembalikan otomatis bila disalip / ditolak / listing ditutup.
@@ -47,7 +47,7 @@ export const MIN_STEP_PCT = 5n; // kenaikan tawaran lelang minimum
 const EXTEND_MS = 5 * 60_000; // tawaran di 5 menit terakhir memperpanjang lelang 5 menit
 const MAX_DAYS = 14;
 const MIN_MICRO = 10_000n; // 0,01 AXTO
-const WD_MAX_ITEMS = 50; // per voucher (vault)
+const WD_MAX_ITEMS = 200; // per voucher (vault coinaxto) — WD massal hemat gas (pemilik 24 Nov 2026)
 
 const lw = (w) => String(w).toLowerCase();
 const isEx = (c) => EX_KEYS.includes(c);
