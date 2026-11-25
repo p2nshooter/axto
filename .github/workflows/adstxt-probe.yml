@@ -1,0 +1,17 @@
+name: Diagnosis ads.txt AdSense
+on:
+  push:
+    branches: [claude/gpu-probe]
+    paths: ['ops/adstxt-probe.mjs', '.github/workflows/adstxt-probe.yml']
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node ops/adstxt-probe.mjs
