@@ -1,0 +1,20 @@
+name: Diagnosis zona Cloudflare (ads.txt)
+on:
+  push:
+    branches: [claude/gpu-probe]
+    paths: ['ops/cfzone-probe.mjs', '.github/workflows/cfzone-probe.yml']
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - env:
+          CLOUDFLARE_API_KEY: ${{ secrets.CLOUDFLARE_API_KEY }}
+          CLOUDFLARE_EMAIL: ${{ secrets.CLOUDFLARE_EMAIL }}
+        run: node ops/cfzone-probe.mjs
