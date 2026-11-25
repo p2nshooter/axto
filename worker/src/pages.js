@@ -217,8 +217,7 @@ function buyBox(lang, c, id, meta, opensea, info) {
 /** Karya eksklusif: kotak toko ($1/edisi, koin AXTO) + listing pasar member untuk karya ini. */
 /** Panggung karya: seri G- yang dibuka dari kartu G- menampilkan lukisan GPU yang SAMA dengan kartunya (pemilik, 23 Nov
  * 2026: „Series G- semuanya dari luar bagus, saat di klik ga bagus dalamnya"); tab untuk berpindah ke animasi asli. */
-/** Versi G- di bawah karya: karya G- baru = video animasi buatan GPU; karya G- lama = lukisan GPU aslinya, diam
- * (pemilik 24 Nov 2026: „Series G- yg sudah terlanjur di buat, kembalikan ke gambar aslinya tanpa animasi"). */
+/** Versi G- di bawah karya: lukisan GPU diam (pemilik 25 Nov 2026: „series G- produksi statik aja … ga usah ada animasi"). */
 function gpuFigure(lang, c, id, meta, info) {
   const al = `${esc(meta.name)} — ${kode(c, id, info.gpuSerial)}`;
   const media = info.gpuAnim

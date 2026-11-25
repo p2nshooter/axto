@@ -30,7 +30,66 @@ export const vGambar = (lolosMutu) => (lolosMutu ? `q${QA_V}` : '2');
 const GAYA = 'perfectly symmetrical composition, centered, straight-on front view, studio product photography, soft cinematic lighting, rich color, highly detailed, sharp focus';
 
 /** Deskripsi untuk GPU dari DNA karya — tanpa teks, tanpa sosok manusia. */
-export function promptFor(key, id) {
+/**
+ * Variasi per karya (pemilik, 25 Nov 2026: „jgn ada 1 pun yg sama, hususunya perangko, krn gambar statis bikin yg banyak
+ * setiap harinya"). Sifat DNA saja terlalu sedikit (prangko: bingkai × subjek × seri × palet ≈ 90 rb kombinasi untuk 10 jt
+ * karya), jadi setiap karya mendapat kombinasi tambahan dari kumpulan di bawah, dipilih tetap dari (koleksi, karya, putaran).
+ * Tanpa unsur huruf/angka (pemeriksa menolak tulisan). Prompt lengkap dijaga unik oleh worker (tanda tangan sekali-tulis R2);
+ * bila kebetulan sama, `putaran` naik dan kombinasi lain dipakai.
+ */
+const VARIASI = {
+  time: [
+    ['soft golden-hour window light', 'cool moonlit glow', 'warm candlelight', 'crisp museum spotlight', 'diffused overcast daylight', 'dramatic chiaroscuro side light', 'gentle sunrise rim light', 'luminous studio softbox light'],
+    ['resting on a polished walnut desk', 'resting on white Carrara marble', 'resting on dark slate stone', 'resting on a velvet cushion', 'resting on an engraved brass tray', 'resting on a lacquered ebony table', 'resting on a glass shelf', 'resting on a carved sandstone ledge', 'resting on a mosaic tile table', 'resting on a leather-bound book'],
+    ['delicate filigree scrollwork', 'fine guilloché engraving', 'enamel cloisonné panels', 'tiny seed-pearl inlay', 'hand-chased acanthus leaves', 'geometric girih inlay', 'mother-of-pearl marquetry', 'subtle hammered texture', 'etched starburst rays', 'twisted rope gadrooning'],
+    ['softly blurred library shelves behind', 'a hazy arched window behind', 'a dim gallery wall behind', 'dust motes floating in a sunbeam behind', 'a quiet garden seen through glass behind', 'deep gradient shadows behind', 'a moonlit balcony behind', 'draped silk behind'],
+    ['champagne', 'rose gold', 'antique bronze', 'platinum', 'emerald enamel', 'sapphire enamel', 'ivory', 'onyx'],
+  ],
+  stamp: [
+    ['with rolling hills behind', 'under a crescent moon', 'beside a calm harbour', 'framed by palm fronds', 'with mountains on the horizon', 'among drifting clouds', 'on a winding river bank', 'with a lighthouse in the distance', 'under a starry sky', 'in a blooming meadow', 'beside an old stone bridge', 'with migrating birds overhead', 'at a desert oasis', 'in gently falling snow', 'with a rising sun behind', 'amid autumn leaves'],
+    ['fine cross-hatched line engraving', 'delicate stipple engraving', 'bold woodcut-style lines', 'copperplate etching', 'lithographic tonal shading', 'guilloché background pattern', 'art deco geometric linework', 'art nouveau flowing linework'],
+    ['cream', 'ivory', 'pale blue-tinted', 'soft grey', 'warm buff', 'pale green-tinted', 'light rose-tinted', 'chalk white'],
+    ['dark velvet', 'a black leather album page', 'navy linen', 'charcoal felt', 'deep green baize', 'burgundy velvet'],
+    ['soft even light', 'gentle side light', 'warm lamp light', 'cool daylight'],
+    ['the subject seen in profile', 'the subject seen head-on', 'the subject in three-quarter view', 'the subject from a low angle', 'the subject from above', 'the subject in close-up', 'the subject in the middle distance'],
+  ],
+  naskah: [
+    ['interlaced eight-point stars', 'arabesque vine scrolls', 'tulip and carnation borders', 'cloud-collar motifs', 'muqarnas-inspired cells', 'braided strapwork bands', 'lotus palmettes', 'pomegranate medallions', 'hexagonal girih tiles', 'peacock-feather arabesques'],
+    ['lapis lazuli blue', 'malachite green', 'carnelian red', 'turquoise', 'deep indigo', 'saffron', 'ivory and gold', 'ruby and gold', 'emerald and gold', 'violet'],
+    ['corner medallions', 'quarter-rosette corners', 'gilded spandrels', 'cartouche corners', 'floral corner sprays'],
+    ['burnished gold leaf', 'punched gold dots', 'fine gold hairlines', 'raised gesso gilding', 'silver highlights'],
+    ['soft museum light', 'warm candle light', 'cool daylight', 'gentle raking light'],
+    ['wide margins with tiny floral sprigs', 'narrow margins', 'marbled paper margins', 'margins with gold rulings', 'plain toned margins'],
+  ],
+};
+
+/** Hash 32-bit tetap (FNV-1a) — murni, sama di worker, engine dan tes. */
+export function hash32(s) {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i += 1) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
+  return h >>> 0;
+}
+
+/** Kalimat variasi karya ini (kombinasi tetap dari kumpulan VARIASI). */
+export function variasiFor(key, id, putaran = 0) {
+  const c = key.replace(/^ex-/, '');
+  const pools = VARIASI[c === 'quran' || c === 'hadith' ? 'naskah' : c];
+  let x = hash32(`${key}:${id}:${putaran}`) ^ Math.imul(hash32(`v2:${id}:${putaran}:${key}`), 2654435761);
+  const pick = pools.map((pool) => { const v = pool[(x >>> 0) % pool.length]; x = Math.floor((x >>> 0) / pool.length) ^ hash32(`${v}:${id}`); return v; });
+  if (c === 'time') return `${pick[0]}, ${pick[1]}, case details of ${pick[2]}, ${pick[3]}, ${pick[4]} accents`;
+  if (c === 'stamp') return `the engraved scene ${pick[0]}, ${pick[5]}, ${pick[1]}, ${pick[2]} paper, resting on ${pick[3]}, ${pick[4]}`;
+  return `ornament of ${pick[0]} in ${pick[1]}, ${pick[2]}, ${pick[3]}, ${pick[5]}, ${pick[4]}`;
+}
+
+/** Seed tetap per karya & putaran (1..2^31-1) — lukisan karya berbeda tidak pernah berangkat dari derau yang sama. */
+export const seedFor = (key, id, putaran = 0) => (hash32(`seed:${key}:${id}:${putaran}`) % 2147483646) + 1;
+
+export function promptFor(key, id, putaran = 0) {
+  return `${promptDasar(key, id)}, ${variasiFor(key, id, putaran)}`;
+}
+
+/** Prompt dari sifat DNA saja (tanpa variasi). */
+export function promptDasar(key, id) {
   const m = metadata(key, id);
   const a = (k) => attr(m, k).toLowerCase();
   const c = key.replace(/^ex-/, '');

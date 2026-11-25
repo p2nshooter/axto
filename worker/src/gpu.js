@@ -1,6 +1,13 @@
 /**
  * Produksi seri G- di worker axto.io — satu-satunya pelukis seri G- (Cron Trigger tiap 5 menit, 24 jam, gratis).
  *
+ * BERLAKU SEKARANG — pemilik, 25 Nov 2026: „series G- produksi statik aja kaya di awal, ga usah ada animasi, tp jg jgn ada
+ * tanda air, bersih aja" · „cukup gambar statik berkualitas, jgn ada 1 pun yg sama, hususunya perangko, krn gambar statis
+ * bikin yg banyak setiap harinya". Maka: karya G- tampil sebagai LUKISAN DIAM begitu lolos pemeriksa mutu (tanpa video,
+ * tanpa gerak); setiap karya punya prompt unik (sifat DNA + variasi tetap, engine/src/gpu.js) dan seed sendiri, prompt
+ * dijaga unik lintas koleksi dengan tanda tangan sekali-tulis di R2 (`gpu/sig/<jenis>/<sha256>.json`); jatah harian naik.
+ * Catatan di bawah ini riwayat (animasi GPU dihentikan).
+ *
  * Pemilik, 24 Nov 2026: „ini series G- sampah semua" · „Bikin ulang semua, hasil NFT 100% sudah keluar dengan animasi yg
  * interaktif" · „Series G- yg sudah terlanjur di buat, kembalikan ke gambar aslinya tanpa animasi" · lalu „Hati2, jgn ada logo
  * apapun di semua karya termasuk GPU, dan pastikan karya2 terbarunya punya animasi dan interaktif, klo bisa karya lama yg statik
@@ -20,10 +27,11 @@
  * Penyimpanan hanya R2 (CAS untuk dokumen seri, satu tulis per percobaan untuk jatah, log append-only).
  */
 import { Buffer } from 'node:buffer';
-import { GPU_KEYS, QA_V, candidates, promptFor, tambahSeri } from '../../engine/src/gpu.js';
-import { getJSON, update, appendLog } from './r2.js';
+import { GPU_KEYS, QA_V, candidates, promptFor, seedFor, tambahSeri } from '../../engine/src/gpu.js';
+import { getJSON, update, appendLog, createOnce } from './r2.js';
 
-export const GPU_HARIAN = 36;
+/** Lukisan per hari (±120 neuron per percobaan; 60 × 120 = 7.200 dari 10.000 neuron gratis harian). */
+export const GPU_HARIAN = 60;
 export const MODEL = '@cf/black-forest-labs/flux-2-klein-4b';
 export const MODEL_CADANGAN = '@cf/black-forest-labs/flux-1-schnell';
 export const MODEL_QA = '@cf/google/gemma-4-26b-a4b-it';
@@ -95,13 +103,14 @@ export function jenisGambar(b) {
 }
 
 /** Melukis dengan FLUX.2 [klein] 4B (1024², masukan multipart); cadangan FLUX.1 schnell 8 langkah bila klein menolak. */
-export async function lukis(env, prompt) {
+export async function lukis(env, prompt, seed = undefined) {
   let alasanKlein = '';
   try {
     const form = new FormData();
     form.append('prompt', prompt);
     form.append('width', '1024');
     form.append('height', '1024');
+    if (Number.isSafeInteger(seed)) form.append('seed', String(seed));
     const fr = new Response(form);
     const out = await env.AI.run(MODEL, { multipart: { body: fr.body, contentType: fr.headers.get('content-type') } });
     const bytes = Buffer.from(String(out?.image ?? ''), 'base64');
@@ -111,7 +120,7 @@ export async function lukis(env, prompt) {
     alasanKlein = pesan(e);
     if (alokasiHabis(alasanKlein)) throw e;
   }
-  const out = await env.AI.run(MODEL_CADANGAN, { prompt, steps: 8 });
+  const out = await env.AI.run(MODEL_CADANGAN, { prompt, steps: 8, ...(Number.isSafeInteger(seed) ? { seed } : {}) });
   const bytes = Buffer.from(String(out?.image ?? ''), 'base64');
   if (bytes.byteLength < 15_000) throw new Error('gambar kosong');
   return { bytes, model: MODEL_CADANGAN, alasanKlein };
@@ -217,10 +226,34 @@ async function periksaLama(env, docs, now) {
  * Satu percobaan berjatah: lukis → periksa. Lolos → disimpan ke R2 gpu/<c>/<id>.<png|jpg>; gagal → tidak disimpan.
  * `simpan: false` untuk pratinjau (hasil dikembalikan, tidak disimpan).
  */
-export async function lukisGratis(env, c, id, prompt, { now = Date.now(), rata = true, simpan = true } = {}) {
+/** Tanda tangan prompt (SHA-256 hex). */
+async function sidik(teks) {
+  const h = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(teks));
+  return [...new Uint8Array(h)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+/**
+ * Prompt unik untuk karya ini: tanda tangan prompt dicatat sekali-tulis di R2 per jenis (karya publik & eksklusif berbagi
+ * jenis), sehingga dua karya G- tidak pernah memakai prompt yang sama. Bila tanda tangan sudah milik karya lain, putaran
+ * berikutnya (kombinasi variasi lain) dipakai. Karya yang dilukis ulang memakai kembali tanda tangannya sendiri.
+ */
+export async function promptUnik(env, c, id) {
+  const jenis = c.replace(/^ex-/, '');
+  for (let putaran = 0; putaran < 8; putaran += 1) {
+    const prompt = promptFor(c, id, putaran);
+    const key = `gpu/sig/${jenis}/${await sidik(prompt)}.json`;
+    const milik = { c, id: Number(id) };
+    if (await createOnce(env.STORE, key, milik)) return { prompt, seed: seedFor(c, id, putaran), putaran };
+    const ada = (await getJSON(env.STORE, key))?.value;
+    if (ada?.c === c && Number(ada?.id) === Number(id)) return { prompt, seed: seedFor(c, id, putaran), putaran };
+  }
+  throw new Error('prompt unik tidak ditemukan');
+}
+
+export async function lukisGratis(env, c, id, prompt, { now = Date.now(), rata = true, simpan = true, seed = undefined } = {}) {
   if (!(await ambilJatah(env.STORE, { now, cap: batasHarian(env), rata }))) return { ok: false, alasan: 'jatah' };
   try {
-    const g = await lukis(env, prompt);
+    const g = await lukis(env, prompt, seed);
     const qa = await periksa(env, c, g.bytes);
     const type = jenisGambar(g.bytes);
     if (simpan && qa.lolos) await env.STORE.put(`gpu/${c}/${Number(id)}.png`, g.bytes, { httpMetadata: { contentType: type, cacheControl: 'public, max-age=31536000, immutable' } });
@@ -257,7 +290,8 @@ async function lukisTick(env, docs, now) {
   const capDari = (r) => ({ v: QA_V, nilai: r.qa.nilai, model: r.model, ...(r.qa.panel ? { panel: r.qa.panel, nada: r.qa.nada } : {}) });
   // lukis ulang karya lama dengan nomor seri G- yang SAMA (gambar diganti, cap mutu baru → tampil setelah videonya ada)
   const lukisUlang = async (c, id) => {
-    const r = await lukisGratis(env, c, id, promptFor(c, id), { now });
+    const u = await promptUnik(env, c, id);
+    const r = await lukisGratis(env, c, id, u.prompt, { now, seed: u.seed });
     if (!r.ok) return gagal(c, id, r);
     const doc = await update(env.STORE, `os/gpu-${c}.json`, (cur) => (cur?.ids?.includes(id) ? { ...cur, by: { ...cur.by, [id]: 'cloudflare-workers-ai' }, qa: { ...(cur.qa ?? {}), [id]: capDari(r) }, at: new Date(now).toISOString() } : undefined));
     return { dibuat: { c, id, g: Number(doc?.serial?.[id] ?? 0), ulang: true, nilai: r.qa.nilai } };
@@ -278,7 +312,8 @@ async function lukisTick(env, docs, now) {
       const ada = new Set(docs[c].ids);
       const id = candidates(c).find((x) => !ada.has(x) && (docs[c].gagal?.[x] ?? 0) < GAGAL_MAKS);
       if (!id) continue;
-      const r = await lukisGratis(env, c, id, promptFor(c, id), { now });
+      const u = await promptUnik(env, c, id);
+      const r = await lukisGratis(env, c, id, u.prompt, { now, seed: u.seed });
       if (!r.ok) return gagal(c, id, r);
       const doc = await update(env.STORE, `os/gpu-${c}.json`, (cur) => tambahSeri(cur, id, 'cloudflare-workers-ai', new Date(now).toISOString(), capDari(r)));
       return { dibuat: { c, id, g: Number(doc?.serial?.[id] ?? 0), nilai: r.qa.nilai } };

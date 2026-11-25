@@ -81,3 +81,37 @@ export function gpuGambar(meta, o) {
 img{position:absolute;left:50%;top:50%;width:100vmin;height:100vmin;transform:translate(-50%,-50%);object-fit:contain}
 </style></head><body><img src="${esc(o.img)}" alt="${esc(meta.name)} — ${esc(o.kode ?? `G-${o.g}`)}"></body></html>`;
 }
+
+/**
+ * Seri G- STATIS (pemilik, 25 Nov 2026: „series G- produksi statik aja kaya di awal, ga usah ada animasi, tp jg jgn ada tanda
+ * air, bersih aja" · „cukup gambar statik berkualitas"): lukisan GPU diam, tanpa video, tanpa gerak, tanpa label. Untuk
+ * Qur'an & hadits, teks Arab ASLI diletakkan tepat di panel kosong lukisan (`qa.panel`, pecahan lebar/tinggi; lukisan
+ * persegi mengisi panggung persegi sehingga posisi cukup dengan persen). Skrip hanya mengecilkan huruf agar muat — sekali,
+ * tanpa animasi.
+ * @param d dna · @param meta metadata · @param ctx renderCtx (teks ayat/hadits) · @param o {img, g, kode, ref, qa, nonce}
+ */
+export function gpuStatis(d, meta, ctx, o) {
+  const n = o.nonce ? ` nonce="${o.nonce}"` : '';
+  const pnl = Array.isArray(o.qa?.panel) && o.qa.panel.length === 4 ? o.qa.panel.map(Number) : null;
+  const gelap = o.qa?.nada === 'gelap';
+  let panel = '';
+  let css = '';
+  let fit = '';
+  if ((d.kind === 'quran' || d.kind === 'hadith') && pnl) {
+    const ar = String(ctx.ar ?? (ctx.lines ?? []).slice(0, 3).join(' ')).replace(/\s+/g, ' ').trim();
+    if (ar) {
+      const pct = (v) => `${(v * 100).toFixed(3)}%`;
+      css = `@font-face{font-family:'Amiri Quran';src:url(/fonts/amiri-quran-arabic.woff2) format('woff2');font-display:swap}
+#pn{position:absolute;left:${pct(pnl[0])};top:${pct(pnl[1])};width:${pct(pnl[2] - pnl[0])};height:${pct(pnl[3] - pnl[1])};display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3%;padding:5% 6%;box-sizing:border-box;overflow:hidden}
+#ar{font-family:'Amiri Quran',serif;direction:rtl;text-align:center;line-height:1.9;font-size:7vmin;color:${gelap ? '#f3dfa2' : '#2e1d0c'};text-shadow:${gelap ? '0 1px 2px rgba(0,0,0,.55)' : '0 1px 0 rgba(255,250,235,.6)'}}
+.ruj{font:600 clamp(8px,2vmin,15px) Georgia,serif;letter-spacing:.06em;color:${gelap ? '#e9c46a' : '#6b4a1c'}}`;
+      panel = `<div id="pn"><div id="ar" lang="ar">${esc(ar)}</div>${o.ref ? `<div class="ruj">${esc(o.ref)}</div>` : ''}</div>`;
+      fit = `<script${n}>(()=>{const P=document.getElementById('pn'),A=document.getElementById('ar');function muat(){let f=Math.min(innerWidth,innerHeight)*0.07,i=0;A.style.fontSize=f+'px';while((P.scrollHeight>P.clientHeight+1||A.scrollWidth>A.clientWidth+1)&&i<70){f*=0.93;A.style.fontSize=f+'px';i++}}muat();addEventListener('resize',muat);document.fonts&&document.fonts.ready.then(muat)})();</script>`;
+    }
+  }
+  const nama = `${meta.name} — ${o.kode ?? `G-${o.g}`}`;
+  return `<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(nama)}</title><style${n}>html,body{margin:0;height:100%;background:#05060c;overflow:hidden}
+#k{position:absolute;left:50%;top:50%;width:100vmin;height:100vmin;transform:translate(-50%,-50%)}
+#k img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}
+${css}</style></head><body><div id="k" role="img" aria-label="${esc(nama)}"><img src="${esc(o.img)}" alt="${esc(nama)}">${panel}</div>${fit}</body></html>`;
+}

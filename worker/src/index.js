@@ -10,7 +10,7 @@ import { metadata, contractMetadata, renderCtx, animatedSvg, renderPlayerLive, a
 import { showcaseIds, SHOWCASE_KEYS, priceUsd } from '../../engine/src/showcase.js';
 import { edition, designOf } from '../../engine/src/editions.js';
 import { hadithRef } from '../../engine/src/render/hadith.js';
-import { gpuPlayer, gpuGambar } from '../../engine/src/render/gpu-player.js';
+import { gpuStatis } from '../../engine/src/render/gpu-player.js';
 import { collectionSeo, seriesSeo, surahSeo, hubSeo, breadcrumb, itemList, seriesLabel, surahInfo, BREAD } from './seo.js';
 import { COLLECTIONS, sha256Hex, kode, ONE_SETS } from '../../engine/src/core.js';
 import { canonical } from '../../engine/src/dna.js';
@@ -72,15 +72,14 @@ async function gpuSet(env, c) {
   if (hit && Date.now() - hit.at < 120_000) return hit;
   let doc = null;
   try { doc = await readJSON(env.STORE, `os/gpu-${c}.json`); } catch { doc = null; }
-  // Pemilik 24 Nov 2026: „OS-G-4 masih diem saja, baru yg OS-G-5 yg punya animasi" · „hasil NFT 100% sudah keluar dengan
-  // animasi yg interaktif" — seri G- tampil HANYA bila lolos mutu (cap QA_V, src/gpu.js; karya lama yang gambar aslinya lolos
-  // juga diberi cap) DAN videonya sudah dibuat GPU (doc.vid). Tidak ada lagi karya G- diam; karya lama lain menunggu
-  // dianimasikan / dilukis ulang dengan nomor seri yang sama.
+  // Pemilik 25 Nov 2026: „series G- produksi statik aja kaya di awal, ga usah ada animasi, tp jg jgn ada tanda air, bersih aja"
+  // — seri G- tampil sebagai LUKISAN DIAM begitu lolos mutu (cap QA_V, src/gpu.js: tanpa tulisan/logo/tanda air, nilai ≥ 8).
+  // Tanpa video dan tanpa gerak; karya yang belum lolos menunggu dilukis ulang dengan nomor seri yang sama.
   const baru = (x) => doc?.qa?.[x]?.v === QA_V;
   const semua = Array.isArray(doc?.ids) ? doc.ids.filter((x) => Number.isSafeInteger(x) && x >= 1 && x <= COLLECTIONS[c].max && baru(x)) : [];
-  const ids = semua.filter((x) => doc?.vid?.[x] === true);
+  const ids = semua;
   const serial = Object.fromEntries(ids.map((x) => [x, doc.serial?.[x]]));
-  const anim = new Set(ids);
+  const anim = new Set();
   const qa = Object.fromEntries(semua.map((x) => [x, doc.qa[x]]));
   const serialAll = Object.fromEntries(semua.map((x) => [x, doc.serial?.[x]]));
   const v = { at: Date.now(), ids, serial, serialAll, bersih: new Set(semua), anim, qa, by: {} };
@@ -231,7 +230,8 @@ async function api(request, env, ctx, url) {
     let gpu = null;
     if (info.g) {
       const gs = await gpuSet(env, info.base);
-      if (gs.bersih.has(info.work)) gpu = { img: `${env.BASE_URL}/gpu/${info.base}/${info.work}.png?v=${vGambar(Boolean(gs.qa[info.work]))}`, anim: gs.anim.has(info.work) ? `${env.BASE_URL}/gplay/${info.base}/${info.work}` : null, serial: Number(gs.serialAll?.[info.work] ?? 0) };
+      // lukisan diam; halaman /gplay menempatkan teks ayat/hadits ASLI di panel kosong lukisan (tanpa gerak)
+      if (gs.bersih.has(info.work)) gpu = { img: `${env.BASE_URL}/gpu/${info.base}/${info.work}.png?v=${vGambar(Boolean(gs.qa[info.work]))}`, anim: `${env.BASE_URL}/gplay/${info.base}/${info.work}`, serial: Number(gs.serialAll?.[info.work] ?? 0) };
     }
     return json(OSX.tokenMetadata(info, meta, env.BASE_URL, gpu), 200, { 'cache-control': info.g ? 'public, max-age=3600' : IMMUTABLE, 'access-control-allow-origin': '*' });
   }
@@ -660,8 +660,6 @@ async function gpuPlay(env, c, id, origin) {
   const d = dna(c, id);
   const meta = metadata(c, id, env.BASE_URL);
   const H = { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'public, max-age=300', 'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer' };
-  // karya G- lama: lukisan GPU aslinya saja, diam, tanpa animasi & tanpa tempelan apa pun
-  if (!gs.anim.has(id)) return new Response(gpuGambar(meta, { img: `/gpu/${c}/${id}.png?v=${vGambar(false)}`, g: Number(gs.serial[id] ?? 0), kode: kode(c, id, Number(gs.serial[id] ?? 0)) }), { headers: H });
   let ctx = {};
   let ref = '';
   if (d.kind === 'quran' || d.kind === 'hadith') {
@@ -669,7 +667,8 @@ async function gpuPlay(env, c, id, origin) {
     if (d.kind === 'quran' && ctx.surah) ref = ctx.ayah ? `${ctx.surahLt ?? ''} · ${ctx.surah}:${ctx.ayah}` : `${ctx.surahLt ?? ''}`;
     if (d.kind === 'hadith') { const hr = hadithRef(d); ref = `${hr.nameId} · No. ${hr.number}`; }
   }
-  const html = gpuPlayer(d, meta, ctx, { img: `/gpu/${c}/${id}.png?v=${vGambar(true)}`, video: `/gpu/${c}/${id}.mp4?v=${QA_V}`, g: Number(gs.serial[id] ?? 0), kode: kode(c, id, Number(gs.serial[id] ?? 0)), ref, qa: gs.qa[id] ?? null });
+  // pemilik 25 Nov 2026: G- statis — lukisan diam + teks ASLI di panel kosong (Qur'an & hadits), tanpa video & tanpa gerak
+  const html = gpuStatis(d, meta, ctx, { img: `/gpu/${c}/${id}.png?v=${vGambar(true)}`, g: Number(gs.serial[id] ?? 0), kode: kode(c, id, Number(gs.serial[id] ?? 0)), ref, qa: gs.qa[id] ?? null });
   return new Response(html, { headers: H });
 }
 
