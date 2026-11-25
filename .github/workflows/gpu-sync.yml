@@ -5,9 +5,9 @@ name: Seri G- (video GPU)
 # mutu); tiap jam (ops/gpu-sync.mjs) axto.io SENDIRI menjadikannya video lewat ZeroGPU dengan kunci di vault axto (salinan
 # serah-terima tersegel dari ulyah.com), video ke R2 axto.io. Gagal dicoba lagi setelah 3 jam. Karya tampil hanya bila lolos
 # mutu DAN sudah beranimasi.
+# DIHENTIKAN 25 Nov 2026 (pemilik: „series G- produksi statik aja kaya di awal, ga usah ada animasi“): seri G- kini lukisan
+# diam (worker/src/gpu.js). Workflow ini tidak lagi dijadwalkan; hanya bisa dijalankan manual.
 on:
-  schedule:
-    - cron: '23 * * * *'
   workflow_dispatch:
   push:
     branches: [ccr-9ef9a045-gmv4m2, main]

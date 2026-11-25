@@ -13,9 +13,12 @@ Aturan kerja yang terbuka untuk kontributor:
   termasuk GPU" · „Hapus aja jgn ada label, biar bersih"): tanpa tanda „AXTO", lencana EXCLUSIVE, lencana kode G-, teks
   petunjuk, tanda air, merek, tanda tangan atau tulisan buatan mesin — dijaga tes `engine/test`, `worker/test` dan pemeriksa
   mesin seri G- (`worker/src/gpu.js`).
-- **Seri G- selalu beranimasi** („OS-G-4 masih diem saja, baru yg OS-G-5 yg punya animasi"): karya G- tampil hanya bila lolos
-  mutu dan videonya sudah dibuat GPU. Karya lama yang gambar aslinya lolos pemeriksaan mutu langsung dianimasikan; yang tidak
-  lolos atau berlogo dilukis ulang dengan nomor seri yang sama.
+- **Seri G- statis** (pemilik, 25 Nov 2026: „series G- produksi statik aja kaya di awal, ga usah ada animasi, tp jg jgn ada
+  tanda air, bersih aja" · „cukup gambar statik berkualitas, jgn ada 1 pun yg sama, hususunya perangko, krn gambar statis bikin
+  yg banyak setiap harinya") — menggantikan aturan „selalu beranimasi" (24 Nov). Karya G- tampil sebagai lukisan diam begitu
+  lolos pemeriksa mutu (tanpa tulisan/logo/tanda air); Qur'an & hadits menampilkan teks ASLI di panel kosong lukisan. Setiap
+  karya punya prompt unik (sifat DNA + variasi tetap) dan seed sendiri; tanda tangan prompt sekali-tulis di R2 menjamin tidak
+  ada dua karya dengan prompt sama. Jatah 60 lukisan/hari (gratis). Video GPU (`ops/gpu-sync.mjs`) dihentikan.
 - **Pembayaran kripto langsung** (pemilik, 24 Nov 2026): semua harga bisa dibayar tanpa koin AXTO — member memilih koin &
   jaringan (stablecoin dianjurkan, jaringan murah lebih dulu), mendapat alamat deposit akun penampung axto.io + jumlah unik +
   QR; pembelian berhasil HANYA setelah pembayaran diterima (`worker/src/pay.js`, kunci API izin lihat — sistem tidak pernah

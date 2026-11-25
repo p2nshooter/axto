@@ -37,7 +37,8 @@ jobs:
         run: |
           set -u
           # berkas workflow · jeda minimum antarputaran (menit)
-          JADWAL="pay-sync.yml:10 engine.yml:60 gpu-sync.yml:60 opensea-list.yml:60 contracts-deploy.yml:10 gas-relay.yml:10"
+          # gpu-sync (video G-) dihentikan 25 Nov 2026: pemilik „series G- produksi statik aja … ga usah ada animasi“
+          JADWAL="pay-sync.yml:10 engine.yml:60 opensea-list.yml:60 contracts-deploy.yml:10 gas-relay.yml:10"
           mulai=$(date +%s)
           picu() {
             local wf=$1 menit=$2 info status dibuat umur

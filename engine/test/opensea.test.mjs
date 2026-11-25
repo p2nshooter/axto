@@ -49,3 +49,21 @@ test('metadata token: nama edisi, seri G- memakai lukisan GPU bila ada, selain i
   assert.equal(pub.image, meta.image, 'koleksi publik tidak pernah memakai lukisan GPU');
   assert.equal(gContractMetadata(contractMetadata('hadith'), 'g-hadith').name, 'AXTO G- Hadith Calligraphy');
 });
+
+test('seri G- statis (pemilik 25 Nov 2026): prompt & seed unik per karya, pemutar diam dengan teks ASLI di panel', async () => {
+  const { promptFor, seedFor } = await import('../src/gpu.js');
+  const { gpuStatis } = await import('../src/render/gpu-player.js');
+  const { dna } = await import('../src/dna.js');
+  const { metadata } = await import('../src/metadata.js');
+  const ids = Array.from({ length: 5000 }, (_, i) => i + 1);
+  assert.equal(new Set(ids.map((i) => promptFor('stamp', i))).size, ids.length, 'prangko: tidak ada prompt kembar');
+  assert.equal(new Set(ids.map((i) => seedFor('stamp', i))).size, ids.length, 'seed berbeda');
+  for (const k of ['time', 'stamp', 'quran', 'hadith']) assert.doesNotMatch(promptFor(k, 7), /\b(text|letters|words|logo|watermark|signature)\b(?!\s*,?\s*no)/i);
+  const q = gpuStatis(dna('quran', 5), metadata('quran', 5, 'https://axto.io'), { ar: 'بِسْمِ ٱللَّهِ' }, { img: '/gpu/quran/5.png?v=q2', g: 3, kode: 'G-3', ref: 'Al-Fatihah · 1:1', qa: { panel: [0.3, 0.32, 0.7, 0.68], nada: 'terang' } });
+  assert.match(q, /<img src="\/gpu\/quran\/5\.png\?v=q2"/);
+  assert.match(q, /id="ar" lang="ar">بِسْمِ ٱللَّهِ</, 'teks ASLI di panel');
+  assert.match(q, /left:30\.000%;top:32\.000%;width:40\.000%;height:36\.000%/, 'panel tepat di posisi yang diukur');
+  assert.doesNotMatch(q, /<video|@keyframes|animation:|requestAnimationFrame|transition/, 'tanpa video & tanpa gerak');
+  const j = gpuStatis(dna('time', 5), metadata('time', 5, 'https://axto.io'), {}, { img: '/gpu/time/5.png?v=q2', g: 1 });
+  assert.doesNotMatch(j, /<video|<script|@keyframes|animation:/, 'jam: lukisan diam saja');
+});

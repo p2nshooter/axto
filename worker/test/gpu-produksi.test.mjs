@@ -2,8 +2,9 @@
 // mutu, hanya yang lolos masuk seri; jatah gratis harian disebar 24 jam (R2 CAS, tidak dobel).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { gpuTick, ambilJatah, lukisGratis, putusan, lamaBerlogo, lamaBelumDicek, BERLOGO, MODEL, MODEL_QA, MODEL_CADANGAN } from '../src/gpu.js';
-import { candidates, QA_V } from '../../engine/src/gpu.js';
+import { gpuTick, ambilJatah, lukisGratis, putusan, lamaBerlogo, lamaBelumDicek, promptUnik, BERLOGO, MODEL, MODEL_QA, MODEL_CADANGAN, GPU_HARIAN } from '../src/gpu.js';
+import { candidates, QA_V, promptFor, seedFor } from '../../engine/src/gpu.js';
+import { createHash } from 'node:crypto';
 
 function fakeR2() {
   const m = new Map();
@@ -164,4 +165,25 @@ test('alokasi gratis Workers AI habis (4006) → berhenti sampai esok, tidak per
   assert.equal(besok.ok, true);
   assert.deepEqual(dipakai, [MODEL, MODEL_CADANGAN, MODEL_QA]);
   assert.match(besok.alasanKlein, /5006/);
+});
+
+test('G- statis tanpa kembar (pemilik 25 Nov 2026): prompt sudah dipakai karya lain → kombinasi berikutnya; seed per karya ikut ke FLUX', async () => {
+  const env = envDengan(aiTiruan());
+  const [a, b] = candidates('stamp');
+  // tanda tangan prompt putaran 0 karya a sudah dimiliki karya lain (b) → karya a mendapat putaran 1
+  const sig = createHash('sha256').update(promptFor('stamp', a, 0)).digest('hex');
+  env.STORE.m.set(`gpu/sig/stamp/${sig}.json`, { body: JSON.stringify({ c: 'ex-stamp', id: b }), etag: 'x' });
+  const u = await promptUnik(env, 'stamp', a);
+  assert.equal(u.putaran, 1);
+  assert.equal(u.prompt, promptFor('stamp', a, 1));
+  assert.equal(u.seed, seedFor('stamp', a, 1));
+  // karya yang sama memanggil lagi (lukis ulang) → tanda tangannya sendiri, tidak berpindah
+  assert.equal((await promptUnik(env, 'stamp', a)).putaran, 1);
+  // prompt & seed sampai ke FLUX.2 (multipart berisi seed)
+  let form = '';
+  env.AI = { async run(model, inp) { if (model === MODEL) { form = await new Response(inp.multipart.body).text(); return { image: PNG }; } return { response: JSON.stringify(BAGUS) }; } };
+  const r = await lukisGratis(env, 'stamp', a, u.prompt, { now: JAM(10), seed: u.seed });
+  assert.ok(r.ok, JSON.stringify(r));
+  assert.match(form, new RegExp(`name="seed"\\r\\n\\r\\n${u.seed}`));
+  assert.ok(GPU_HARIAN >= 60, 'lebih banyak lukisan per hari');
 });
